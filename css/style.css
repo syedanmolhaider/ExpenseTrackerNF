@@ -1067,6 +1067,117 @@ body::after {
   font-style: italic;
 }
 
+/* Category Bars Chart */
+.category-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.category-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.category-name {
+  font-weight: 600;
+  color: var(--ultra-white);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.category-amount {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.category-bar-track {
+  height: 24px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  position: relative;
+}
+
+.category-bar-fill {
+  height: 100%;
+  border-radius: 12px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 20px currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 12px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+/* Trend Bars Chart */
+.trend-bars {
+  display: flex;
+  justify-content: space-around;
+  align-items: flex-end;
+  height: 240px;
+  padding: 20px 0;
+  gap: 8px;
+}
+
+.trend-bar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.trend-bar-column {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.trend-bar-fill {
+  width: 80%;
+  border-radius: 8px 8px 0 0;
+  transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 20px rgba(255, 0, 209, 0.5), 0 4px 20px rgba(0, 229, 255, 0.3);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 8px;
+  position: relative;
+  min-height: 30px;
+}
+
+.trend-bar-value {
+  color: white;
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.trend-bar-label {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+
 /* Recent Activity Section */
 .recent-activity-section {
   margin-bottom: 40px;
@@ -1772,6 +1883,26 @@ body::after {
 
   .recent-item-amount {
     font-size: 1.5rem;
+  }
+
+  .trend-bars {
+    height: 180px;
+    gap: 4px;
+  }
+
+  .trend-bar-value {
+    font-size: 0.65rem;
+  }
+
+  .trend-bar-label {
+    font-size: 0.7rem;
+  }
+
+  .category-bar-header {
+    font-size: 0.8rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 
   .summary-section {

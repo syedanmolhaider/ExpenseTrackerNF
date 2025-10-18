@@ -102,6 +102,7 @@ async function loadExpenses() {
     displayExpenses();
     updateSummary();
     displayRecentActivity();
+    updateCharts();
   } catch (error) {
     console.error("Load expenses error:", error);
     document.getElementById("expensesList").innerHTML =
@@ -245,6 +246,154 @@ function getCategoryIcon(category) {
     Other: "📦",
   };
   return icons[category] || "📦";
+}
+
+// Display category chart
+function displayCategoryChart() {
+  const categoryChart = document.getElementById("categoryChart");
+
+  if (!categoryChart) return;
+
+  if (expenses.length === 0) {
+    categoryChart.innerHTML =
+      '<p class="chart-placeholder">No data available</p>';
+    return;
+  }
+
+  // Calculate category totals
+  const categoryTotals = {};
+  expenses.forEach((expense) => {
+    const category = expense.category;
+    const amount = parseFloat(expense.amount);
+    categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+  });
+
+  // Sort by amount (descending)
+  const sortedCategories = Object.entries(categoryTotals).sort(
+    (a, b) => b[1] - a[1]
+  );
+
+  const total = sortedCategories.reduce((sum, [_, amount]) => sum + amount, 0);
+
+  // Create visual bars
+  categoryChart.innerHTML = `
+    <div class="category-bars">
+      ${sortedCategories
+        .map(([category, amount]) => {
+          const percentage = ((amount / total) * 100).toFixed(1);
+          return `
+            <div class="category-bar-item">
+              <div class="category-bar-header">
+                <span class="category-name">${getCategoryIcon(
+                  category
+                )} ${category}</span>
+                <span class="category-amount">$${amount.toFixed(
+                  2
+                )} (${percentage}%)</span>
+              </div>
+              <div class="category-bar-track">
+                <div class="category-bar-fill" style="width: ${percentage}%; background: ${getCategoryColor(
+            category
+          )}"></div>
+              </div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+// Get category color
+function getCategoryColor(category) {
+  const colors = {
+    Food: "linear-gradient(90deg, #00e5ff, #00a8cc)",
+    Transport: "linear-gradient(90deg, #ff00d1, #cc00a8)",
+    Entertainment: "linear-gradient(90deg, #c7ff00, #9acc00)",
+    Shopping: "linear-gradient(90deg, #ff00d1, #ff0055)",
+    Bills: "linear-gradient(90deg, #00e5ff, #c7ff00)",
+    Healthcare: "linear-gradient(90deg, #ff0055, #ff00d1)",
+    Education: "linear-gradient(90deg, #c7ff00, #00e5ff)",
+    Other: "linear-gradient(90deg, #ffffff, #c0c5ce)",
+  };
+  return colors[category] || colors.Other;
+}
+
+// Display monthly trend
+function displayMonthlyTrend() {
+  const trendChart = document.getElementById("trendChart");
+
+  if (!trendChart) return;
+
+  if (expenses.length === 0) {
+    trendChart.innerHTML = '<p class="chart-placeholder">No data available</p>';
+    return;
+  }
+
+  // Get last 6 months data
+  const monthlyData = {};
+  const currentDate = new Date();
+
+  // Initialize last 6 months
+  for (let i = 5; i >= 0; i--) {
+    const date = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() - i,
+      1
+    );
+    const monthKey = `${date.getFullYear()}-${String(
+      date.getMonth() + 1
+    ).padStart(2, "0")}`;
+    const monthName = date.toLocaleDateString("en", { month: "short" });
+    monthlyData[monthKey] = { name: monthName, amount: 0 };
+  }
+
+  // Calculate monthly totals
+  expenses.forEach((expense) => {
+    const date = new Date(expense.date);
+    const monthKey = `${date.getFullYear()}-${String(
+      date.getMonth() + 1
+    ).padStart(2, "0")}`;
+    if (monthlyData[monthKey]) {
+      monthlyData[monthKey].amount += parseFloat(expense.amount);
+    }
+  });
+
+  const monthlyArray = Object.values(monthlyData);
+  const maxAmount = Math.max(...monthlyArray.map((m) => m.amount), 100);
+
+  // Create visual bars
+  trendChart.innerHTML = `
+    <div class="trend-bars">
+      ${monthlyArray
+        .map((month) => {
+          const heightPercent = (month.amount / maxAmount) * 100;
+          return `
+            <div class="trend-bar-item">
+              <div class="trend-bar-column">
+                <div class="trend-bar-fill" style="height: ${heightPercent}%; background: linear-gradient(180deg, #ff00d1, #00e5ff)">
+                  ${
+                    month.amount > 0
+                      ? `<span class="trend-bar-value">$${month.amount.toFixed(
+                          0
+                        )}</span>`
+                      : ""
+                  }
+                </div>
+              </div>
+              <div class="trend-bar-label">${month.name}</div>
+            </div>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+// Update charts
+function updateCharts() {
+  displayCategoryChart();
+  displayMonthlyTrend();
 }
 
 // Handle add expense
