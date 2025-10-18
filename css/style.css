@@ -2001,6 +2001,29 @@ body::after {
 
 /* Mobile - 480px and below */
 @media (max-width: 480px) {
+  /* Further performance optimizations for small screens */
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Remove all gradient backgrounds (expensive) */
+  .summary-value,
+  .header-content h1,
+  .btn-primary,
+  .expense-amount {
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    -webkit-text-fill-color: unset !important;
+    color: var(--electric-cyan) !important;
+  }
+
+  /* Disable all hover effects */
+  *:hover {
+    transform: none !important;
+    box-shadow: inherit !important;
+  }
+
   .logo {
     font-size: 2rem;
   }
@@ -2247,7 +2270,68 @@ body::after {
   }
 }
 
-/* CSS Fallback Mode */
+/* CSS Fallback Mode - Mobile & Low Performance Devices */
+body.css-fallback {
+  /* Disable all expensive effects */
+  * {
+    animation: none !important;
+    transition: opacity 0.2s ease !important;
+  }
+
+  /* Remove all 3D transforms */
+  .auth-card,
+  .summary-card,
+  .expense-item,
+  .modal-content,
+  .chart-card {
+    transform: none !important;
+    transform-style: flat !important;
+    perspective: none !important;
+  }
+
+  /* Disable glassmorphism */
+  .auth-card,
+  .dashboard-header,
+  .summary-card,
+  .add-expense-section,
+  .expense-item {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(11, 15, 26, 0.98) !important;
+  }
+
+  /* Simple shadows only */
+  .auth-card,
+  .summary-card,
+  .expense-item {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  /* Disable pseudo-elements */
+  *::before,
+  *::after {
+    display: none !important;
+  }
+
+  /* Solid colors instead of gradients */
+  .summary-value {
+    background: none !important;
+    color: var(--electric-cyan) !important;
+    -webkit-text-fill-color: unset !important;
+  }
+
+  .header-content h1 {
+    background: none !important;
+    color: var(--electric-cyan) !important;
+    -webkit-text-fill-color: unset !important;
+  }
+
+  /* Disable all hover effects */
+  *:hover {
+    transform: none !important;
+  }
+}
+
 body.css-fallback #neon-settings .settings-toggle {
   background: rgba(11, 15, 26, 0.95);
   border: 2px solid var(--electric-cyan);
