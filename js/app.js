@@ -20,6 +20,14 @@ class App {
   async init() {
     console.log("🚀 Initializing Neon 3D App...");
 
+    // Check if mobile device
+    const isMobile = this.detectMobileDevice();
+    if (isMobile) {
+      console.log("📱 Mobile device detected - Using lightweight mode");
+      this.initFallbackMode();
+      return;
+    }
+
     // Check for WebGL support and GPU tier
     const gpuTier = await this.detectGPUTier();
     console.log("GPU Tier:", gpuTier);
