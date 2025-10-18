@@ -1813,9 +1813,62 @@ body::after {
 
 /* Tablet - 768px (iPad) */
 @media (max-width: 768px) {
+  /* Disable heavy animations and 3D effects for mobile performance */
+  * {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  /* Keep only essential transforms */
+  .auth-card,
+  .summary-card,
+  .expense-item,
+  .modal-content {
+    transform: none !important;
+  }
+
+  /* Disable glassmorphism backdrop-filter (expensive on mobile) */
+  .auth-card,
+  .dashboard-header,
+  .dashboard-nav,
+  .summary-card,
+  .add-expense-section,
+  .chart-card,
+  .expense-item,
+  .modal-content,
+  .settings-toggle,
+  .settings-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(11, 15, 26, 0.95) !important;
+  }
+
+  /* Disable shadows and glows (reduce GPU load) */
+  .auth-card,
+  .summary-card,
+  .expense-item,
+  .btn,
+  .modal-content {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    text-shadow: none !important;
+  }
+
+  /* Disable pseudo-element effects */
+  body::before,
+  body::after,
+  .auth-card::before,
+  .auth-card::after,
+  .summary-card::before,
+  .summary-card::after,
+  .dashboard-header::before,
+  .modal-content::before {
+    display: none !important;
+  }
+
+  /* Simple flat design for mobile */
   .auth-card {
     padding: 40px 28px;
-    transform: translateZ(var(--elevation-2));
   }
 
   .form-row {
