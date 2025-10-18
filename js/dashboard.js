@@ -64,6 +64,17 @@ function initializeEventListeners() {
       closeModal();
     }
   });
+
+  // Listen for section changes to update charts
+  window.addEventListener("section:changed", (e) => {
+    if (e.detail.section === "dashboard") {
+      console.log("Dashboard section active - updating charts");
+      // Small delay to ensure elements are visible
+      setTimeout(() => {
+        updateCharts();
+      }, 100);
+    }
+  });
 }
 
 // Set default date to today
@@ -252,13 +263,18 @@ function getCategoryIcon(category) {
 function displayCategoryChart() {
   const categoryChart = document.getElementById("categoryChart");
 
-  if (!categoryChart) return;
+  if (!categoryChart) {
+    console.warn("categoryChart element not found");
+    return;
+  }
 
   if (expenses.length === 0) {
     categoryChart.innerHTML =
       '<p class="chart-placeholder">No data available</p>';
     return;
   }
+
+  console.log("Rendering category chart with", expenses.length, "expenses");
 
   // Calculate category totals
   const categoryTotals = {};
@@ -323,12 +339,17 @@ function getCategoryColor(category) {
 function displayMonthlyTrend() {
   const trendChart = document.getElementById("trendChart");
 
-  if (!trendChart) return;
+  if (!trendChart) {
+    console.warn("trendChart element not found");
+    return;
+  }
 
   if (expenses.length === 0) {
     trendChart.innerHTML = '<p class="chart-placeholder">No data available</p>';
     return;
   }
+
+  console.log("Rendering monthly trend with", expenses.length, "expenses");
 
   // Get last 6 months data
   const monthlyData = {};
@@ -392,8 +413,21 @@ function displayMonthlyTrend() {
 
 // Update charts
 function updateCharts() {
-  displayCategoryChart();
-  displayMonthlyTrend();
+  console.log("updateCharts called, expenses count:", expenses.length);
+  
+  // Check if chart elements exist
+  const categoryChart = document.getElementById("categoryChart");
+  const trendChart = document.getElementById("trendChart");
+  
+  console.log("categoryChart exists:", !!categoryChart);
+  console.log("trendChart exists:", !!trendChart);
+  
+  if (categoryChart || trendChart) {
+    displayCategoryChart();
+    displayMonthlyTrend();
+  } else {
+    console.error("Chart elements not found in DOM");
+  }
 }
 
 // Handle add expense
