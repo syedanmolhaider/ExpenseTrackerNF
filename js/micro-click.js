@@ -8,15 +8,18 @@ class MicroClickAnimator {
     this.stage = stage;
     this.particlePool = [];
     this.activeAnimations = new Set();
-    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
 
     this.init();
   }
 
   init() {
     // Listen for reduced motion preference changes
-    window.matchMedia('(prefers-reduced-motion: reduce)')
-      .addEventListener('change', (e) => {
+    window
+      .matchMedia("(prefers-reduced-motion: reduce)")
+      .addEventListener("change", (e) => {
         this.reducedMotion = e.matches;
       });
 
@@ -25,13 +28,19 @@ class MicroClickAnimator {
   }
 
   registerGlobalClickHandler() {
-    document.addEventListener('click', (e) => {
-      const target = e.target.closest('[data-3d-click], .btn, .expense-item, .filter-group select, .summary-card');
-      
-      if (target && !target.hasAttribute('data-3d-disabled')) {
-        this.microClickAnimation(target, e);
-      }
-    }, true);
+    document.addEventListener(
+      "click",
+      (e) => {
+        const target = e.target.closest(
+          "[data-3d-click], .btn, .expense-item, .filter-group select, .summary-card"
+        );
+
+        if (target && !target.hasAttribute("data-3d-disabled")) {
+          this.microClickAnimation(target, e);
+        }
+      },
+      true
+    );
   }
 
   microClickAnimation(element, event, options = {}) {
@@ -46,7 +55,7 @@ class MicroClickAnimator {
       particleLifetime: 0.6,
       scaleAmount: 0.96,
       glowIntensity: 1.5,
-      cameraPush: 0.5
+      cameraPush: 0.5,
     };
 
     const config = { ...defaults, ...options };
@@ -62,33 +71,43 @@ class MicroClickAnimator {
     const tl = gsap.timeline({
       onComplete: () => {
         this.activeAnimations.delete(element);
-      }
+      },
     });
 
     // Button press animation
     tl.to(element, {
       scale: config.scaleAmount,
       duration: config.duration * 0.4,
-      ease: 'power2.in'
-    })
-    .to(element, {
-      scale: 1,
-      duration: config.duration * 0.6,
-      ease: 'elastic.out(1, 0.3)'
-    }, `-=${config.duration * 0.2}`);
+      ease: "power2.in",
+    }).to(
+      element,
+      {
+        scale: 1,
+        duration: config.duration * 0.6,
+        ease: "elastic.out(1, 0.3)",
+      },
+      `-=${config.duration * 0.2}`
+    );
 
     // Add glow effect if element supports it
-    if (window.getComputedStyle(element).boxShadow !== 'none') {
-      tl.to(element, {
-        '--glow-intensity': config.glowIntensity,
-        duration: config.duration * 0.5,
-        ease: 'power2.out'
-      }, 0)
-      .to(element, {
-        '--glow-intensity': 1,
-        duration: config.duration * 0.5,
-        ease: 'power2.in'
-      }, config.duration * 0.5);
+    if (window.getComputedStyle(element).boxShadow !== "none") {
+      tl.to(
+        element,
+        {
+          "--glow-intensity": config.glowIntensity,
+          duration: config.duration * 0.5,
+          ease: "power2.out",
+        },
+        0
+      ).to(
+        element,
+        {
+          "--glow-intensity": 1,
+          duration: config.duration * 0.5,
+          ease: "power2.in",
+        },
+        config.duration * 0.5
+      );
     }
 
     // Camera subtle push (if 3D stage available)
@@ -97,14 +116,14 @@ class MicroClickAnimator {
       gsap.to(this.stage.camera.position, {
         z: originalZ - config.cameraPush,
         duration: config.duration * 0.4,
-        ease: 'power2.out',
+        ease: "power2.out",
         onComplete: () => {
           gsap.to(this.stage.camera.position, {
             z: originalZ,
             duration: config.duration * 0.6,
-            ease: 'power2.inOut'
+            ease: "power2.inOut",
           });
-        }
+        },
       });
     }
 
@@ -133,16 +152,16 @@ class MicroClickAnimator {
     for (let i = 0; i < particleCount; i++) {
       const angle = (Math.PI * 2 * i) / particleCount;
       const velocity = 5 + Math.random() * 10;
-      
+
       const geometry = new THREE.SphereGeometry(0.1, 8, 8);
       const material = new THREE.MeshBasicMaterial({
         color: this.getRandomNeonColor(),
         transparent: true,
-        opacity: 1
+        opacity: 1,
       });
 
       const particle = new THREE.Mesh(geometry, material);
-      
+
       // Position at click point (approximated in front of camera)
       const depth = 40;
       particle.position.set(
@@ -157,7 +176,7 @@ class MicroClickAnimator {
 
       particle.userData = {
         velocity: new THREE.Vector3(velocityX, velocityY, velocityZ),
-        lifetime: config.particleLifetime
+        lifetime: config.particleLifetime,
       };
 
       this.stage.scene.add(particle);
@@ -167,12 +186,12 @@ class MicroClickAnimator {
       gsap.to(particle.material, {
         opacity: 0,
         duration: config.particleLifetime,
-        ease: 'power2.out',
+        ease: "power2.out",
         onComplete: () => {
           this.stage.scene.remove(particle);
           geometry.dispose();
           material.dispose();
-        }
+        },
       });
 
       gsap.to(particle.scale, {
@@ -180,7 +199,7 @@ class MicroClickAnimator {
         y: 0,
         z: 0,
         duration: config.particleLifetime,
-        ease: 'power2.in'
+        ease: "power2.in",
       });
     }
 
@@ -194,15 +213,17 @@ class MicroClickAnimator {
 
     const update = () => {
       frameCount++;
-      
-      particles.forEach(particle => {
+
+      particles.forEach((particle) => {
         if (particle.parent) {
-          particle.position.add(particle.userData.velocity.clone().multiplyScalar(0.016));
+          particle.position.add(
+            particle.userData.velocity.clone().multiplyScalar(0.016)
+          );
           particle.userData.velocity.multiplyScalar(0.95); // Friction
         }
       });
 
-      if (frameCount < maxFrames && particles.some(p => p.parent)) {
+      if (frameCount < maxFrames && particles.some((p) => p.parent)) {
         requestAnimationFrame(update);
       }
     };
@@ -212,23 +233,23 @@ class MicroClickAnimator {
 
   spawnDOMParticles(event, config) {
     // Fallback: Create DOM-based particles
-    const container = document.createElement('div');
-    container.className = 'particle-burst';
-    container.style.position = 'fixed';
-    container.style.left = event.clientX + 'px';
-    container.style.top = event.clientY + 'px';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '9999';
+    const container = document.createElement("div");
+    container.className = "particle-burst";
+    container.style.position = "fixed";
+    container.style.left = event.clientX + "px";
+    container.style.top = event.clientY + "px";
+    container.style.pointerEvents = "none";
+    container.style.zIndex = "9999";
     document.body.appendChild(container);
 
     for (let i = 0; i < config.particleCount; i++) {
-      const particle = document.createElement('div');
-      particle.className = 'particle';
-      
+      const particle = document.createElement("div");
+      particle.className = "particle";
+
       const angle = (Math.PI * 2 * i) / config.particleCount;
       const velocity = 30 + Math.random() * 50;
       const size = 2 + Math.random() * 4;
-      
+
       particle.style.cssText = `
         position: absolute;
         width: ${size}px;
@@ -249,10 +270,10 @@ class MicroClickAnimator {
         opacity: 0,
         scale: 0,
         duration: config.particleLifetime,
-        ease: 'power2.out',
+        ease: "power2.out",
         onComplete: () => {
           particle.remove();
-        }
+        },
       });
     }
 
@@ -268,7 +289,11 @@ class MicroClickAnimator {
   }
 
   getRandomNeonColorCSS() {
-    const colors = ['rgba(255, 0, 209, 1)', 'rgba(0, 229, 255, 1)', 'rgba(199, 255, 0, 1)'];
+    const colors = [
+      "rgba(255, 0, 209, 1)",
+      "rgba(0, 229, 255, 1)",
+      "rgba(199, 255, 0, 1)",
+    ];
     return colors[Math.floor(Math.random() * colors.length)];
   }
 
@@ -279,7 +304,7 @@ class MicroClickAnimator {
       const rect = element.getBoundingClientRect();
       event = {
         clientX: rect.left + rect.width / 2,
-        clientY: rect.top + rect.height / 2
+        clientY: rect.top + rect.height / 2,
       };
     }
 
@@ -288,6 +313,6 @@ class MicroClickAnimator {
 }
 
 // Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = MicroClickAnimator;
 }

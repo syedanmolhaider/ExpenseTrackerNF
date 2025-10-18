@@ -21,8 +21,8 @@ class DashboardVisualizer {
       emissiveIntensity: options.emissiveIntensity || 1,
       segments: options.segments || 64,
       startAngle: options.startAngle || 0,
-      label: options.label || '',
-      ...options
+      label: options.label || "",
+      ...options,
     };
 
     const percentage = value / max;
@@ -42,7 +42,7 @@ class DashboardVisualizer {
       color: config.color,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.8,
     });
 
     const gauge = new THREE.Mesh(geometry, material);
@@ -53,7 +53,7 @@ class DashboardVisualizer {
       color: config.color,
       transparent: true,
       opacity: 0.3,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     });
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
     glow.scale.set(1.1, 1.1, 1.1);
@@ -69,7 +69,7 @@ class DashboardVisualizer {
       color: 0x0b0f1a,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.3
+      opacity: 0.3,
     });
     const background = new THREE.Mesh(bgGeometry, bgMaterial);
     gauge.add(background);
@@ -79,7 +79,7 @@ class DashboardVisualizer {
       const rect = container.getBoundingClientRect();
       const x = ((rect.left + rect.width / 2) / window.innerWidth) * 2 - 1;
       const y = -((rect.top + rect.height / 2) / window.innerHeight) * 2 + 1;
-      
+
       gauge.position.set(x * 30, y * 30, 20);
     }
 
@@ -96,25 +96,28 @@ class DashboardVisualizer {
     const geometry = gauge.geometry;
     const startAngle = config.startAngle;
 
-    gsap.to({ angle: 0 }, {
-      angle: targetAngle,
-      duration: 1.5,
-      ease: 'power2.out',
-      onUpdate: function() {
-        // Recreate geometry with new angle
-        const newGeometry = new THREE.RingGeometry(
-          config.radius - config.thickness,
-          config.radius,
-          config.segments,
-          1,
-          startAngle,
-          this.targets()[0].angle
-        );
-        
-        gauge.geometry.dispose();
-        gauge.geometry = newGeometry;
+    gsap.to(
+      { angle: 0 },
+      {
+        angle: targetAngle,
+        duration: 1.5,
+        ease: "power2.out",
+        onUpdate: function () {
+          // Recreate geometry with new angle
+          const newGeometry = new THREE.RingGeometry(
+            config.radius - config.thickness,
+            config.radius,
+            config.segments,
+            1,
+            startAngle,
+            this.targets()[0].angle
+          );
+
+          gauge.geometry.dispose();
+          gauge.geometry = newGeometry;
+        },
       }
-    });
+    );
   }
 
   /**
@@ -127,7 +130,7 @@ class DashboardVisualizer {
       height: options.height || 0.5,
       segments: options.segments || 64,
       gap: options.gap || 0.02,
-      ...options
+      ...options,
     };
 
     const group = new THREE.Group();
@@ -155,7 +158,7 @@ class DashboardVisualizer {
         transparent: true,
         opacity: 0.9,
         emissive: item.color || this.getCategoryColor(item.category),
-        emissiveIntensity: 0.5
+        emissiveIntensity: 0.5,
       });
 
       const segment = new THREE.Mesh(geometry, material);
@@ -164,16 +167,16 @@ class DashboardVisualizer {
       const shape = new THREE.Shape();
       const innerRadius = config.radius - config.thickness;
       const outerRadius = config.radius;
-      
+
       for (let i = 0; i <= config.segments; i++) {
         const theta = currentAngle + (angle * i) / config.segments;
         const x = Math.cos(theta) * outerRadius;
         const y = Math.sin(theta) * outerRadius;
-        
+
         if (i === 0) shape.moveTo(x, y);
         else shape.lineTo(x, y);
       }
-      
+
       for (let i = config.segments; i >= 0; i--) {
         const theta = currentAngle + (angle * i) / config.segments;
         const x = Math.cos(theta) * innerRadius;
@@ -186,7 +189,7 @@ class DashboardVisualizer {
         bevelEnabled: true,
         bevelThickness: 0.1,
         bevelSize: 0.1,
-        bevelSegments: 3
+        bevelSegments: 3,
       };
 
       const extrudeGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
@@ -199,7 +202,7 @@ class DashboardVisualizer {
       extrudedSegment.userData = {
         category: item.category,
         value: item.value,
-        percentage: percentage * 100
+        percentage: percentage * 100,
       };
 
       // Animate appearance
@@ -210,7 +213,7 @@ class DashboardVisualizer {
         z: 1,
         duration: 0.8,
         delay: index * 0.1,
-        ease: 'back.out(1.7)'
+        ease: "back.out(1.7)",
       });
 
       currentAngle += angle + config.gap;
@@ -221,7 +224,7 @@ class DashboardVisualizer {
       const rect = container.getBoundingClientRect();
       const x = ((rect.left + rect.width / 2) / window.innerWidth) * 2 - 1;
       const y = -((rect.top + rect.height / 2) / window.innerHeight) * 2 + 1;
-      
+
       group.position.set(x * 30, y * 30, 15);
     }
 
@@ -236,7 +239,7 @@ class DashboardVisualizer {
       z: Math.PI * 2,
       duration: 20,
       repeat: -1,
-      ease: 'none'
+      ease: "none",
     });
 
     return group;
@@ -251,15 +254,15 @@ class DashboardVisualizer {
       barDepth: options.barDepth || 0.8,
       spacing: options.spacing || 0.3,
       maxHeight: options.maxHeight || 10,
-      ...options
+      ...options,
     };
 
     const group = new THREE.Group();
-    const maxValue = Math.max(...data.map(d => d.value));
+    const maxValue = Math.max(...data.map((d) => d.value));
 
     data.forEach((item, index) => {
       const height = (item.value / maxValue) * config.maxHeight;
-      
+
       const geometry = new THREE.BoxGeometry(
         config.barWidth,
         height,
@@ -273,11 +276,13 @@ class DashboardVisualizer {
         transparent: true,
         opacity: 0.9,
         emissive: item.color || this.getCategoryColor(item.category),
-        emissiveIntensity: 0.3
+        emissiveIntensity: 0.3,
       });
 
       const bar = new THREE.Mesh(geometry, material);
-      bar.position.x = index * (config.barWidth + config.spacing) - (data.length * (config.barWidth + config.spacing)) / 2;
+      bar.position.x =
+        index * (config.barWidth + config.spacing) -
+        (data.length * (config.barWidth + config.spacing)) / 2;
       bar.position.y = height / 2;
 
       // Add edge glow
@@ -285,7 +290,7 @@ class DashboardVisualizer {
       const lineMaterial = new THREE.LineBasicMaterial({
         color: item.color || this.getCategoryColor(item.category),
         transparent: true,
-        opacity: 0.8
+        opacity: 0.8,
       });
       const wireframe = new THREE.LineSegments(edges, lineMaterial);
       bar.add(wireframe);
@@ -298,12 +303,12 @@ class DashboardVisualizer {
         y: 1,
         duration: 1,
         delay: index * 0.1,
-        ease: 'elastic.out(1, 0.5)'
+        ease: "elastic.out(1, 0.5)",
       });
 
       bar.userData = {
         category: item.category,
-        value: item.value
+        value: item.value,
       };
     });
 
@@ -312,7 +317,7 @@ class DashboardVisualizer {
       const rect = container.getBoundingClientRect();
       const x = ((rect.left + rect.width / 2) / window.innerWidth) * 2 - 1;
       const y = -((rect.top + rect.height / 2) / window.innerHeight) * 2 + 1;
-      
+
       group.position.set(x * 30, y * 30, 15);
     }
 
@@ -339,7 +344,7 @@ class DashboardVisualizer {
     // Recreate with new data
     // Type detection based on data structure
     if (Array.isArray(newData)) {
-      if (newData[0].hasOwnProperty('category')) {
+      if (newData[0].hasOwnProperty("category")) {
         this.createDonutChart(container, newData);
       } else {
         this.createBarChart(container, newData);
@@ -352,11 +357,11 @@ class DashboardVisualizer {
    */
   getCategoryColor(category) {
     const colorMap = {
-      'food': 0x00e5ff,
-      'transport': 0xff00d1,
-      'entertainment': 0xc7ff00,
-      'utilities': 0x00e5ff,
-      'other': 0xff00d1
+      food: 0x00e5ff,
+      transport: 0xff00d1,
+      entertainment: 0xc7ff00,
+      utilities: 0x00e5ff,
+      other: 0xff00d1,
     };
 
     return colorMap[category?.toLowerCase()] || 0x00e5ff;
@@ -370,13 +375,13 @@ class DashboardVisualizer {
     if (viz) {
       this.stage.scene.remove(viz);
       this.visualizations.delete(container);
-      
+
       // Dispose geometries and materials
-      viz.traverse(child => {
+      viz.traverse((child) => {
         if (child.geometry) child.geometry.dispose();
         if (child.material) {
           if (Array.isArray(child.material)) {
-            child.material.forEach(m => m.dispose());
+            child.material.forEach((m) => m.dispose());
           } else {
             child.material.dispose();
           }
@@ -396,6 +401,6 @@ class DashboardVisualizer {
 }
 
 // Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = DashboardVisualizer;
 }

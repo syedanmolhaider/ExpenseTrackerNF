@@ -10,7 +10,9 @@ class PointerController {
     this.targetRotation = { x: 0, y: 0 };
     this.currentRotation = { x: 0, y: 0 };
     this.isEnabled = true;
-    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
     this.trackedElements = new Map();
 
     this.init();
@@ -18,8 +20,9 @@ class PointerController {
 
   init() {
     // Listen for reduced motion preference
-    window.matchMedia('(prefers-reduced-motion: reduce)')
-      .addEventListener('change', (e) => {
+    window
+      .matchMedia("(prefers-reduced-motion: reduce)")
+      .addEventListener("change", (e) => {
         this.reducedMotion = e.matches;
         if (this.reducedMotion) {
           this.resetAllTilts();
@@ -27,8 +30,10 @@ class PointerController {
       });
 
     // Setup pointer tracking
-    window.addEventListener('pointermove', (e) => this.handlePointerMove(e), { passive: true });
-    window.addEventListener('pointerleave', () => this.handlePointerLeave());
+    window.addEventListener("pointermove", (e) => this.handlePointerMove(e), {
+      passive: true,
+    });
+    window.addEventListener("pointerleave", () => this.handlePointerLeave());
 
     // Auto-detect elements to track
     this.autoDetectElements();
@@ -36,37 +41,38 @@ class PointerController {
     // Start animation loop
     this.animate();
 
-    console.log('👆 Pointer controller initialized');
+    console.log("👆 Pointer controller initialized");
   }
 
   autoDetectElements() {
     // Auto-track common interactive elements
     const selectors = [
-      '.auth-card',
-      '.summary-card',
-      '.expense-item',
-      '.add-expense-section',
-      '.modal-content'
+      ".auth-card",
+      ".summary-card",
+      ".expense-item",
+      ".add-expense-section",
+      ".modal-content",
     ];
 
-    selectors.forEach(selector => {
-      document.querySelectorAll(selector).forEach(el => {
+    selectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((el) => {
         this.trackElement(el);
       });
     });
 
     // Setup mutation observer for dynamically added elements
     const observer = new MutationObserver((mutations) => {
-      mutations.forEach(mutation => {
-        mutation.addedNodes.forEach(node => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
           if (node.nodeType === 1) {
-            selectors.forEach(selector => {
+            selectors.forEach((selector) => {
               if (node.matches && node.matches(selector)) {
                 this.trackElement(node);
               }
-              node.querySelectorAll && node.querySelectorAll(selector).forEach(el => {
-                this.trackElement(el);
-              });
+              node.querySelectorAll &&
+                node.querySelectorAll(selector).forEach((el) => {
+                  this.trackElement(el);
+                });
             });
           }
         });
@@ -75,7 +81,7 @@ class PointerController {
 
     observer.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
   }
 
@@ -90,7 +96,7 @@ class PointerController {
       perspective: options.perspective || 1000,
       scale: options.scale || 1.02,
       glareEffect: options.glareEffect !== false,
-      ...options
+      ...options,
     };
 
     // Store original transform
@@ -100,17 +106,17 @@ class PointerController {
       config,
       originalTransform,
       currentTilt: { x: 0, y: 0 },
-      glareElement: null
+      glareElement: null,
     });
 
     // Setup element
-    element.style.transformStyle = 'preserve-3d';
-    element.style.transition = 'transform 0.1s ease-out';
+    element.style.transformStyle = "preserve-3d";
+    element.style.transition = "transform 0.1s ease-out";
 
     // Add glare effect
-    if (config.glareEffect && !element.querySelector('.parallax-glare')) {
-      const glare = document.createElement('div');
-      glare.className = 'parallax-glare';
+    if (config.glareEffect && !element.querySelector(".parallax-glare")) {
+      const glare = document.createElement("div");
+      glare.className = "parallax-glare";
       glare.style.cssText = `
         position: absolute;
         top: 0;
@@ -129,17 +135,17 @@ class PointerController {
     }
 
     // Setup hover listeners
-    element.addEventListener('mouseenter', () => {
+    element.addEventListener("mouseenter", () => {
       if (!this.reducedMotion) {
         gsap.to(element, {
           scale: config.scale,
           duration: 0.3,
-          ease: 'power2.out'
+          ease: "power2.out",
         });
       }
     });
 
-    element.addEventListener('mouseleave', () => {
+    element.addEventListener("mouseleave", () => {
       this.resetTilt(element);
     });
   }
@@ -172,7 +178,7 @@ class PointerController {
     if (!data) return;
 
     // Check if pointer is over element
-    const isOver = 
+    const isOver =
       event.clientX >= rect.left &&
       event.clientX <= rect.right &&
       event.clientY >= rect.top &&
@@ -186,8 +192,8 @@ class PointerController {
     const x = (event.clientX - rect.left) / rect.width;
     const y = (event.clientY - rect.top) / rect.height;
 
-    const tiltX = ((y - 0.5) * 2) * data.config.maxTilt;
-    const tiltY = ((x - 0.5) * -2) * data.config.maxTilt;
+    const tiltX = (y - 0.5) * 2 * data.config.maxTilt;
+    const tiltY = (x - 0.5) * -2 * data.config.maxTilt;
 
     // Apply transform
     element.style.transform = `
@@ -199,9 +205,10 @@ class PointerController {
 
     // Update glare position
     if (data.glareElement) {
-      data.glareElement.style.background = 
-        `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(255, 255, 255, 0.2) 0%, transparent 50%)`;
-      data.glareElement.style.opacity = '1';
+      data.glareElement.style.background = `radial-gradient(circle at ${
+        x * 100
+      }% ${y * 100}%, rgba(255, 255, 255, 0.2) 0%, transparent 50%)`;
+      data.glareElement.style.opacity = "1";
     }
   }
 
@@ -217,15 +224,14 @@ class PointerController {
     gsap.to(element, {
       scale: 1,
       duration: 0.4,
-      ease: 'power2.inOut'
+      ease: "power2.inOut",
     });
 
-    element.style.transform = data.originalTransform !== 'none' 
-      ? data.originalTransform 
-      : 'none';
+    element.style.transform =
+      data.originalTransform !== "none" ? data.originalTransform : "none";
 
     if (data.glareElement) {
-      data.glareElement.style.opacity = '0';
+      data.glareElement.style.opacity = "0";
     }
   }
 
@@ -238,8 +244,10 @@ class PointerController {
   animate() {
     // Smooth camera rotation
     if (this.stage && this.stage.camera && !this.reducedMotion) {
-      this.currentRotation.x += (this.targetRotation.x - this.currentRotation.x) * 0.05;
-      this.currentRotation.y += (this.targetRotation.y - this.currentRotation.y) * 0.05;
+      this.currentRotation.x +=
+        (this.targetRotation.x - this.currentRotation.x) * 0.05;
+      this.currentRotation.y +=
+        (this.targetRotation.y - this.currentRotation.y) * 0.05;
 
       this.stage.camera.rotation.x = this.currentRotation.x * (Math.PI / 180);
       this.stage.camera.rotation.y = this.currentRotation.y * (Math.PI / 180);
@@ -267,12 +275,12 @@ class PointerController {
   destroy() {
     this.resetAllTilts();
     this.trackedElements.clear();
-    window.removeEventListener('pointermove', this.handlePointerMove);
-    window.removeEventListener('pointerleave', this.handlePointerLeave);
+    window.removeEventListener("pointermove", this.handlePointerMove);
+    window.removeEventListener("pointerleave", this.handlePointerLeave);
   }
 }
 
 // Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = PointerController;
 }
