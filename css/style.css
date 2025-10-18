@@ -750,6 +750,121 @@ body::after {
   font-size: 0.875rem;
 }
 
+/* ===============================================
+   NAVIGATION MENU - Dashboard Tabs
+   =============================================== */
+.dashboard-nav {
+  background: rgba(11, 15, 26, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+  padding: 0;
+  position: sticky;
+  top: 92px;
+  z-index: 99;
+  display: flex;
+  gap: 0;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.nav-item {
+  flex: 1;
+  max-width: 300px;
+  background: transparent;
+  border: none;
+  padding: 20px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--text-secondary);
+  font-size: 1rem;
+  font-weight: 600;
+  border-bottom: 3px solid transparent;
+}
+
+.nav-item:hover {
+  background: rgba(0, 229, 255, 0.05);
+  color: var(--electric-cyan);
+}
+
+.nav-item.active {
+  color: var(--electric-cyan);
+  background: rgba(0, 229, 255, 0.1);
+  border-bottom-color: var(--electric-cyan);
+  text-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
+}
+
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--electric-cyan) 50%,
+    transparent
+  );
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.8);
+}
+
+.nav-icon {
+  font-size: 1.5rem;
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.nav-item:hover .nav-icon {
+  transform: scale(1.2);
+}
+
+.nav-item.active .nav-icon {
+  animation: iconPulse 2s ease-in-out infinite;
+}
+
+@keyframes iconPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.nav-text {
+  font-family: inherit;
+  letter-spacing: 0.5px;
+}
+
+/* Content Sections */
+.content-section {
+  display: none;
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.content-section.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Dashboard Main */
 .dashboard-main {
   max-width: 1400px;
@@ -891,6 +1006,135 @@ body::after {
   background: linear-gradient(90deg, var(--neon-magenta), var(--electric-cyan));
   box-shadow: var(--glow-cyan);
   border-radius: 2px;
+}
+
+/* ===============================================
+   CHARTS SECTION - Analytics Visualizations
+   =============================================== */
+.charts-section {
+  margin-bottom: 40px;
+}
+
+.charts-section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, var(--electric-cyan), var(--acid-lime));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 30px rgba(0, 229, 255, 0.4);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+}
+
+.chart-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  padding: 32px;
+  border-radius: 20px;
+  border: 2px solid rgba(199, 255, 0, 0.3);
+  box-shadow: var(--shadow), var(--glow-inner);
+  position: relative;
+  overflow: hidden;
+  min-height: 350px;
+}
+
+.chart-card h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--acid-lime);
+  margin-bottom: 20px;
+  text-shadow: 0 0 20px rgba(199, 255, 0, 0.5);
+}
+
+.chart-container {
+  width: 100%;
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.chart-placeholder {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Recent Activity Section */
+.recent-activity-section {
+  margin-bottom: 40px;
+}
+
+.recent-activity-section h2 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  background: linear-gradient(
+    135deg,
+    var(--neon-magenta),
+    var(--electric-cyan)
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 30px rgba(255, 0, 209, 0.4);
+}
+
+.recent-list {
+  display: grid;
+  gap: 16px;
+}
+
+.recent-item {
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.recent-item:hover {
+  border-color: var(--electric-cyan);
+  box-shadow: 0 4px 20px rgba(0, 229, 255, 0.3);
+  transform: translateX(8px);
+}
+
+.recent-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recent-item-title {
+  font-weight: 600;
+  color: var(--ultra-white);
+  font-size: 1rem;
+}
+
+.recent-item-category {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.recent-item-amount {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 10px rgba(255, 0, 209, 0.5);
 }
 
 /* Add Expense Section - Glass Panel */
@@ -1490,8 +1734,44 @@ body::after {
     width: 100%;
   }
 
+  .dashboard-nav {
+    top: auto;
+    position: relative;
+  }
+
+  .nav-item {
+    padding: 16px 20px;
+    font-size: 0.9rem;
+  }
+
+  .nav-icon {
+    font-size: 1.25rem;
+  }
+
+  .nav-text {
+    font-size: 0.875rem;
+  }
+
   .dashboard-main {
     padding: 32px 20px;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card {
+    min-height: 300px;
+  }
+
+  .recent-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .recent-item-amount {
+    font-size: 1.5rem;
   }
 
   .summary-section {

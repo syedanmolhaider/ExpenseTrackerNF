@@ -101,6 +101,7 @@ async function loadExpenses() {
     expenses = data.expenses;
     displayExpenses();
     updateSummary();
+    displayRecentActivity();
   } catch (error) {
     console.error("Load expenses error:", error);
     document.getElementById("expensesList").innerHTML =
@@ -192,6 +193,58 @@ function updateSummary() {
     "monthlyExpenses"
   ).textContent = `$${monthlyTotal.toFixed(2)}`;
   document.getElementById("totalEntries").textContent = expenses.length;
+}
+
+// Display recent activity (last 5 expenses)
+function displayRecentActivity() {
+  const recentActivity = document.getElementById("recentActivity");
+
+  if (!recentActivity) return; // Element might not exist yet
+
+  if (expenses.length === 0) {
+    recentActivity.innerHTML = '<p class="empty-state">No recent expenses</p>';
+    return;
+  }
+
+  // Get last 5 expenses sorted by date
+  const recentExpenses = [...expenses]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 5);
+
+  recentActivity.innerHTML = recentExpenses
+    .map(
+      (expense) => `
+        <div class="recent-item" onclick="openEditModal('${expense.id}')">
+          <div class="recent-item-info">
+            <div class="recent-item-title">${escapeHtml(expense.title)}</div>
+            <div class="recent-item-category">
+              ${getCategoryIcon(expense.category)} ${escapeHtml(
+        expense.category
+      )}
+            </div>
+          </div>
+          <div class="recent-item-amount">$${parseFloat(expense.amount).toFixed(
+            2
+          )}</div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+// Get category icon
+function getCategoryIcon(category) {
+  const icons = {
+    Food: "🍔",
+    Transport: "🚗",
+    Entertainment: "🎬",
+    Shopping: "🛍️",
+    Bills: "📄",
+    Healthcare: "⚕️",
+    Education: "📚",
+    Other: "📦",
+  };
+  return icons[category] || "📦";
 }
 
 // Handle add expense
