@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chart Debug Test</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    body {
+      padding: 40px;
+      background: #05060a;
+    }
+    .debug-info {
+      background: rgba(11, 15, 26, 0.9);
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      margin-bottom: 20px;
+      color: white;
+    }
+    .test-section {
+      margin-bottom: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="debug-info">
+    <h2>🔍 Chart Debug Information</h2>
+    <div id="debugInfo">Loading...</div>
+  </div>
+
+  <div class="test-section">
+    <h2>📊 Category Chart Test</h2>
+    <div class="chart-card">
+      <div id="categoryChart" class="chart-container">
+        <p class="chart-placeholder">Initializing...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="test-section">
+    <h2>📈 Trend Chart Test</h2>
+    <div class="chart-card">
+      <div id="trendChart" class="chart-container">
+        <p class="chart-placeholder">Initializing...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Mock expenses data for testing
+    const mockExpenses = [
+      {
+        id: '1',
+        title: 'Groceries',
+        amount: 150.50,
+        category: 'Food',
+        date: '2025-10-15',
+        created_at: '2025-10-15T10:30:00'
+      },
+      {
+        id: '2',
+        title: 'Uber',
+        amount: 25.00,
+        category: 'Transport',
+        date: '2025-10-16',
+        created_at: '2025-10-16T14:20:00'
+      },
+      {
+        id: '3',
+        title: 'Movie Tickets',
+        amount: 40.00,
+        category: 'Entertainment',
+        date: '2025-10-17',
+        created_at: '2025-10-17T19:45:00'
+      },
+      {
+        id: '4',
+        title: 'Restaurant',
+        amount: 85.75,
+        category: 'Food',
+        date: '2025-10-18',
+        created_at: '2025-10-18T20:15:00'
+      },
+      {
+        id: '5',
+        title: 'Gas',
+        amount: 60.00,
+        category: 'Transport',
+        date: '2025-10-19',
+        created_at: '2025-10-19T09:00:00'
+      }
+    ];
+
+    let expenses = mockExpenses;
+
+    // Display debug info
+    function showDebugInfo() {
+      const info = document.getElementById('debugInfo');
+      info.innerHTML = `
+        <p><strong>Total Expenses:</strong> ${expenses.length}</p>
+        <p><strong>Total Amount:</strong> $${expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0).toFixed(2)}</p>
+        <p><strong>categoryChart element:</strong> ${document.getElementById('categoryChart') ? '✅ Found' : '❌ Not Found'}</p>
+        <p><strong>trendChart element:</strong> ${document.getElementById('trendChart') ? '✅ Found' : '❌ Not Found'}</p>
+      `;
+    }
+
+    // Copy functions from dashboard.js
+    function getCategoryIcon(category) {
+      const icons = {
+        Food: "🍔",
+        Transport: "🚗",
+        Entertainment: "🎬",
+        Shopping: "🛍️",
+        Bills: "📄",
+        Healthcare: "⚕️",
+        Education: "📚",
+        Other: "📦",
+      };
+      return icons[category] || "📦";
+    }
+
+    function getCategoryColor(category) {
+      const colors = {
+        Food: 'linear-gradient(90deg, #00e5ff, #00a8cc)',
+        Transport: 'linear-gradient(90deg, #ff00d1, #cc00a8)',
+        Entertainment: 'linear-gradient(90deg, #c7ff00, #9acc00)',
+        Shopping: 'linear-gradient(90deg, #ff00d1, #ff0055)',
+        Bills: 'linear-gradient(90deg, #00e5ff, #c7ff00)',
+        Healthcare: 'linear-gradient(90deg, #ff0055, #ff00d1)',
+        Education: 'linear-gradient(90deg, #c7ff00, #00e5ff)',
+        Other: 'linear-gradient(90deg, #ffffff, #c0c5ce)'
+      };
+      return colors[category] || colors.Other;
+    }
+
+    function displayCategoryChart() {
+      const categoryChart = document.getElementById("categoryChart");
+
+      if (!categoryChart) {
+        console.error("categoryChart element not found");
+        return;
+      }
+
+      if (expenses.length === 0) {
+        categoryChart.innerHTML = '<p class="chart-placeholder">No data available</p>';
+        return;
+      }
+
+      console.log("Rendering category chart with", expenses.length, "expenses");
+
+      // Calculate category totals
+      const categoryTotals = {};
+      expenses.forEach((expense) => {
+        const category = expense.category;
+        const amount = parseFloat(expense.amount);
+        categoryTotals[category] = (categoryTotals[category] || 0) + amount;
+      });
+
+      // Sort by amount (descending)
+      const sortedCategories = Object.entries(categoryTotals).sort(
+        (a, b) => b[1] - a[1]
+      );
+
+      const total = sortedCategories.reduce((sum, [_, amount]) => sum + amount, 0);
+
+      // Create visual bars
+      categoryChart.innerHTML = `
+        <div class="category-bars">
+          ${sortedCategories
+            .map(([category, amount]) => {
+              const percentage = ((amount / total) * 100).toFixed(1);
+              return `
+                <div class="category-bar-item">
+                  <div class="category-bar-header">
+                    <span class="category-name">${getCategoryIcon(category)} ${category}</span>
+                    <span class="category-amount">$${amount.toFixed(2)} (${percentage}%)</span>
+                  </div>
+                  <div class="category-bar-track">
+                    <div class="category-bar-fill" style="width: ${percentage}%; background: ${getCategoryColor(category)}"></div>
+                  </div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+    }
+
+    function displayMonthlyTrend() {
+      const trendChart = document.getElementById("trendChart");
+
+      if (!trendChart) {
+        console.error("trendChart element not found");
+        return;
+      }
+
+      if (expenses.length === 0) {
+        trendChart.innerHTML = '<p class="chart-placeholder">No data available</p>';
+        return;
+      }
+
+      console.log("Rendering monthly trend with", expenses.length, "expenses");
+
+      // Get last 6 months data
+      const monthlyData = {};
+      const currentDate = new Date();
+
+      // Initialize last 6 months
+      for (let i = 5; i >= 0; i--) {
+        const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const monthName = date.toLocaleDateString('en', { month: 'short' });
+        monthlyData[monthKey] = { name: monthName, amount: 0 };
+      }
+
+      // Calculate monthly totals
+      expenses.forEach((expense) => {
+        const date = new Date(expense.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (monthlyData[monthKey]) {
+          monthlyData[monthKey].amount += parseFloat(expense.amount);
+        }
+      });
+
+      const monthlyArray = Object.values(monthlyData);
+      const maxAmount = Math.max(...monthlyArray.map(m => m.amount), 100);
+
+      // Create visual bars
+      trendChart.innerHTML = `
+        <div class="trend-bars">
+          ${monthlyArray
+            .map((month) => {
+              const heightPercent = (month.amount / maxAmount) * 100;
+              return `
+                <div class="trend-bar-item">
+                  <div class="trend-bar-column">
+                    <div class="trend-bar-fill" style="height: ${heightPercent}%; background: linear-gradient(180deg, #ff00d1, #00e5ff)">
+                      ${month.amount > 0 ? `<span class="trend-bar-value">$${month.amount.toFixed(0)}</span>` : ''}
+                    </div>
+                  </div>
+                  <div class="trend-bar-label">${month.name}</div>
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+    }
+
+    // Run tests
+    window.addEventListener('DOMContentLoaded', () => {
+      console.log('🧪 Running chart tests...');
+      showDebugInfo();
+      
+      setTimeout(() => {
+        console.log('Rendering charts...');
+        displayCategoryChart();
+        displayMonthlyTrend();
+        console.log('✅ Charts rendered!');
+      }, 500);
+    });
+  </script>
+</body>
+</html>
