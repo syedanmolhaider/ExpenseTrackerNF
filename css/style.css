@@ -1844,26 +1844,68 @@ body::after {
     background: rgba(11, 15, 26, 0.95) !important;
   }
 
-  /* Disable shadows and glows (reduce GPU load) */
+  /* Disable ALL shadows, glows, and text-shadows */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Simple single shadow only for elevation */
   .auth-card,
   .summary-card,
   .expense-item,
-  .btn,
-  .modal-content {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
-    text-shadow: none !important;
+  .modal-content,
+  .chart-card {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
   }
 
-  /* Disable pseudo-element effects */
-  body::before,
-  body::after,
-  .auth-card::before,
-  .auth-card::after,
-  .summary-card::before,
-  .summary-card::after,
-  .dashboard-header::before,
-  .modal-content::before {
+  /* Disable ALL pseudo-element effects and animations */
+  *::before,
+  *::after {
     display: none !important;
+    content: none !important;
+    animation: none !important;
+  }
+
+  /* Disable body ambient effects */
+  body::before,
+  body::after {
+    display: none !important;
+  }
+
+  /* Disable all glowing borders */
+  .auth-card,
+  .summary-card,
+  .expense-item,
+  .input,
+  .btn,
+  .nav-item.active {
+    border: 1px solid rgba(0, 229, 255, 0.3) !important;
+  }
+
+  /* Remove all gradient backgrounds - use solid colors */
+  .summary-value,
+  .header-content h1,
+  .expense-amount,
+  .btn-primary {
+    background: none !important;
+    background-image: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    -webkit-text-fill-color: unset !important;
+    color: var(--electric-cyan) !important;
+  }
+
+  /* Remove all filter effects */
+  .logo,
+  .header-content h1::after,
+  .nav-icon {
+    filter: none !important;
   }
 
   /* Simple flat design for mobile */
@@ -1936,6 +1978,13 @@ body::after {
 
   .recent-item-amount {
     font-size: 1.5rem;
+  }
+
+  /* Disable chart glowing effects */
+  .category-bar-fill,
+  .trend-bar-fill {
+    box-shadow: none !important;
+    filter: none !important;
   }
 
   .trend-bars {
@@ -2272,10 +2321,22 @@ body::after {
 
 /* CSS Fallback Mode - Mobile & Low Performance Devices */
 body.css-fallback {
-  /* Disable all expensive effects */
+  /* Disable ALL expensive effects */
   * {
     animation: none !important;
-    transition: opacity 0.2s ease !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  /* Remove ALL glowing effects */
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   /* Remove all 3D transforms */
@@ -2289,46 +2350,69 @@ body.css-fallback {
     perspective: none !important;
   }
 
-  /* Disable glassmorphism */
+  /* Solid backgrounds only */
   .auth-card,
   .dashboard-header,
+  .dashboard-nav,
   .summary-card,
   .add-expense-section,
-  .expense-item {
+  .expense-item,
+  .chart-card,
+  .modal-content {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     background: rgba(11, 15, 26, 0.98) !important;
   }
 
-  /* Simple shadows only */
+  /* Single simple shadow for depth only */
   .auth-card,
   .summary-card,
-  .expense-item {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5) !important;
+  .expense-item,
+  .chart-card {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
   }
 
-  /* Disable pseudo-elements */
+  /* Disable ALL pseudo-elements */
   *::before,
   *::after {
     display: none !important;
+    content: none !important;
   }
 
-  /* Solid colors instead of gradients */
-  .summary-value {
+  /* Solid colors - NO gradients */
+  .summary-value,
+  .header-content h1,
+  .expense-amount,
+  .btn-primary {
     background: none !important;
-    color: var(--electric-cyan) !important;
+    background-image: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
     -webkit-text-fill-color: unset !important;
+    color: var(--electric-cyan) !important;
   }
 
-  .header-content h1 {
-    background: none !important;
-    color: var(--electric-cyan) !important;
-    -webkit-text-fill-color: unset !important;
-  }
-
-  /* Disable all hover effects */
+  /* Disable ALL hover effects */
   *:hover {
     transform: none !important;
+    box-shadow: inherit !important;
+  }
+
+  /* Simple borders - no glow */
+  .auth-card,
+  .summary-card,
+  .btn,
+  input,
+  select,
+  textarea {
+    border: 1px solid rgba(0, 229, 255, 0.3) !important;
+  }
+
+  /* Disable chart glows */
+  .category-bar-fill,
+  .trend-bar-fill {
+    box-shadow: none !important;
+    filter: none !important;
   }
 }
 
