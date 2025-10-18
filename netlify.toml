@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = "."
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[dev]
+  command = ""
+  port = 8888
+  targetPort = 8888
+  publish = "."
+  autoLaunch = true

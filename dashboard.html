@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - Expense Tracker</title>
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="dashboard">
+      <!-- Header -->
+      <header class="dashboard-header">
+        <div class="header-content">
+          <h1>💰 Expense Tracker</h1>
+          <div class="user-info">
+            <span id="userName">Loading...</span>
+            <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="dashboard-main">
+        <!-- Summary Cards -->
+        <div class="summary-section">
+          <div class="summary-card">
+            <h3>Total Expenses</h3>
+            <p class="summary-value" id="totalExpenses">$0.00</p>
+          </div>
+          <div class="summary-card">
+            <h3>This Month</h3>
+            <p class="summary-value" id="monthlyExpenses">$0.00</p>
+          </div>
+          <div class="summary-card">
+            <h3>Total Entries</h3>
+            <p class="summary-value" id="totalEntries">0</p>
+          </div>
+        </div>
+
+        <!-- Add Expense Section -->
+        <div class="add-expense-section">
+          <h2>Add New Expense</h2>
+          <form id="addExpenseForm">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="expenseTitle">Title</label>
+                <input type="text" id="expenseTitle" name="title" required />
+              </div>
+              <div class="form-group">
+                <label for="expenseAmount">Amount ($)</label>
+                <input
+                  type="number"
+                  id="expenseAmount"
+                  name="amount"
+                  step="0.01"
+                  min="0.01"
+                  required
+                />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="expenseCategory">Category</label>
+                <select id="expenseCategory" name="category" required>
+                  <option value="">Select Category</option>
+                  <option value="Food">Food</option>
+                  <option value="Transport">Transport</option>
+                  <option value="Entertainment">Entertainment</option>
+                  <option value="Shopping">Shopping</option>
+                  <option value="Bills">Bills</option>
+                  <option value="Healthcare">Healthcare</option>
+                  <option value="Education">Education</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="expenseDate">Date</label>
+                <input type="date" id="expenseDate" name="date" required />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="expenseNotes">Notes (Optional)</label>
+              <textarea id="expenseNotes" name="notes" rows="2"></textarea>
+            </div>
+            <div id="formError" class="error-message"></div>
+            <button type="submit" class="btn btn-primary">Add Expense</button>
+          </form>
+        </div>
+
+        <!-- Filters and Export -->
+        <div class="controls-section">
+          <div class="filter-group">
+            <label for="filterCategory">Filter by Category:</label>
+            <select id="filterCategory">
+              <option value="">All Categories</option>
+              <option value="Food">Food</option>
+              <option value="Transport">Transport</option>
+              <option value="Entertainment">Entertainment</option>
+              <option value="Shopping">Shopping</option>
+              <option value="Bills">Bills</option>
+              <option value="Healthcare">Healthcare</option>
+              <option value="Education">Education</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <button id="exportBtn" class="btn btn-secondary">Export CSV</button>
+        </div>
+
+        <!-- Expenses List -->
+        <div class="expenses-section">
+          <h2>Your Expenses</h2>
+          <div id="expensesList" class="expenses-list">
+            <p class="loading">Loading expenses...</p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Edit Expense</h2>
+        <form id="editExpenseForm">
+          <input type="hidden" id="editExpenseId" />
+          <div class="form-group">
+            <label for="editExpenseTitle">Title</label>
+            <input type="text" id="editExpenseTitle" name="title" required />
+          </div>
+          <div class="form-group">
+            <label for="editExpenseAmount">Amount ($)</label>
+            <input
+              type="number"
+              id="editExpenseAmount"
+              name="amount"
+              step="0.01"
+              min="0.01"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="editExpenseCategory">Category</label>
+            <select id="editExpenseCategory" name="category" required>
+              <option value="Food">Food</option>
+              <option value="Transport">Transport</option>
+              <option value="Entertainment">Entertainment</option>
+              <option value="Shopping">Shopping</option>
+              <option value="Bills">Bills</option>
+              <option value="Healthcare">Healthcare</option>
+              <option value="Education">Education</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="editExpenseDate">Date</label>
+            <input type="date" id="editExpenseDate" name="date" required />
+          </div>
+          <div class="form-group">
+            <label for="editExpenseNotes">Notes</label>
+            <textarea id="editExpenseNotes" name="notes" rows="2"></textarea>
+          </div>
+          <div id="editFormError" class="error-message"></div>
+          <button type="submit" class="btn btn-primary">Update Expense</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+  </body>
+</html>

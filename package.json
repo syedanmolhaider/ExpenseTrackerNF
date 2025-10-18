@@ -1,0 +1,27 @@
+{
+  "name": "expense-tracker-netlify",
+  "version": "1.0.0",
+  "description": "Expense Tracker with Netlify Functions and Neon Database",
+  "main": "index.js",
+  "scripts": {
+    "dev": "netlify dev",
+    "build": "echo 'No build step required for static HTML'"
+  },
+  "keywords": [
+    "expense-tracker",
+    "netlify",
+    "neon",
+    "postgresql"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cookie": "^0.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.0.0"
+  }
+}
