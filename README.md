@@ -42,7 +42,7 @@ A full-stack expense tracking web application built with vanilla JavaScript, Net
 
 ## 📁 Project Structure
 
-```
+````
 expense-tracker/
 ├── css/
 │   └── style.css              # All styling
@@ -124,13 +124,14 @@ Neon Magenta     : #ff00d1   /* Primary accent */
 Electric Cyan    : #00e5ff   /* Secondary accent */
 Acid Lime        : #c7ff00   /* Tertiary accent */
 Ultra White      : #ffffff   /* Text */
-```
+````
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Modern browser (Chrome 90+, Firefox 88+, Safari 14+)
 - Node.js 14+ (for backend)
 - PostgreSQL database
@@ -138,28 +139,33 @@ Ultra White      : #ffffff   /* Text */
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/syedanmolhaider/ExpenseTrackerNF.git
    cd ExpenseTrackerNF
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 3. **Set up environment variables**
+
    ```bash
    cp .env.example .env
    # Edit .env with your database credentials
    ```
 
 4. **Run database migrations**
+
    ```bash
    psql -U your_username -d your_database -f migration.sql
    ```
 
 5. **Start the development server**
+
    ```bash
    netlify dev
    ```
@@ -202,10 +208,12 @@ ExpenseTrackerNF/
 ## 📚 Documentation
 
 ### For Designers
+
 - **[DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)** - Complete design system with tokens, components, and specifications
 - **[MOODBOARD_REFERENCE.md](MOODBOARD_REFERENCE.md)** - Visual references, inspiration sources, and asset guidelines
 
 ### For Developers
+
 - **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** - Step-by-step implementation with code snippets
 - **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick lookup for colors, spacing, animations
 - **[INSTALLATION.md](INSTALLATION.md)** - Detailed setup instructions
@@ -216,6 +224,7 @@ ExpenseTrackerNF/
 ## 🎭 Animation System
 
 ### Durations
+
 - **Micro (180ms)**: Button press, small interactions
 - **Quick (280ms)**: Input focus, hover states
 - **Standard (400ms)**: Card animations, transitions
@@ -223,10 +232,11 @@ ExpenseTrackerNF/
 - **Panel (900ms)**: Modal/panel slide-ins
 
 ### Easing Functions
+
 ```css
---ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* Overshoot */
---ease-out: cubic-bezier(0.33, 1, 0.68, 1);        /* Smooth decel */
---ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);     /* Symmetrical */
+--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Overshoot */
+--ease-out: cubic-bezier(0.33, 1, 0.68, 1); /* Smooth decel */
+--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* Symmetrical */
 ```
 
 ---
@@ -234,18 +244,21 @@ ExpenseTrackerNF/
 ## 🔧 Technology Stack
 
 ### Frontend
+
 - **HTML5** - Semantic markup
 - **CSS3** - 3D transforms, animations, glassmorphism
 - **JavaScript (ES6+)** - Micro-interactions, particle effects
 - **Three.js** (optional) - Advanced 3D backgrounds
 
 ### Backend
+
 - **Node.js** - Runtime environment
 - **Netlify Functions** - Serverless API
 - **PostgreSQL** - Database
 - **JWT** - Authentication
 
 ### Tools
+
 - **Netlify** - Hosting & deployment
 - **Git** - Version control
 - **VS Code** - Development environment
@@ -255,6 +268,7 @@ ExpenseTrackerNF/
 ## 🎨 Design Highlights
 
 ### Glass Morphism
+
 ```css
 background: rgba(11, 15, 26, 0.4);
 backdrop-filter: blur(20px);
@@ -263,20 +277,16 @@ box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.1);
 ```
 
 ### Neon Glow
+
 ```css
-text-shadow: 
-  0 0 10px rgba(0, 229, 255, 0.5),
-  0 0 20px rgba(0, 229, 255, 0.3),
+text-shadow: 0 0 10px rgba(0, 229, 255, 0.5), 0 0 20px rgba(0, 229, 255, 0.3),
   0 0 30px rgba(0, 229, 255, 0.2);
 ```
 
 ### 3D Transform
+
 ```css
-transform: 
-  perspective(1000px) 
-  rotateX(2deg) 
-  rotateY(-2deg) 
-  translateZ(24px);
+transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) translateZ(24px);
 ```
 
 ---
@@ -284,12 +294,14 @@ transform:
 ## 📊 Performance
 
 ### Metrics
+
 - **First Contentful Paint**: < 1.5s
 - **Time to Interactive**: < 2.5s (mobile 4G)
 - **Lighthouse Score**: 90+ (Performance)
 - **Frame Rate**: Consistent 60fps
 
 ### Optimizations
+
 - ✅ GPU-accelerated transforms
 - ✅ Lazy-loaded animations (Intersection Observer)
 - ✅ Debounced event handlers
@@ -301,12 +313,14 @@ transform:
 ## ♿ Accessibility Features
 
 ### Compliance
+
 - **WCAG 2.1 Level AA** compliant
 - **Keyboard navigation** throughout
 - **Screen reader** friendly with ARIA labels
 - **Color contrast** meets AA standards (15.8:1 for body text)
 
 ### Inclusive Design
+
 ```css
 /* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
@@ -318,7 +332,9 @@ transform:
 
 /* High Contrast */
 @media (prefers-contrast: high) {
-  .card { border-width: 3px; }
+  .card {
+    border-width: 3px;
+  }
 }
 ```
 
@@ -326,8 +342,8 @@ transform:
 
 ## 🌐 Browser Support
 
-| Browser | Version | Status |
-|---------|---------|--------|
+| Browser | Version | Status  |
+| ------- | ------- | ------- |
 | Chrome  | 90+     | ✅ Full |
 | Firefox | 88+     | ✅ Full |
 | Safari  | 14+     | ✅ Full |
@@ -335,6 +351,7 @@ transform:
 | Opera   | 76+     | ✅ Full |
 
 ### Fallbacks
+
 - Solid backgrounds if `backdrop-filter` unsupported
 - 2D transforms if 3D transforms unavailable
 - Solid colors if gradients fail
@@ -344,24 +361,28 @@ transform:
 ## 🚦 Roadmap
 
 ### Phase 1: Core UI ✅ (Completed)
+
 - [x] Neon color palette
 - [x] Glassmorphism panels
 - [x] 3D depth effects
 - [x] Responsive breakpoints
 
 ### Phase 2: Micro-interactions (In Progress)
+
 - [x] Button particle burst
 - [x] Hover parallax tilt
 - [ ] Animated numeric counters
 - [ ] Progress arcs with gradients
 
 ### Phase 3: Advanced Effects (Planned)
+
 - [ ] Three.js background scene
 - [ ] WebGL particle system
 - [ ] Volumetric fog
 - [ ] Dynamic reflections
 
 ### Phase 4: Polish (Planned)
+
 - [ ] Loading skeleton screens
 - [ ] Toast notifications
 - [ ] Advanced filtering
@@ -389,6 +410,7 @@ Contributions are welcome! Please follow these steps:
 5. **Open a Pull Request**
 
 ### Code Style
+
 - Use **2 spaces** for indentation
 - Follow **BEM naming** convention for CSS
 - Add **JSDoc comments** for functions
@@ -405,12 +427,14 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## 🙏 Acknowledgments
 
 ### Design Inspiration
+
 - **Blade Runner 2049** - Holographic interfaces
 - **Tron Legacy** - Neon grid aesthetics
 - **Ghost in the Shell** - Cyberpunk terminals
 - **Iron Man JARVIS** - AI console design
 
 ### Libraries & Tools
+
 - **Three.js** - 3D graphics
 - **Anime.js** - Animation library
 - **Netlify** - Hosting platform
@@ -421,6 +445,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## 📞 Contact
 
 **Syed Anmol Haider**
+
 - GitHub: [@syedanmolhaider](https://github.com/syedanmolhaider)
 - Email: your.email@example.com
 - Portfolio: https://your-portfolio.com
@@ -430,15 +455,19 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## 📸 Screenshots
 
 ### Desktop View
+
 ![Dashboard Desktop](screenshots/dashboard-desktop.png)
 
 ### Tablet View
+
 ![Dashboard Tablet](screenshots/dashboard-tablet.png)
 
 ### Mobile View
+
 ![Dashboard Mobile](screenshots/dashboard-mobile.png)
 
 ### Interactive Prototype
+
 [View Live Demo](https://your-netlify-url.netlify.app)
 
 ---
@@ -446,6 +475,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ## 🔖 Version History
 
 ### v2.0.0 (Current - Oct 19, 2025)
+
 - ✨ Complete UI transformation to neon cyberpunk aesthetic
 - 🎨 3D depth effects and volumetric lighting
 - 🎬 Micro-interactions with particle effects
@@ -453,6 +483,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - 📱 Optimized responsive design
 
 ### v1.0.0 (Initial Release)
+
 - Basic expense tracking functionality
 - Simple UI with standard CSS
 - PostgreSQL backend
@@ -467,8 +498,9 @@ If you find this project useful, please consider giving it a star on GitHub!
 
 ---
 
-**Built with 💜 and neon lights** | © 2025 Syed Anmol Haider                  # This file
-```
+**Built with 💜 and neon lights** | © 2025 Syed Anmol Haider # This file
+
+````
 
 ## 🚀 Local Development Setup
 
@@ -486,7 +518,7 @@ cd expense-tracker
 
 # Install dependencies
 npm install
-```
+````
 
 ### Step 2: Setup Neon Database
 
