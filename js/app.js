@@ -99,6 +99,15 @@ class App {
     }
   }
 
+  detectMobileDevice() {
+    // Check for mobile/tablet devices
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isSmallScreen = window.innerWidth <= 768;
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    
+    return isMobile || (isSmallScreen && isTouchDevice);
+  }
+
   async detectGPUTier() {
     // Simple GPU tier detection
     const canvas = document.createElement("canvas");
