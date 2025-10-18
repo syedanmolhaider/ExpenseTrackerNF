@@ -414,14 +414,14 @@ function displayMonthlyTrend() {
 // Update charts
 function updateCharts() {
   console.log("updateCharts called, expenses count:", expenses.length);
-  
+
   // Check if chart elements exist
   const categoryChart = document.getElementById("categoryChart");
   const trendChart = document.getElementById("trendChart");
-  
+
   console.log("categoryChart exists:", !!categoryChart);
   console.log("trendChart exists:", !!trendChart);
-  
+
   if (categoryChart || trendChart) {
     displayCategoryChart();
     displayMonthlyTrend();
