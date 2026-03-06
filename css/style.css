@@ -737,6 +737,52 @@ body {
   border-radius: 3px;
 }
 
+/* Budget Percentage Badges */
+.budget-pct-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.budget-pct-badge.sm {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+}
+
+.budget-pct-badge.ok {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.budget-pct-badge.warn {
+  background: var(--orange-dim);
+  color: var(--orange);
+}
+
+.budget-pct-badge.over {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+/* Category Item Count */
+.budget-cat-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* Sub-item dot status colors */
+.budget-sub-dot.warn {
+  background: var(--orange);
+}
+
+.budget-sub-dot.over {
+  background: var(--red);
+}
+
 .budget-check {
   width: 22px;
   height: 22px;

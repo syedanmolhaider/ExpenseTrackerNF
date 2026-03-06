@@ -361,46 +361,62 @@ function displayBudget() {
     const categoryRemaining = categoryLimit - categorySpent;
     const isOver = categoryRemaining < 0;
     const pct = categoryLimit > 0 ? Math.min((categorySpent / categoryLimit) * 100, 100) : 0;
+    const pctUsed = categoryLimit > 0 ? ((categorySpent / categoryLimit) * 100).toFixed(0) : 0;
 
     html += `<div class="budget-category-group">`;
     // Category header with totals
     html += `
       <div class="budget-cat-header ${isOver ? 'over-budget' : ''}">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <div style="font-weight: 700; font-size: 1.05rem;">${getCatIcon(cat)} ${esc(cat)}</div>
-          <div style="font-size: 0.85rem;">
-            ${isOver ? '<span class="text-red" style="font-weight:700">⚠ Over Budget</span>' : '<span class="text-green" style="font-weight:600">✓ On Track</span>'}
+          <div style="font-weight: 700; font-size: 1.05rem;">${getCatIcon(cat)} ${esc(cat)} <span class="budget-cat-count">${items.length} item${items.length > 1 ? 's' : ''}</span></div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="budget-pct-badge ${isOver ? 'over' : pct > 80 ? 'warn' : 'ok'}">${isOver ? pctUsed + '% ⚠' : pctUsed + '% used'}</span>
           </div>
         </div>
-        <div style="display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 6px; color:var(--text-secondary);">
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color:var(--text-secondary);">
           <span>Limit: <strong style="color:var(--text-primary)">${fmtCurr(categoryLimit)}</strong></span>
           <span>Spent: <span style="color:var(--orange); font-weight:600">${fmtCurr(categorySpent)}</span></span>
-          <span>${isOver ? 'Overspent:' : 'Left:'} <strong class="${isOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(categoryRemaining))}</strong></span>
+          <span>${isOver ? 'Over:' : 'Left:'} <strong class="${isOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(categoryRemaining))}</strong></span>
         </div>
-        <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
-          <div class="progress-bar-fill" style="height: 100%; width:${pct}%; background:${isOver ? 'var(--red)' : 'var(--accent)'}; transition: width 0.3s ease;"></div>
+        <div class="progress-bar" style="height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;">
+          <div class="progress-bar-fill" style="height: 100%; width:${pct}%; background:${isOver ? 'var(--red)' : pct > 80 ? 'var(--orange)' : 'var(--accent)'}; transition: width 0.3s ease;"></div>
         </div>
       </div>`;
 
-    // Individual sub-items
+    // Individual sub-items with proportional spending
     items.forEach((item) => {
       const limit = parseFloat(item.amount);
-      const itemPct = categoryLimit > 0 ? ((limit / categoryLimit) * 100).toFixed(0) : 0;
+      const shareOfCategory = categoryLimit > 0 ? (limit / categoryLimit) : 0;
+      const proportionalSpent = categorySpent * shareOfCategory;
+      const subRemaining = limit - proportionalSpent;
+      const subIsOver = subRemaining < 0;
+      const subPct = limit > 0 ? Math.min((proportionalSpent / limit) * 100, 100) : 0;
+      const subPctUsed = limit > 0 ? ((proportionalSpent / limit) * 100).toFixed(0) : 0;
+      const sharePct = (shareOfCategory * 100).toFixed(0);
+
       html += `
       <div class="budget-sub-item">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="budget-sub-dot"></span>
+            <span class="budget-sub-dot ${subIsOver ? 'over' : subPct > 80 ? 'warn' : ''}"></span>
             <span style="font-weight: 600; font-size: 0.9rem;">${esc(item.title)}</span>
-            <span class="budget-sub-pct">${itemPct}%</span>
+            <span class="budget-sub-pct">${sharePct}% of ${esc(cat)}</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-weight: 700; font-size: 0.9rem;">${fmtCurr(limit)}</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="budget-pct-badge sm ${subIsOver ? 'over' : subPct > 80 ? 'warn' : 'ok'}">${subPctUsed}%</span>
             <div class="budget-actions">
               <button class="btn-sm" onclick="openEditBudgetModal('${item.id}')">Edit</button>
               <button class="btn-sm delete" onclick="deleteBudget('${item.id}')">✕</button>
             </div>
           </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color:var(--text-muted); margin-bottom: 4px;">
+          <span>Limit: ${fmtCurr(limit)}</span>
+          <span>Est. Spent: <span style="color:var(--orange)">${fmtCurr(proportionalSpent)}</span></span>
+          <span>${subIsOver ? 'Over:' : 'Left:'} <span class="${subIsOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(subRemaining))}</span></span>
+        </div>
+        <div class="progress-bar" style="height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;">
+          <div class="progress-bar-fill" style="height: 100%; width:${subPct}%; background:${subIsOver ? 'var(--red)' : subPct > 80 ? 'var(--orange)' : 'var(--green)'}; transition: width 0.3s ease;"></div>
         </div>
       </div>`;
     });
