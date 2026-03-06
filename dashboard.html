@@ -1,232 +1,316 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dashboard - Expense Tracker</title>
-    <link rel="stylesheet" href="css/style.css" />
-  </head>
-  <body>
-    <div class="dashboard">
-      <!-- Header -->
-      <header class="dashboard-header">
-        <div class="header-content">
-          <h1>💰 Expense Tracker</h1>
-          <div class="user-info">
-            <span id="userName">Loading...</span>
-            <button id="logoutBtn" class="btn btn-secondary">Logout</button>
-          </div>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expense Tracker - Dashboard</title>
+  <meta name="description" content="Track your monthly budget and daily expenses with real-time balance updates." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+  <div class="app-shell">
+    <!-- Top Bar -->
+    <header class="topbar" id="topbar">
+      <div class="topbar-left">
+        <h1 class="brand">💰 ExpenseTracker</h1>
+      </div>
+      <div class="topbar-center">
+        <button class="month-nav-btn" id="prevMonth" aria-label="Previous month">‹</button>
+        <span class="month-label" id="currentMonthLabel">March 2026</span>
+        <button class="month-nav-btn" id="nextMonth" aria-label="Next month">›</button>
+      </div>
+      <div class="topbar-right">
+        <span class="user-badge" id="userName">User</span>
+        <button id="logoutBtn" class="btn-icon" title="Logout">⏻</button>
+      </div>
+    </header>
+
+    <!-- Balance Bar -->
+    <div class="balance-bar" id="balanceBar">
+      <div class="balance-item" id="balanceAvailableWrap">
+        <label>Available Balance</label>
+        <div class="balance-editable">
+          <span class="balance-value" id="balanceAvailable">Rs 0</span>
+          <button class="btn-tiny" id="editBalanceBtn" title="Set balance">✎</button>
         </div>
-      </header>
-
-      <!-- Navigation Menu -->
-      <nav class="dashboard-nav">
-        <button class="nav-item active" data-section="dashboard">
-          <span class="nav-icon">📊</span>
-          <span class="nav-text">Dashboard</span>
-        </button>
-        <button class="nav-item" data-section="logs">
-          <span class="nav-icon">📝</span>
-          <span class="nav-text">Logs</span>
-        </button>
-      </nav>
-
-      <!-- Main Content -->
-      <main class="dashboard-main">
-        <!-- DASHBOARD SECTION - Stats & Visualizations -->
-        <div id="dashboard-section" class="content-section active">
-          <!-- Summary Cards -->
-          <div class="summary-section">
-            <div class="summary-card">
-              <h3>Total Expenses</h3>
-              <p class="summary-value" id="totalExpenses">$0.00</p>
-            </div>
-            <div class="summary-card">
-              <h3>This Month</h3>
-              <p class="summary-value" id="monthlyExpenses">$0.00</p>
-            </div>
-            <div class="summary-card">
-              <h3>Total Entries</h3>
-              <p class="summary-value" id="totalEntries">0</p>
-            </div>
-          </div>
-
-          <!-- Charts Section -->
-          <div class="charts-section">
-            <h2>📈 Expense Analytics</h2>
-            <div class="charts-grid">
-              <div class="chart-card">
-                <h3>Category Distribution</h3>
-                <div id="categoryChart" class="chart-container">
-                  <p class="chart-placeholder">Loading chart data...</p>
-                </div>
-              </div>
-              <div class="chart-card">
-                <h3>Monthly Trend</h3>
-                <div id="trendChart" class="chart-container">
-                  <p class="chart-placeholder">Loading trend data...</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Recent Activity -->
-          <div class="recent-activity-section">
-            <h2>🔥 Recent Activity</h2>
-            <div id="recentActivity" class="recent-list">
-              <p class="loading">Loading recent expenses...</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- LOGS SECTION - Records & Entry -->
-        <div id="logs-section" class="content-section">
-          <!-- Add Expense Section -->
-          <div class="add-expense-section">
-            <h2>Add New Expense</h2>
-            <form id="addExpenseForm">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="expenseTitle">Title</label>
-                  <input type="text" id="expenseTitle" name="title" required />
-                </div>
-                <div class="form-group">
-                  <label for="expenseAmount">Amount ($)</label>
-                  <input
-                    type="number"
-                    id="expenseAmount"
-                    name="amount"
-                    step="0.01"
-                    min="0.01"
-                    required
-                  />
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="expenseCategory">Category</label>
-                  <select id="expenseCategory" name="category" required>
-                    <option value="">Select Category</option>
-                    <option value="Food">Food</option>
-                    <option value="Transport">Transport</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Shopping">Shopping</option>
-                    <option value="Bills">Bills</option>
-                    <option value="Healthcare">Healthcare</option>
-                    <option value="Education">Education</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="expenseDate">Date</label>
-                  <input type="date" id="expenseDate" name="date" required />
-                </div>
-              </div>
-              <div class="form-group">
-                <label for="expenseNotes">Notes (Optional)</label>
-                <textarea id="expenseNotes" name="notes" rows="2"></textarea>
-              </div>
-              <div id="formError" class="error-message"></div>
-              <button type="submit" class="btn btn-primary">Add Expense</button>
-            </form>
-          </div>
-
-          <!-- Filters and Export -->
-          <div class="controls-section">
-            <div class="filter-group">
-              <label for="filterCategory">Filter by Category:</label>
-              <select id="filterCategory">
-                <option value="">All Categories</option>
-                <option value="Food">Food</option>
-                <option value="Transport">Transport</option>
-                <option value="Entertainment">Entertainment</option>
-                <option value="Shopping">Shopping</option>
-                <option value="Bills">Bills</option>
-                <option value="Healthcare">Healthcare</option>
-                <option value="Education">Education</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <button id="exportBtn" class="btn btn-secondary">Export CSV</button>
-          </div>
-
-          <!-- Expenses List -->
-          <div class="expenses-section">
-            <h2>📋 All Expense Records</h2>
-            <div id="expensesList" class="expenses-list">
-              <p class="loading">Loading expenses...</p>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-
-    <!-- Edit Modal -->
-    <div id="editModal" class="modal">
-      <div class="modal-content">
-        <span class="close">&times;</span>
-        <h2>Edit Expense</h2>
-        <form id="editExpenseForm">
-          <input type="hidden" id="editExpenseId" />
-          <div class="form-group">
-            <label for="editExpenseTitle">Title</label>
-            <input type="text" id="editExpenseTitle" name="title" required />
-          </div>
-          <div class="form-group">
-            <label for="editExpenseAmount">Amount ($)</label>
-            <input
-              type="number"
-              id="editExpenseAmount"
-              name="amount"
-              step="0.01"
-              min="0.01"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label for="editExpenseCategory">Category</label>
-            <select id="editExpenseCategory" name="category" required>
-              <option value="Food">Food</option>
-              <option value="Transport">Transport</option>
-              <option value="Entertainment">Entertainment</option>
-              <option value="Shopping">Shopping</option>
-              <option value="Bills">Bills</option>
-              <option value="Healthcare">Healthcare</option>
-              <option value="Education">Education</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="editExpenseDate">Date</label>
-            <input type="date" id="editExpenseDate" name="date" required />
-          </div>
-          <div class="form-group">
-            <label for="editExpenseNotes">Notes</label>
-            <textarea id="editExpenseNotes" name="notes" rows="2"></textarea>
-          </div>
-          <div id="editFormError" class="error-message"></div>
-          <button type="submit" class="btn btn-primary">Update Expense</button>
-        </form>
+      </div>
+      <div class="balance-item">
+        <label>Budget Planned</label>
+        <span class="balance-value text-blue" id="balanceBudgetTotal">Rs 0</span>
+      </div>
+      <div class="balance-item">
+        <label>Budget Spent</label>
+        <span class="balance-value text-green" id="balanceBudgetSpent">Rs 0</span>
+      </div>
+      <div class="balance-item">
+        <label>Daily Spent</label>
+        <span class="balance-value text-orange" id="balanceDailySpent">Rs 0</span>
+      </div>
+      <div class="balance-item highlight">
+        <label>Remaining</label>
+        <span class="balance-value text-accent" id="balanceRemaining">Rs 0</span>
       </div>
     </div>
 
-    <!-- Three.js -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <!-- Set Balance Modal -->
+    <div class="modal-overlay" id="balanceModal">
+      <div class="modal-box">
+        <h3>Set Available Balance</h3>
+        <p class="modal-desc">Enter your total available money for this month.</p>
+        <input type="number" id="balanceInput" placeholder="e.g. 50000" min="0" step="1" />
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="cancelBalance">Cancel</button>
+          <button class="btn btn-primary" id="saveBalance">Save</button>
+        </div>
+      </div>
+    </div>
 
-    <!-- GSAP -->
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <!-- Tab Navigation -->
+    <nav class="tab-nav" id="tabNav">
+      <button class="tab active" data-tab="budget" id="tab-budget">
+        📋 Budget Plan
+      </button>
+      <button class="tab" data-tab="tracker" id="tab-tracker">
+        📊 Daily Tracker
+      </button>
+      <button class="tab" data-tab="trends" id="tab-trends">
+        📈 Trends
+      </button>
+    </nav>
 
-    <!-- 3D Modules -->
-    <script src="js/three-stage.js"></script>
-    <script src="js/micro-click.js"></script>
-    <script src="js/pointer-controller.js"></script>
-    <script src="js/dashboard-visualizer.js"></script>
-    <script src="js/app.js"></script>
+    <!-- Main Content -->
+    <main class="main-content">
 
-    <!-- Navigation Controller -->
-    <script src="js/navigation.js"></script>
+      <!-- ========== BUDGET SECTION ========== -->
+      <section class="tab-panel active" id="panel-budget">
+        <!-- Add Budget Item -->
+        <div class="card add-card">
+          <h2 class="card-title">Add Budget Item</h2>
+          <form id="addBudgetForm" class="inline-form">
+            <input type="text" id="budgetTitle" placeholder="e.g. Rent, Groceries, Internet" required />
+            <input type="number" id="budgetAmount" placeholder="Amount (Rs)" step="0.01" min="0.01" required />
+            <button type="submit" class="btn btn-primary">+ Add</button>
+          </form>
+        </div>
 
-    <!-- Original Dashboard Script -->
-    <script src="js/dashboard.js"></script>
-  </body>
+        <!-- Budget Summary -->
+        <div class="card summary-strip">
+          <div class="summary-cell">
+            <span class="summary-label">Total Planned</span>
+            <span class="summary-num" id="budgetTotalPlanned">Rs 0</span>
+          </div>
+          <div class="summary-cell">
+            <span class="summary-label">Completed</span>
+            <span class="summary-num text-green" id="budgetTotalDone">Rs 0</span>
+          </div>
+          <div class="summary-cell">
+            <span class="summary-label">Pending</span>
+            <span class="summary-num text-orange" id="budgetTotalPending">Rs 0</span>
+          </div>
+        </div>
+
+        <!-- Budget Items List -->
+        <div class="card">
+          <h2 class="card-title">Budget Items</h2>
+          <div id="budgetList" class="item-list">
+            <p class="empty-msg">No budget items yet. Add your first one above!</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== DAILY TRACKER SECTION ========== -->
+      <section class="tab-panel" id="panel-tracker">
+        <!-- Add Expense -->
+        <div class="card add-card">
+          <h2 class="card-title">Log Expense</h2>
+          <form id="addExpenseForm" class="form-grid">
+            <div class="form-field">
+              <label for="expenseTitle">Title</label>
+              <input type="text" id="expenseTitle" name="title" placeholder="What did you spend on?" required />
+            </div>
+            <div class="form-field">
+              <label for="expenseAmount">Amount (Rs)</label>
+              <input type="number" id="expenseAmount" name="amount" step="0.01" min="0.01" placeholder="0.00"
+                required />
+            </div>
+            <div class="form-field">
+              <label for="expenseCategory">Category</label>
+              <select id="expenseCategory" name="category" required>
+                <option value="">Select</option>
+                <option value="Food">🍔 Food</option>
+                <option value="Transport">🚗 Transport</option>
+                <option value="Entertainment">🎬 Entertainment</option>
+                <option value="Shopping">🛍️ Shopping</option>
+                <option value="Bills">📄 Bills</option>
+                <option value="Healthcare">⚕️ Healthcare</option>
+                <option value="Education">📚 Education</option>
+                <option value="Other">📦 Other</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="expenseDate">Date</label>
+              <input type="date" id="expenseDate" name="date" required />
+            </div>
+            <div class="form-field full-width">
+              <label for="expenseNotes">Notes <small>(optional)</small></label>
+              <input type="text" id="expenseNotes" name="notes" placeholder="Quick note..." />
+            </div>
+            <div class="form-field full-width">
+              <button type="submit" class="btn btn-primary">+ Log Expense</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Daily Summary -->
+        <div class="card summary-strip">
+          <div class="summary-cell">
+            <span class="summary-label">Month Total</span>
+            <span class="summary-num" id="dailyTotalSpent">Rs 0</span>
+          </div>
+          <div class="summary-cell">
+            <span class="summary-label">Today</span>
+            <span class="summary-num text-orange" id="dailyTodaySpent">Rs 0</span>
+          </div>
+          <div class="summary-cell">
+            <span class="summary-label">Entries</span>
+            <span class="summary-num text-blue" id="dailyTotalEntries">0</span>
+          </div>
+        </div>
+
+        <!-- Filter & Import/Export -->
+        <div class="card controls-row">
+          <select id="filterCategory" class="filter-select">
+            <option value="">All Categories</option>
+            <option value="Food">🍔 Food</option>
+            <option value="Transport">🚗 Transport</option>
+            <option value="Entertainment">🎬 Entertainment</option>
+            <option value="Shopping">🛍️ Shopping</option>
+            <option value="Bills">📄 Bills</option>
+            <option value="Healthcare">⚕️ Healthcare</option>
+            <option value="Education">📚 Education</option>
+            <option value="Other">📦 Other</option>
+          </select>
+          <div class="btn-group">
+            <label class="btn btn-ghost import-btn" for="importFile">📤 Import CSV
+              <input type="file" id="importFile" accept=".csv,.json" hidden />
+            </label>
+            <button id="exportBtn" class="btn btn-ghost">📥 Export</button>
+          </div>
+        </div>
+
+        <!-- Expenses List -->
+        <div class="card">
+          <h2 class="card-title">Expense Records</h2>
+          <div id="expensesList" class="item-list">
+            <p class="empty-msg">No expenses logged this month.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== TRENDS SECTION ========== -->
+      <section class="tab-panel" id="panel-trends">
+        <!-- Category Breakdown -->
+        <div class="card">
+          <h2 class="card-title">📊 Spending by Category</h2>
+          <div id="categoryChart" class="chart-area"></div>
+        </div>
+
+        <!-- Daily Spending Chart -->
+        <div class="card">
+          <h2 class="card-title">📅 Daily Spending This Month</h2>
+          <div id="dailyChart" class="chart-area"></div>
+        </div>
+
+        <!-- Budget Progress -->
+        <div class="card">
+          <h2 class="card-title">✅ Budget Progress</h2>
+          <div id="budgetProgress" class="chart-area"></div>
+        </div>
+
+        <!-- Top Expenses -->
+        <div class="card">
+          <h2 class="card-title">🔥 Top 5 Expenses</h2>
+          <div id="topExpenses" class="chart-area"></div>
+        </div>
+
+        <!-- Comparison vs Last Month -->
+        <div class="card">
+          <h2 class="card-title">📉 vs Last Month</h2>
+          <div id="monthComparison" class="chart-area"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Edit Expense Modal -->
+  <div class="modal-overlay" id="editModal">
+    <div class="modal-box">
+      <h3>Edit Expense</h3>
+      <form id="editExpenseForm" class="form-grid">
+        <input type="hidden" id="editExpenseId" />
+        <div class="form-field">
+          <label for="editExpenseTitle">Title</label>
+          <input type="text" id="editExpenseTitle" name="title" required />
+        </div>
+        <div class="form-field">
+          <label for="editExpenseAmount">Amount (Rs)</label>
+          <input type="number" id="editExpenseAmount" name="amount" step="0.01" min="0.01" required />
+        </div>
+        <div class="form-field">
+          <label for="editExpenseCategory">Category</label>
+          <select id="editExpenseCategory" name="category" required>
+            <option value="Food">🍔 Food</option>
+            <option value="Transport">🚗 Transport</option>
+            <option value="Entertainment">🎬 Entertainment</option>
+            <option value="Shopping">🛍️ Shopping</option>
+            <option value="Bills">📄 Bills</option>
+            <option value="Healthcare">⚕️ Healthcare</option>
+            <option value="Education">📚 Education</option>
+            <option value="Other">📦 Other</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="editExpenseDate">Date</label>
+          <input type="date" id="editExpenseDate" name="date" required />
+        </div>
+        <div class="form-field full-width">
+          <label for="editExpenseNotes">Notes</label>
+          <input type="text" id="editExpenseNotes" name="notes" />
+        </div>
+        <div class="modal-actions full-width">
+          <button type="button" class="btn btn-ghost close-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div class="modal-overlay" id="exportModal">
+    <div class="modal-box">
+      <h3>Export Data</h3>
+      <p class="modal-desc">Choose what to export for this month.</p>
+      <div class="export-options">
+        <button class="btn btn-ghost export-opt" id="exportCSV">📄 Expenses as CSV</button>
+        <button class="btn btn-ghost export-opt" id="exportJSON">📋 Expenses as JSON</button>
+        <button class="btn btn-ghost export-opt" id="exportBudgetCSV">📋 Budget Plan as CSV</button>
+        <button class="btn btn-ghost export-opt" id="exportFullReport">📊 Full Month Report</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancelExport">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="js/dashboard.js"></script>
+</body>
+
 </html>
