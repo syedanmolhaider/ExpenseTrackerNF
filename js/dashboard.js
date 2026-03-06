@@ -1009,7 +1009,7 @@ async function handleImport(e) {
   }
 
   if (rows.length === 0) { toast("No rows found", "error"); e.target.value = ""; return; }
-  const validCats = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education", "Loan", "Rent", "Other"];
+  const validCats = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education", "Loan", "Rent", "Parents", "Investment", "Unexpected", "Maintenance", "Household", "Personal Care", "Savings", "Dining Out", "Other"];
   let imported = 0, failed = 0;
   for (const row of rows) {
     const cat = validCats.find((c) => c.toLowerCase() === (row.category || "").toLowerCase()) || "Other";
@@ -1773,6 +1773,7 @@ function toast(msg, type = "") { const el = document.getElementById("toast"); el
 // Globals for inline onclick
 window.openEditModal = openEditModal;
 window.handleDelete = handleDelete;
+window.openEditBudgetModal = openEditBudgetModal;
 window.deleteBudget = deleteBudget;
 window.deleteIncome = deleteIncome;
 window.openEditNextBudgetModal = openEditNextBudgetModal;
