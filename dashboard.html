@@ -26,12 +26,17 @@
       </div>
       <div class="topbar-right">
         <span class="user-badge" id="userName">User</span>
+        <button id="resetAllBtn" class="btn-icon" title="Reset All Data" style="color:var(--text-muted)">🗑</button>
         <button id="logoutBtn" class="btn-icon" title="Logout">⏻</button>
       </div>
     </header>
 
     <!-- Balance Bar -->
     <div class="balance-bar" id="balanceBar">
+      <div class="balance-item">
+        <label>Income</label>
+        <span class="balance-value text-green" id="balanceIncome">Rs 0</span>
+      </div>
       <div class="balance-item" id="balanceAvailableWrap">
         <label>Available Balance</label>
         <div class="balance-editable">
@@ -77,6 +82,9 @@
       </button>
       <button class="tab" data-tab="tracker" id="tab-tracker">
         📊 Daily Tracker
+      </button>
+      <button class="tab" data-tab="income" id="tab-income">
+        💵 Income
       </button>
       <button class="tab" data-tab="trends" id="tab-trends">
         📈 Trends
@@ -212,6 +220,67 @@
         </div>
       </section>
 
+      <!-- ========== INCOME SECTION ========== -->
+      <section class="tab-panel" id="panel-income">
+        <!-- Add Income -->
+        <div class="card add-card">
+          <h2 class="card-title">Add Income</h2>
+          <form id="addIncomeForm" class="form-grid">
+            <div class="form-field">
+              <label for="incomeTitle">Title</label>
+              <input type="text" id="incomeTitle" name="title" placeholder="e.g. Salary, Freelance, Gift" required />
+            </div>
+            <div class="form-field">
+              <label for="incomeAmount">Amount (Rs)</label>
+              <input type="number" id="incomeAmount" name="amount" step="0.01" min="0.01" placeholder="0.00" required />
+            </div>
+            <div class="form-field">
+              <label for="incomeSource">Source</label>
+              <select id="incomeSource" name="source" required>
+                <option value="Salary">💼 Salary</option>
+                <option value="Freelance">💻 Freelance</option>
+                <option value="Business">🏢 Business</option>
+                <option value="Investment">📈 Investment</option>
+                <option value="Gift">🎁 Gift</option>
+                <option value="Refund">↩️ Refund</option>
+                <option value="Other">📦 Other</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="incomeDate">Date</label>
+              <input type="date" id="incomeDate" name="date" required />
+            </div>
+            <div class="form-field full-width">
+              <label for="incomeNotes">Notes <small>(optional)</small></label>
+              <input type="text" id="incomeNotes" name="notes" placeholder="Quick note..." />
+            </div>
+            <div class="form-field full-width">
+              <button type="submit" class="btn btn-primary">+ Add Income</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Income Summary -->
+        <div class="card summary-strip">
+          <div class="summary-cell">
+            <span class="summary-label">Month Income</span>
+            <span class="summary-num text-green" id="incomeTotalMonth">Rs 0</span>
+          </div>
+          <div class="summary-cell">
+            <span class="summary-label">Entries</span>
+            <span class="summary-num text-blue" id="incomeTotalEntries">0</span>
+          </div>
+        </div>
+
+        <!-- Income Records -->
+        <div class="card">
+          <h2 class="card-title">Income Records</h2>
+          <div id="incomeList" class="item-list">
+            <p class="empty-msg">No income recorded this month.</p>
+          </div>
+        </div>
+      </section>
+
       <!-- ========== TRENDS SECTION ========== -->
       <section class="tab-panel" id="panel-trends">
         <!-- Category Breakdown -->
@@ -299,7 +368,10 @@
         <button class="btn btn-ghost export-opt" id="exportCSV">📄 Expenses as CSV</button>
         <button class="btn btn-ghost export-opt" id="exportJSON">📋 Expenses as JSON</button>
         <button class="btn btn-ghost export-opt" id="exportBudgetCSV">📋 Budget Plan as CSV</button>
+        <button class="btn btn-ghost export-opt" id="exportIncomeCSV">💵 Income as CSV</button>
         <button class="btn btn-ghost export-opt" id="exportFullReport">📊 Full Month Report</button>
+        <hr style="border-color:var(--border);margin:8px 0">
+        <button class="btn btn-ghost export-opt" id="exportTemplate">📝 Download Import Template (CSV)</button>
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" id="cancelExport">Close</button>

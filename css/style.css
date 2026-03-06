@@ -825,6 +825,69 @@ body {
   margin-top: 8px;
 }
 
+/* Income Item */
+.income-item {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+
+.income-item:last-child {
+  border-bottom: none;
+}
+
+.income-item:hover {
+  background: var(--bg-hover);
+  margin: 0 -20px;
+  padding: 14px 20px;
+  border-radius: var(--radius-sm);
+}
+
+.income-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.income-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.income-title-text {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.income-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.income-source {
+  color: var(--green);
+  font-weight: 500;
+}
+
+.income-amount-val {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.income-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+
 /* Modal */
 .modal-overlay {
   display: none;
