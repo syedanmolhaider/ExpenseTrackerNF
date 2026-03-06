@@ -781,22 +781,48 @@ function downloadFile(content, filename, type) {
 // CHARTS / TRENDS
 // =============================================
 const CHART_COLORS = ["#6c5ce7", "#0984e3", "#00b894", "#f39c12", "#e74c3c", "#a29bfe", "#fd79a8", "#636e72"];
+let apexInstances = {};
 
 function renderCharts() { renderCategoryChart(); renderDailyChart(); renderBudgetProgress(); renderTopExpenses(); renderMonthComparison(); }
 
 function renderCategoryChart() {
   const el = document.getElementById("categoryChart");
-  if (expenses.length === 0) { el.innerHTML = '<p class="chart-empty">No expense data.</p>'; return; }
+  if (expenses.length === 0) {
+    if (apexInstances.cat) { apexInstances.cat.destroy(); delete apexInstances.cat; }
+    el.innerHTML = '<p class="chart-empty">No expense data.</p>';
+    return;
+  }
   const catTotals = {}; expenses.forEach((e) => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
   const sorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
-  const max = sorted[0][1]; const total = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  el.innerHTML = sorted.map(([cat, amt], i) => `
-    <div class="bar-row"><div class="bar-label">${getCatIcon(cat)} ${cat}</div><div class="bar-track"><div class="bar-fill" style="width:${(amt / max) * 100}%; background:${CHART_COLORS[i % CHART_COLORS.length]}"></div></div><div class="bar-value">${fmtCurr(amt)} <small style="color:var(--text-muted)">(${((amt / total) * 100).toFixed(1)}%)</small></div></div>`).join("");
+
+  const labels = sorted.map(i => i[0]);
+  const data = sorted.map(i => i[1]);
+
+  if (apexInstances.cat) { apexInstances.cat.destroy(); }
+  el.innerHTML = '';
+
+  const options = {
+    series: data,
+    chart: { type: 'donut', height: 320, background: 'transparent' },
+    labels: labels.map(c => getCatIcon(c) + ' ' + c),
+    colors: CHART_COLORS,
+    plotOptions: { pie: { donut: { size: '65%' } } },
+    dataLabels: { enabled: true, formatter: function (val) { return val.toFixed(1) + "%" } },
+    legend: { position: 'bottom' },
+    stroke: { show: false },
+    tooltip: { theme: 'light', y: { formatter: function (val) { return fmtCurr(val) } } }
+  };
+  apexInstances.cat = new ApexCharts(el, options);
+  apexInstances.cat.render();
 }
 
 function renderDailyChart() {
   const el = document.getElementById("dailyChart");
-  if (expenses.length === 0) { el.innerHTML = '<p class="chart-empty">No expense data.</p>'; return; }
+  if (expenses.length === 0) {
+    if (apexInstances.daily) { apexInstances.daily.destroy(); delete apexInstances.daily; }
+    el.innerHTML = '<p class="chart-empty">No expense data.</p>';
+    return;
+  }
 
   const startDay = userSettings.month_start_day;
   const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
@@ -808,33 +834,49 @@ function renderDailyChart() {
   const dayTotals = {};
   let curr = new Date(startDate);
   while (curr <= endDate) {
-    dayTotals[`${curr.getMonth()}-${curr.getDate()}`] = 0;
+    dayTotals[`${curr.getDate()} ${curr.toLocaleString('en-US', { month: 'short' })}`] = 0;
     curr.setDate(curr.getDate() + 1);
   }
 
   expenses.forEach((e) => {
     const d = new Date(e.date);
-    const k = `${d.getMonth()}-${d.getDate()}`;
+    const k = `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })}`;
     if (dayTotals[k] !== undefined) dayTotals[k] += parseFloat(e.amount);
   });
-  const maxDay = Math.max(...Object.values(dayTotals), 1);
 
-  let html = `<div class="day-bars">`;
-  let i = 0;
-  for (const [key, amt] of Object.entries(dayTotals)) {
-    const dayNum = parseInt(key.split("-")[1], 10);
-    html += `<div class="day-bar-col"><div class="day-bar" style="height:${Math.max((amt / maxDay) * 100, 2)}%; background:${amt > 0 ? "#6c5ce7" : "var(--border)"}">${amt > 0 ? `<div class="day-bar-tooltip">Day ${dayNum}: ${fmtCurr(amt)}</div>` : ""}</div><div class="day-bar-label">${i % 5 === 0 ? dayNum : ""}</div></div>`;
-    i++;
-  }
-  html += `</div>`;
-  el.innerHTML = html;
+  const categories = Object.keys(dayTotals);
+  const data = Object.values(dayTotals);
+
+  if (apexInstances.daily) { apexInstances.daily.destroy(); }
+  el.innerHTML = '';
+
+  const options = {
+    series: [{ name: 'Spent', data: data }],
+    chart: { type: 'area', height: 300, toolbar: { show: false }, background: 'transparent' },
+    colors: ['#0984e3'],
+    fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.1, stops: [0, 90, 100] } },
+    dataLabels: { enabled: false },
+    stroke: { curve: 'smooth', width: 3 },
+    xaxis: { categories: categories, tickAmount: Math.min(categories.length, 10) },
+    yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
+    tooltip: { theme: 'light', y: { formatter: function (val) { return fmtCurr(val) } } }
+  };
+
+  apexInstances.daily = new ApexCharts(el, options);
+  apexInstances.daily.render();
 }
 
 function renderBudgetProgress() {
   const el = document.getElementById("budgetProgress");
-  if (budgetItems.length === 0) { el.innerHTML = '<p class="chart-empty">No budget items.</p>'; return; }
+  if (budgetItems.length === 0) {
+    if (apexInstances.budget) { apexInstances.budget.destroy(); delete apexInstances.budget; }
+    el.innerHTML = '<p class="chart-empty">No budget items.</p>';
+    return;
+  }
 
-  let html = '';
+  let categories = [];
+  let planned = [];
+  let spentData = [];
   let overallLimit = 0; let overallSpent = 0;
 
   budgetItems.forEach((item) => {
@@ -842,18 +884,39 @@ function renderBudgetProgress() {
     const limit = parseFloat(item.amount);
     const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
     overallLimit += limit; overallSpent += spent;
-
-    const pct = Math.min((spent / limit) * 100, 100).toFixed(0);
-    const isOver = spent > limit;
-
-    html += `<div class="progress-item"><div class="progress-header"><span class="progress-name">${esc(item.title)} <small>(${esc(cat)})</small></span><span class="progress-status ${isOver ? "text-red" : "pending"}">${fmtCurr(spent)} / ${fmtCurr(limit)}</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%; background:${isOver ? "var(--red)" : "var(--accent)"}"></div></div></div>`;
+    categories.push(item.title);
+    planned.push(limit);
+    spentData.push(spent);
   });
 
-  const overallPct = overallLimit > 0 ? Math.min((overallSpent / overallLimit) * 100, 100).toFixed(0) : 0;
-  const overallIsOver = overallSpent > overallLimit;
-  html = `<div class="progress-item"><div class="progress-header"><span class="progress-name">Overall Budget Categories</span><span class="progress-status ${overallIsOver ? "text-red" : "pending"}">${fmtCurr(overallSpent)} / ${fmtCurr(overallLimit)} (${overallPct}%)</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${overallPct}%; background:${overallIsOver ? "var(--red)" : "var(--green)"}"></div></div></div>` + html;
+  categories.unshift('Overall Budget');
+  planned.unshift(overallLimit);
+  spentData.unshift(overallSpent);
 
-  el.innerHTML = html;
+  if (apexInstances.budget) { apexInstances.budget.destroy(); }
+  el.innerHTML = '';
+
+  const options = {
+    series: [
+      { name: 'Planned Limit', data: planned },
+      { name: 'Actual Spent', data: spentData }
+    ],
+    chart: { type: 'bar', height: Math.max(250, categories.length * 60), toolbar: { show: false }, background: 'transparent' },
+    plotOptions: { bar: { horizontal: true, dataLabels: { position: 'top' }, borderRadius: 4, barHeight: '70%' } },
+    colors: ['#00b894', '#e74c3c'],
+    dataLabels: {
+      enabled: true, offsetX: 25,
+      style: { fontSize: '12px', colors: ['#333'] },
+      formatter: function (val) { return val > 0 ? fmtCurr(val) : ''; }
+    },
+    stroke: { show: true, width: 2, colors: ['transparent'] },
+    xaxis: { categories: categories, labels: { formatter: function (val) { return fmtCurr(val); } } },
+    yaxis: { labels: { style: { fontWeight: 'bold' } } },
+    tooltip: { theme: 'light', shared: true, intersect: false, y: { formatter: function (val) { return fmtCurr(val); } } }
+  };
+
+  apexInstances.budget = new ApexCharts(el, options);
+  apexInstances.budget.render();
 }
 
 function renderTopExpenses() {
