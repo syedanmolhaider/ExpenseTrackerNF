@@ -429,37 +429,49 @@ function displayBudget() {
     let itemSpends = items.map(() => 0);
     let unallocatedSpent = 0;
 
-    if (items.length === 1) {
-      itemSpends[0] = categorySpent;
-    } else {
-      catExpenses.forEach((e) => {
-        const eTitle = e.title.toLowerCase().trim();
-        let matchedIdx = -1;
+    catExpenses.forEach((e) => {
+      const eTitle = e.title.toLowerCase().trim();
+      let matchedIdx = -1;
 
-        // Exact match first
-        for (let i = 0; i < items.length; i++) {
-          if (eTitle === items[i].title.toLowerCase().trim()) {
-            matchedIdx = i; break;
-          }
+      // Phase 1: Exact match first
+      for (let i = 0; i < items.length; i++) {
+        const bTitle = items[i].title.toLowerCase().trim();
+        if (eTitle === bTitle) {
+          matchedIdx = i; break;
         }
+      }
 
-        // Partial match fallback
-        if (matchedIdx === -1) {
-          for (let i = 0; i < items.length; i++) {
-            const bTitle = items[i].title.toLowerCase().trim();
+      // Phase 2: Safe Substring match via Word Boundaries (prevent "Car" matching "Card")
+      if (matchedIdx === -1) {
+        for (let i = 0; i < items.length; i++) {
+          const bTitle = items[i].title.toLowerCase().trim();
+          // Escape regex characters just in case
+          const safeBTitle = bTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const safeETitle = eTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+          try {
+            // Check if the budget title is a standalone word in the expense title, OR vice versa
+            const bInE = new RegExp(`\\b${safeBTitle}\\b`).test(eTitle);
+            const eInB = new RegExp(`\\b${safeETitle}\\b`).test(bTitle);
+
+            if (bInE || eInB) {
+              matchedIdx = i; break;
+            }
+          } catch (err) {
+            // Fallback to simple includes if regex fails maliciously
             if (eTitle.includes(bTitle) || bTitle.includes(eTitle)) {
               matchedIdx = i; break;
             }
           }
         }
+      }
 
-        if (matchedIdx !== -1) {
-          itemSpends[matchedIdx] += parseFloat(e.amount);
-        } else {
-          unallocatedSpent += parseFloat(e.amount);
-        }
-      });
-    }
+      if (matchedIdx !== -1) {
+        itemSpends[matchedIdx] += parseFloat(e.amount);
+      } else {
+        unallocatedSpent += parseFloat(e.amount);
+      }
+    });
 
     // Individual sub-items
     items.forEach((item, idx) => {
@@ -500,7 +512,7 @@ function displayBudget() {
       </div>`;
     });
 
-    if (unallocatedSpent > 0 && items.length > 1) {
+    if (unallocatedSpent > 0) {
       html += `
       <div class="budget-sub-item">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
