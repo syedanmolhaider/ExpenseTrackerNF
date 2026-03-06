@@ -8,6 +8,7 @@ let currentMonth = new Date();
 let expenses = [];
 let allExpenses = [];
 let budgetItems = [];
+let nextBudgetItems = [];
 let incomeEntries = [];
 let currentFilter = "";
 let userSettings = { month_start_day: 1, currency: "Rs" };
@@ -17,6 +18,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await checkAuth();
   await loadSettings();
   renderMonthLabel();
+  renderNextMonthLabel();
   initListeners();
   setDefaultDate();
   await loadAll();
@@ -86,7 +88,21 @@ function renderMonthLabel() {
 function changeMonth(offset) {
   currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1);
   renderMonthLabel();
+  renderNextMonthLabel();
   loadAll();
+}
+
+// Returns the month key for the NEXT month relative to currently viewed month
+function getNextMonthKey() {
+  const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function renderNextMonthLabel() {
+  const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+  const label = next.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const el = document.getElementById("nextMonthLabel");
+  if (el) el.textContent = `Planning for ${label}`;
 }
 
 // ------ Listeners ------
@@ -98,6 +114,7 @@ function initListeners() {
     tab.addEventListener("click", () => {
       switchTab(tab.dataset.tab);
       if (tab.dataset.tab === "trends") renderCharts();
+      if (tab.dataset.tab === "nextbudget") loadNextBudget(getNextMonthKey());
     });
   });
 
@@ -110,6 +127,14 @@ function initListeners() {
   const editBudgetForm = document.getElementById("editBudgetForm");
   if (editBudgetForm) editBudgetForm.addEventListener("submit", handleEditBudget);
   document.getElementById("addIncomeForm").addEventListener("submit", handleAddIncome);
+
+  // Next Month Budget listeners
+  const addNextBudgetForm = document.getElementById("addNextBudgetForm");
+  if (addNextBudgetForm) addNextBudgetForm.addEventListener("submit", handleAddNextBudget);
+  const copyBtn = document.getElementById("copyCurrentBudgetBtn");
+  if (copyBtn) copyBtn.addEventListener("click", handleCopyCurrentBudget);
+  const editNextBudgetForm = document.getElementById("editNextBudgetForm");
+  if (editNextBudgetForm) editNextBudgetForm.addEventListener("submit", handleEditNextBudget);
 
   document.getElementById("filterCategory").addEventListener("change", (e) => {
     currentFilter = e.target.value;
@@ -136,21 +161,23 @@ function initListeners() {
   // Import
   document.getElementById("importFile").addEventListener("change", handleImport);
 
-  // Edit modal close
-  document.querySelectorAll(".close-modal").forEach((btn) => btn.addEventListener("click", closeEditModal));
+  // Edit modal close — close all modals
+  document.querySelectorAll(".close-modal").forEach((btn) => btn.addEventListener("click", () => { closeEditModal(); closeEditBudgetModal(); closeEditNextBudgetModal(); }));
 
   // Overlay clicks
   document.getElementById("settingsModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) document.getElementById("settingsModal").classList.remove("show"); });
   document.getElementById("editModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditModal(); });
   const editBudgetModal = document.getElementById("editBudgetModal");
   if (editBudgetModal) editBudgetModal.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditBudgetModal(); });
+  const editNextBudgetModal = document.getElementById("editNextBudgetModal");
+  if (editNextBudgetModal) editNextBudgetModal.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditNextBudgetModal(); });
 
   // Reset All
   document.getElementById("resetAllBtn").addEventListener("click", handleResetAll);
 
   // Keyboard: Escape
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeEditModal(); closeExportModal(); closeEditBudgetModal(); document.getElementById("settingsModal").classList.remove("show"); }
+    if (e.key === "Escape") { closeEditModal(); closeExportModal(); closeEditBudgetModal(); closeEditNextBudgetModal(); document.getElementById("settingsModal").classList.remove("show"); }
   });
 }
 
@@ -197,7 +224,7 @@ function switchTab(tabName) {
 // ------ Load All Data ------
 async function loadAll() {
   const month = getMonthKey();
-  await Promise.all([loadExpenses(month), loadBudget(month), loadIncome(month)]);
+  await Promise.all([loadExpenses(month), loadBudget(month), loadIncome(month), loadNextBudget(getNextMonthKey())]);
   updateBalanceBar();
   if (document.getElementById("panel-trends").classList.contains("active")) renderCharts();
 }
@@ -431,15 +458,187 @@ async function handleEditBudget(e) {
   } catch { toast("Network error", "error"); }
 }
 
-async function toggleBudget(id) {
-  // Legacy function no longer used in new strictly separated architecture
-}
-
 async function deleteBudget(id) {
   if (!confirm("Delete this budget limit?")) return;
   try {
     const res = await fetch(`/api/budget/${id}`, { method: "DELETE", credentials: "include" });
     if (res.ok) { toast("Deleted", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
+  } catch { toast("Failed", "error"); }
+}
+
+// =============================================
+// NEXT MONTH BUDGET PLAN
+// =============================================
+async function loadNextBudget(month) {
+  try {
+    const res = await fetch(`/api/budget?month=${month}`, { credentials: "include" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    nextBudgetItems = data.items || [];
+    displayNextBudget();
+    updateNextBudgetSummary();
+  } catch {
+    const el = document.getElementById("nextBudgetList");
+    if (el) el.innerHTML = '<p class="empty-msg" style="color:var(--red)">Failed to load next month budget.</p>';
+  }
+}
+
+function displayNextBudget() {
+  const list = document.getElementById("nextBudgetList");
+  if (!list) return;
+  if (nextBudgetItems.length === 0) {
+    list.innerHTML = '<p class="empty-msg">No budget items planned for next month yet. Add items above or copy from current month!</p>';
+    return;
+  }
+  list.innerHTML = nextBudgetItems.map((item) => {
+    const limit = parseFloat(item.amount);
+    const cat = item.category || 'Other';
+    // Compare with current month's same-category budget
+    const currentItem = budgetItems.find(b => (b.category || 'Other') === cat);
+    const currentLimit = currentItem ? parseFloat(currentItem.amount) : 0;
+    const diff = limit - currentLimit;
+    const diffLabel = currentItem ? (diff > 0 ? `▲ ${fmtCurr(diff)}` : diff < 0 ? `▼ ${fmtCurr(Math.abs(diff))}` : '= Same') : 'New';
+    const diffClass = currentItem ? (diff > 0 ? 'text-orange' : diff < 0 ? 'text-green' : 'text-blue') : 'text-accent';
+    return `
+    <div class="budget-item next-budget-item" style="display: flex; flex-direction: column; align-items: stretch; padding: 15px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div class="budget-title" style="font-weight: bold; font-size: 1.1rem;">${getCatIcon(cat)} ${esc(item.title)} <span style="font-weight:normal; font-size:0.9rem; color:var(--text-muted)">(${esc(cat)})</span></div>
+        <div class="budget-actions">
+          <button class="btn-sm" onclick="openEditNextBudgetModal('${item.id}')">Edit</button>
+          <button class="btn-sm delete" onclick="deleteNextBudget('${item.id}')">✕</button>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px;">
+        <span>Planned Limit: <strong>${fmtCurr(limit)}</strong></span>
+        <span>vs Current: <span class="${diffClass}" style="font-weight:600">${diffLabel}</span></span>
+      </div>
+      <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+        <div class="progress-bar-fill" style="height: 100%; width:100%; background:var(--accent)"></div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function updateNextBudgetSummary() {
+  const totalLimit = nextBudgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
+  const categoriesCount = new Set(nextBudgetItems.map(i => i.category || 'Other')).size;
+  const currentTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
+
+  const el1 = document.getElementById("nextBudgetTotalPlanned");
+  const el2 = document.getElementById("nextBudgetCategoriesCount");
+  const el3 = document.getElementById("nextBudgetVsCurrent");
+
+  if (el1) el1.textContent = fmtCurr(totalLimit);
+  if (el2) el2.textContent = categoriesCount;
+  if (el3) {
+    if (currentTotal === 0 && totalLimit === 0) {
+      el3.textContent = '—';
+      el3.className = 'summary-num';
+    } else if (currentTotal === 0) {
+      el3.textContent = 'New Plan';
+      el3.className = 'summary-num text-accent';
+    } else {
+      const diff = totalLimit - currentTotal;
+      const pct = ((diff / currentTotal) * 100).toFixed(0);
+      if (Math.abs(diff) < 1) {
+        el3.textContent = '~Same';
+        el3.className = 'summary-num text-blue';
+      } else if (diff > 0) {
+        el3.textContent = `▲ ${pct}% more`;
+        el3.className = 'summary-num text-orange';
+      } else {
+        el3.textContent = `▼ ${Math.abs(pct)}% less`;
+        el3.className = 'summary-num text-green';
+      }
+    }
+  }
+}
+
+async function handleAddNextBudget(e) {
+  e.preventDefault();
+  const title = document.getElementById("nextBudgetTitle").value.trim();
+  const category = document.getElementById("nextBudgetCategory").value;
+  const amount = document.getElementById("nextBudgetAmount").value;
+  if (!title || !category || !amount) return;
+  // Duplicate check
+  if (nextBudgetItems.some(i => (i.category || 'Other') === category)) {
+    toast("A budget limit for this category already exists in next month!", "error");
+    return;
+  }
+  try {
+    const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, category, amount: parseFloat(amount), month: getNextMonthKey() }) });
+    if (res.ok) { e.target.reset(); toast("Next month budget item added", "success"); await loadNextBudget(getNextMonthKey()); }
+    else { const d = await res.json(); toast(d.error || "Failed", "error"); }
+  } catch { toast("Network error", "error"); }
+}
+
+async function handleCopyCurrentBudget() {
+  if (budgetItems.length === 0) {
+    toast("No budget items in current month to copy!", "error");
+    return;
+  }
+  const confirmCopy = confirm(`This will copy ${budgetItems.length} budget item(s) from current month to next month.\nExisting next month items with the same category will be skipped.\n\nContinue?`);
+  if (!confirmCopy) return;
+
+  let copied = 0;
+  let skipped = 0;
+  for (const item of budgetItems) {
+    const cat = item.category || 'Other';
+    if (nextBudgetItems.some(i => (i.category || 'Other') === cat)) {
+      skipped++;
+      continue;
+    }
+    try {
+      await fetch("/api/budget", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ title: item.title, category: cat, amount: parseFloat(item.amount), month: getNextMonthKey() })
+      });
+      copied++;
+    } catch { /* skip failed */ }
+  }
+
+  if (copied > 0) {
+    toast(`${copied} budget item(s) copied to next month${skipped > 0 ? `, ${skipped} skipped (already exist)` : ''}`, "success");
+    await loadNextBudget(getNextMonthKey());
+  } else if (skipped > 0) {
+    toast(`All items already exist in next month's budget (${skipped} skipped)`, "error");
+  } else {
+    toast("Failed to copy budget items", "error");
+  }
+}
+
+function openEditNextBudgetModal(id) {
+  const item = nextBudgetItems.find((e) => e.id === id);
+  if (!item) return;
+  document.getElementById("editNextBudgetId").value = item.id;
+  document.getElementById("editNextBudgetTitle").value = item.title;
+  document.getElementById("editNextBudgetCategory").value = item.category || "Other";
+  document.getElementById("editNextBudgetAmount").value = item.amount;
+  document.getElementById("editNextBudgetModal").classList.add("show");
+}
+
+function closeEditNextBudgetModal() {
+  const modal = document.getElementById("editNextBudgetModal");
+  if (modal) modal.classList.remove("show");
+}
+
+async function handleEditNextBudget(e) {
+  e.preventDefault();
+  const id = document.getElementById("editNextBudgetId").value;
+  const form = e.target;
+  const data = { title: form.title.value.trim(), category: form.category.value, amount: form.amount.value };
+  try {
+    const res = await fetch(`/api/budget/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
+    if (res.ok) { closeEditNextBudgetModal(); toast("Next month budget updated", "success"); await loadNextBudget(getNextMonthKey()); }
+    else toast("Failed to update", "error");
+  } catch { toast("Network error", "error"); }
+}
+
+async function deleteNextBudget(id) {
+  if (!confirm("Delete this next month budget limit?")) return;
+  try {
+    const res = await fetch(`/api/budget/${id}`, { method: "DELETE", credentials: "include" });
+    if (res.ok) { toast("Deleted", "success"); await loadNextBudget(getNextMonthKey()); }
   } catch { toast("Failed", "error"); }
 }
 
@@ -566,9 +765,9 @@ async function handleResetAll() {
     const res = await fetch("/api/reset", { method: "DELETE", credentials: "include" });
     if (res.ok) {
       toast("All data has been reset", "success");
-      expenses = []; allExpenses = []; budgetItems = []; incomeEntries = []; availableBalance = 0;
-      displayExpenses(); displayBudget(); displayIncome();
-      updateDailySummary(); updateBudgetSummary(); updateIncomeSummary(); updateBalanceBar();
+      expenses = []; allExpenses = []; budgetItems = []; nextBudgetItems = []; incomeEntries = [];
+      displayExpenses(); displayBudget(); displayIncome(); displayNextBudget();
+      updateDailySummary(); updateBudgetSummary(); updateIncomeSummary(); updateNextBudgetSummary(); updateBalanceBar();
     } else toast("Failed to reset", "error");
   } catch { toast("Network error", "error"); }
 }
@@ -964,6 +1163,7 @@ function toast(msg, type = "") { const el = document.getElementById("toast"); el
 // Globals for inline onclick
 window.openEditModal = openEditModal;
 window.handleDelete = handleDelete;
-window.toggleBudget = toggleBudget;
 window.deleteBudget = deleteBudget;
 window.deleteIncome = deleteIncome;
+window.openEditNextBudgetModal = openEditNextBudgetModal;
+window.deleteNextBudget = deleteNextBudget;
