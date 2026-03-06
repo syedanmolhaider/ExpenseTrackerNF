@@ -642,7 +642,7 @@ async function handleImport(e) {
   }
 
   if (rows.length === 0) { toast("No rows found", "error"); e.target.value = ""; return; }
-  const validCats = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education", "Other"];
+  const validCats = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education", "Loan", "Rent", "Other"];
   let imported = 0, failed = 0;
   for (const row of rows) {
     const cat = validCats.find((c) => c.toLowerCase() === (row.category || "").toLowerCase()) || "Other";
@@ -912,7 +912,7 @@ function fmtCurr(n) {
   return `${userSettings.currency} ${numText}`;
 }
 
-function getCatIcon(c) { return ({ Food: "🍔", Transport: "🚗", Entertainment: "🎬", Shopping: "🛍️", Bills: "📄", Healthcare: "⚕️", Education: "📚", Other: "📦" })[c] || "📦"; }
+function getCatIcon(c) { return ({ Food: "🍔", Transport: "🚗", Entertainment: "🎬", Shopping: "🛍️", Bills: "📄", Healthcare: "⚕️", Education: "📚", Loan: "🏦", Rent: "🏠", Other: "📦" })[c] || "📦"; }
 function toast(msg, type = "") { const el = document.getElementById("toast"); el.textContent = msg; el.className = "toast show " + type; clearTimeout(el._tid); el._tid = setTimeout(() => el.className = "toast", 2500); }
 
 // Globals for inline onclick
