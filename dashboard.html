@@ -679,6 +679,48 @@
     </div>
   </div>
 
+  <!-- Edit Income Modal -->
+  <div class="modal-overlay" id="editIncomeModal">
+    <div class="modal-box">
+      <h3>Edit Income Entry</h3>
+      <form id="editIncomeForm" class="form-grid">
+        <input type="hidden" id="editIncomeId" />
+        <div class="form-field" style="grid-column: span 2;">
+          <label for="editIncomeTitle">Title</label>
+          <input type="text" id="editIncomeTitle" name="title" required />
+        </div>
+        <div class="form-field">
+          <label for="editIncomeAmount">Amount</label>
+          <input type="number" id="editIncomeAmount" name="amount" step="0.01" min="0.01" required />
+        </div>
+        <div class="form-field">
+          <label for="editIncomeSource">Source</label>
+          <select id="editIncomeSource" name="source" required>
+            <option value="Salary">💼 Salary</option>
+            <option value="Freelance">💻 Freelance</option>
+            <option value="Business">🏢 Business</option>
+            <option value="Investment">📈 Investment</option>
+            <option value="Gift">🎁 Gift</option>
+            <option value="Refund">↩️ Refund</option>
+            <option value="Other">📦 Other</option>
+          </select>
+        </div>
+        <div class="form-field">
+          <label for="editIncomeDate">Date</label>
+          <input type="date" id="editIncomeDate" name="date" required />
+        </div>
+        <div class="form-field full-width">
+          <label for="editIncomeNotes">Notes</label>
+          <input type="text" id="editIncomeNotes" name="notes" />
+        </div>
+        <div class="modal-actions full-width">
+          <button type="button" class="btn btn-ghost" id="closeEditIncomeModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Export Modal -->
   <div class="modal-overlay" id="exportModal">
     <div class="modal-box">

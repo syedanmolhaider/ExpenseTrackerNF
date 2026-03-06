@@ -4,6 +4,7 @@ const {
   generateToken,
   setAuthCookie,
   createResponse,
+  isValidEmail,
 } = require("./utils/auth");
 
 exports.handler = async (event) => {
@@ -22,6 +23,11 @@ exports.handler = async (event) => {
     // Validate input
     if (!email || !password) {
       return createResponse(400, { error: "Email and password are required" });
+    }
+
+    // Validate email format
+    if (!isValidEmail(email)) {
+      return createResponse(400, { error: "Please enter a valid email address" });
     }
 
     if (email.length > 255 || password.length > 72) {
@@ -64,7 +70,7 @@ exports.handler = async (event) => {
       authCookie
     );
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Login error:", error.message);
     return createResponse(500, { error: "Internal server error" });
   }
 };

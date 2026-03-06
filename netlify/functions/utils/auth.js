@@ -2,8 +2,13 @@ const jwt = require("jsonwebtoken");
 const cookie = require("cookie");
 
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET && process.env.NODE_ENV === "production") {
+// Netlify sets CONTEXT (not NODE_ENV) — check both for safety
+const isProduction = process.env.CONTEXT === "production" || process.env.NODE_ENV === "production";
+if (!JWT_SECRET && isProduction) {
   throw new Error("CRITICAL FATAL: JWT_SECRET environment variable is missing in production!");
+}
+if (!JWT_SECRET) {
+  console.warn("⚠️ JWT_SECRET not set — using fallback dev secret. Do NOT use in production!");
 }
 const SECRET = JWT_SECRET || "fallback-dev-secret-only";
 const COOKIE_NAME = "auth_token";
@@ -23,7 +28,7 @@ function verifyToken(token) {
 function setAuthCookie(token) {
   return cookie.serialize(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProduction,
     sameSite: "strict",
     maxAge: 7 * 24 * 60 * 60, // 7 days
     path: "/",
@@ -33,7 +38,7 @@ function setAuthCookie(token) {
 function clearAuthCookie() {
   return cookie.serialize(COOKIE_NAME, "", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isProduction,
     sameSite: "strict",
     maxAge: 0,
     path: "/",
@@ -56,12 +61,20 @@ function getUserFromRequest(event) {
   }
 }
 
+// Email format validation
+function isValidEmail(email) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
+}
+
 function createResponse(statusCode, body, setCookie = null) {
+  const origin = process.env.URL || process.env.DEPLOY_PRIME_URL || "*";
   const headers = {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
   };
 
   if (setCookie) {
@@ -82,4 +95,5 @@ module.exports = {
   clearAuthCookie,
   getUserFromRequest,
   createResponse,
+  isValidEmail,
 };

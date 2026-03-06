@@ -306,8 +306,8 @@ function displayExpenses() {
         <div class="expense-amount-val">${fmtCurr(exp.amount)}</div>
       </div>
       <div class="expense-actions">
-        <button class="btn-sm" onclick="openEditModal('${exp.id}')">Edit</button>
-        <button class="btn-sm delete" onclick="handleDelete('${exp.id}')">Delete</button>
+        <button class="btn-sm" data-action="editExpense" data-id="${exp.id}" aria-label="Edit expense ${esc(exp.title)}">Edit</button>
+        <button class="btn-sm delete" data-action="deleteExpense" data-id="${exp.id}" aria-label="Delete expense ${esc(exp.title)}">Delete</button>
       </div>
     </div>`).join("");
 }
@@ -496,8 +496,8 @@ function displayBudget() {
           <div style="display: flex; align-items: center; gap: 6px;">
             <span class="budget-pct-badge sm ${subIsOver ? 'over' : subPct > 80 ? 'warn' : 'ok'}">${subPctUsed}%</span>
             <div class="budget-actions">
-              <button class="btn-sm" onclick="openEditBudgetModal('${item.id}')">Edit</button>
-              <button class="btn-sm delete" onclick="deleteBudget('${item.id}')">✕</button>
+              <button class="btn-sm" data-action="editBudget" data-id="${item.id}" aria-label="Edit budget item ${esc(item.title)}">Edit</button>
+              <button class="btn-sm delete" data-action="deleteBudget" data-id="${item.id}" aria-label="Delete budget item ${esc(item.title)}">✕</button>
             </div>
           </div>
         </div>
@@ -706,8 +706,8 @@ function displayNextBudget() {
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="font-weight: 700; font-size: 0.9rem;">${fmtCurr(limit)}</span>
             <div class="budget-actions">
-              <button class="btn-sm" onclick="openEditNextBudgetModal('${item.id}')">Edit</button>
-              <button class="btn-sm delete" onclick="deleteNextBudget('${item.id}')">✕</button>
+              <button class="btn-sm" data-action="editNextBudget" data-id="${item.id}" aria-label="Edit next budget item ${esc(item.title)}">Edit</button>
+              <button class="btn-sm delete" data-action="deleteNextBudget" data-id="${item.id}" aria-label="Delete next budget item ${esc(item.title)}">✕</button>
             </div>
           </div>
         </div>
@@ -883,7 +883,8 @@ function displayIncome() {
         <div class="income-amount-val">+ ${fmtCurr(entry.amount)}</div>
       </div>
       <div class="income-actions">
-        <button class="btn-sm delete" onclick="deleteIncome('${entry.id}')">Delete</button>
+        <button class="btn-sm" data-action="editIncome" data-id="${entry.id}" aria-label="Edit income ${esc(entry.title)}">Edit</button>
+        <button class="btn-sm delete" data-action="deleteIncome" data-id="${entry.id}" aria-label="Delete income ${esc(entry.title)}">Delete</button>
       </div>
     </div>`).join("");
 }
@@ -1074,6 +1075,7 @@ function exportIncomeCSV() {
 }
 
 function exportTemplate() {
+  const c = userSettings.currency || 'Rs';
   const template = `Date,Title,Category,Amount,Notes
 2026-03-01,Groceries,Food,1500,Weekly groceries from store
 2026-03-02,Uber ride,Transport,350,Office commute
@@ -1770,12 +1772,70 @@ function fmtCurr(n) {
 function getCatIcon(c) { return ({ Food: "🍔", Transport: "🚗", Entertainment: "🎬", Shopping: "🛍️", Bills: "📄", Healthcare: "⚕️", Education: "📚", Loan: "🏦", Rent: "🏠", Parents: "👨‍👩‍👧", Investment: "📈", Unexpected: "⚠️", Maintenance: "🛠️", Household: "🪑", "Personal Care": "🧴", Savings: "💰", "Dining Out": "🍽️", Other: "📦" })[c] || "📦"; }
 function toast(msg, type = "") { const el = document.getElementById("toast"); el.textContent = msg; el.className = "toast show " + type; clearTimeout(el._tid); el._tid = setTimeout(() => el.className = "toast", 2500); }
 
-// Globals for inline onclick
-window.openEditModal = openEditModal;
-window.handleDelete = handleDelete;
-window.openEditBudgetModal = openEditBudgetModal;
-window.deleteBudget = deleteBudget;
-window.deleteIncome = deleteIncome;
-window.openEditNextBudgetModal = openEditNextBudgetModal;
-window.deleteNextBudget = deleteNextBudget;
+// Loading state helpers
+function showLoading(containerId) {
+  const el = document.getElementById(containerId);
+  if (el) el.innerHTML = '<div class="loading-spinner" aria-label="Loading"><div class="spinner"></div><span>Loading...</span></div>';
+}
+function hideLoading(containerId) {
+  const el = document.getElementById(containerId);
+  if (el && el.querySelector('.loading-spinner')) el.innerHTML = '';
+}
 
+// =============================================
+// INCOME EDIT MODAL
+// =============================================
+function openEditIncomeModal(id) {
+  const entry = incomeEntries.find((e) => e.id === id);
+  if (!entry) return;
+  document.getElementById("editIncomeId").value = entry.id;
+  document.getElementById("editIncomeTitle").value = entry.title;
+  document.getElementById("editIncomeAmount").value = entry.amount;
+  document.getElementById("editIncomeSource").value = entry.source || 'Other';
+  document.getElementById("editIncomeDate").value = entry.date ? entry.date.split("T")[0] : "";
+  document.getElementById("editIncomeNotes").value = entry.notes || "";
+  document.getElementById("editIncomeModal").classList.add("show");
+}
+function closeEditIncomeModal() { document.getElementById("editIncomeModal").classList.remove("show"); }
+
+async function handleEditIncome(e) {
+  e.preventDefault();
+  const id = document.getElementById("editIncomeId").value;
+  const form = e.target;
+  const data = { title: form.title.value.trim(), amount: form.amount.value, source: form.source.value, date: form.date.value, notes: form.notes.value.trim() };
+  try {
+    const res = await fetch(`/api/income/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
+    if (res.ok) { closeEditIncomeModal(); toast("Income updated", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); }
+    else toast("Failed to update", "error");
+  } catch { toast("Network error", "error"); }
+}
+
+// =============================================
+// EVENT DELEGATION (replaces inline onclick handlers) — C1 FIX
+// =============================================
+function initEventDelegation() {
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const id = btn.dataset.id;
+    switch (action) {
+      case 'editExpense': openEditModal(id); break;
+      case 'deleteExpense': handleDelete(id); break;
+      case 'editBudget': openEditBudgetModal(id); break;
+      case 'deleteBudget': deleteBudget(id); break;
+      case 'editIncome': openEditIncomeModal(id); break;
+      case 'deleteIncome': deleteIncome(id); break;
+      case 'editNextBudget': openEditNextBudgetModal(id); break;
+      case 'deleteNextBudget': deleteNextBudget(id); break;
+    }
+  });
+
+  // Income edit form
+  const editIncomeForm = document.getElementById("editIncomeForm");
+  if (editIncomeForm) editIncomeForm.addEventListener("submit", handleEditIncome);
+  const closeEditIncomeBtn = document.getElementById("closeEditIncomeModal");
+  if (closeEditIncomeBtn) closeEditIncomeBtn.addEventListener("click", closeEditIncomeModal);
+}
+
+initEventDelegation();

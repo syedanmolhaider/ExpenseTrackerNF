@@ -25,12 +25,6 @@ exports.handler = async (event) => {
         const isToggle = lastPart === "toggle";
         const itemId = isToggle ? secondLast : (lastPart !== "budget" ? lastPart : null);
 
-        // Auto migrate category column (fails silently if already exists)
-        try {
-            await query("ALTER TABLE budget_items ADD COLUMN category VARCHAR(100) DEFAULT 'Other'");
-            await query("UPDATE budget_items SET category = title WHERE category = 'Other' OR category IS NULL");
-        } catch (e) { }
-
         // Handle GET - fetch budget items for a month
         if (event.httpMethod === "GET") {
             const month = params.month;

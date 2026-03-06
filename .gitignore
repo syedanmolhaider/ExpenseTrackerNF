@@ -23,3 +23,7 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+
+# Debug/test files
+err.txt
+test-*.html

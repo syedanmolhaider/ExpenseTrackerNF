@@ -22,20 +22,13 @@ exports.handler = async (event) => {
         // Delete all user data across all months
         await query("DELETE FROM expenses WHERE user_id = $1", [userId]);
         await query("DELETE FROM budget_items WHERE user_id = $1", [userId]);
-        await query("DELETE FROM monthly_balance WHERE user_id = $1", [userId]);
-
-        // Also delete income if table exists
-        try {
-            await query("DELETE FROM income WHERE user_id = $1", [userId]);
-        } catch (e) {
-            // income table might not exist yet, ignore
-        }
+        await query("DELETE FROM income WHERE user_id = $1", [userId]);
 
         return createResponse(200, {
             message: "All data has been reset successfully",
         });
     } catch (error) {
-        console.error("Reset error:", error);
+        console.error("Reset error:", error.message);
         return createResponse(500, { error: "Internal server error" });
     }
 };

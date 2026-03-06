@@ -13,7 +13,7 @@ exports.handler = async (event) => {
         }
 
         const userId = decoded.userId;
-        const pathParts = event.path.split("/");
+        const pathParts = event.path.replace(/\/$/, "").split("/");
         const params = event.queryStringParameters || {};
         const lastPart = pathParts[pathParts.length - 1];
         const incomeId = lastPart !== "income" ? lastPart : null;
@@ -59,6 +59,12 @@ exports.handler = async (event) => {
                 });
             }
 
+            if (title.length > 255 || (notes && notes.length > 1000)) {
+                return createResponse(400, {
+                    error: "Payload size limits exceeded (Title max 255, Notes max 1000)",
+                });
+            }
+
             const result = await query(
                 `INSERT INTO income (user_id, title, amount, source, date, notes) 
          VALUES ($1, $2, $3, $4, $5, $6) 
@@ -68,6 +74,56 @@ exports.handler = async (event) => {
 
             return createResponse(201, {
                 message: "Income entry added",
+                entry: result.rows[0],
+            });
+        }
+
+        // PUT — update income entry
+        if (event.httpMethod === "PUT") {
+            if (!incomeId) {
+                return createResponse(400, { error: "Income ID is required" });
+            }
+
+            const { title, amount, source, date, notes } = JSON.parse(event.body);
+
+            if (!title || !amount || !date) {
+                return createResponse(400, {
+                    error: "Title, amount, and date are required",
+                });
+            }
+
+            if (isNaN(amount) || parseFloat(amount) <= 0) {
+                return createResponse(400, {
+                    error: "Amount must be a positive number",
+                });
+            }
+
+            if (title.length > 255 || (notes && notes.length > 1000)) {
+                return createResponse(400, {
+                    error: "Payload size limits exceeded (Title max 255, Notes max 1000)",
+                });
+            }
+
+            // Check ownership
+            const checkResult = await query(
+                "SELECT id FROM income WHERE id = $1 AND user_id = $2",
+                [incomeId, userId]
+            );
+
+            if (checkResult.rows.length === 0) {
+                return createResponse(404, { error: "Income entry not found" });
+            }
+
+            const result = await query(
+                `UPDATE income 
+         SET title = $1, amount = $2, source = $3, date = $4, notes = $5 
+         WHERE id = $6 AND user_id = $7 
+         RETURNING id, title, amount, source, date, notes, created_at`,
+                [title, parseFloat(amount), source || "Other", date, notes || null, incomeId, userId]
+            );
+
+            return createResponse(200, {
+                message: "Income entry updated",
                 entry: result.rows[0],
             });
         }
@@ -97,7 +153,7 @@ exports.handler = async (event) => {
 
         return createResponse(405, { error: "Method not allowed" });
     } catch (error) {
-        console.error("Income error:", error);
+        console.error("Income error:", error.message);
         return createResponse(500, { error: "Internal server error" });
     }
 };

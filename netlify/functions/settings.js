@@ -1,15 +1,6 @@
 const { query } = require("./utils/db");
 const { getUserFromRequest, createResponse } = require("./utils/auth");
 
-// Auto-migrate: add month_end_day column if missing
-async function ensureEndDayColumn() {
-    try {
-        await query(`ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS month_end_day INTEGER DEFAULT 0`);
-    } catch (e) {
-        // Column might already exist
-    }
-}
-
 exports.handler = async (event) => {
     if (event.httpMethod === "OPTIONS") {
         return createResponse(200, { message: "OK" });
@@ -21,8 +12,6 @@ exports.handler = async (event) => {
             return createResponse(401, { error: "Unauthorized" });
         }
         const userId = decoded.userId;
-
-        await ensureEndDayColumn();
 
         if (event.httpMethod === "GET") {
             const result = await query(
@@ -69,7 +58,7 @@ exports.handler = async (event) => {
 
         return createResponse(405, { error: "Method not allowed" });
     } catch (error) {
-        console.error("Settings error:", error);
+        console.error("Settings error:", error.message);
         return createResponse(500, { error: "Internal server error" });
     }
 };
