@@ -11,7 +11,8 @@ let budgetItems = [];
 let nextBudgetItems = [];
 let incomeEntries = [];
 let currentFilter = "";
-let userSettings = { month_start_day: 1, currency: "Rs" };
+let searchQuery = "";
+let userSettings = { month_start_day: 1, month_end_day: 0, currency: "Rs" };
 
 // ------ Init ------
 document.addEventListener("DOMContentLoaded", async () => {
@@ -42,6 +43,7 @@ async function loadSettings() {
       const data = await res.json();
       if (data.settings) {
         userSettings.month_start_day = parseInt(data.settings.month_start_day) || 1;
+        userSettings.month_end_day = parseInt(data.settings.month_end_day) || 0;
         userSettings.currency = data.settings.currency || "Rs";
       }
     }
@@ -73,13 +75,16 @@ function getMonthKey(d = currentMonth) {
 
 function renderMonthLabel() {
   const startDay = userSettings.month_start_day;
+  const endDay = userSettings.month_end_day;
 
-  if (startDay === 1) {
+  if (startDay === 1 && endDay === 0) {
     document.getElementById("currentMonthLabel").textContent = currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
   } else {
-    // e.g. cycle "April 2026" (currentMonth = 2026-04-01) -> Mar 25 to Apr 24
+    const actualEndDay = endDay > 0 ? endDay : (startDay > 1 ? startDay - 1 : 0);
     const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, startDay);
-    const endDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), startDay - 1);
+    const endDate = actualEndDay > 0
+      ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), actualEndDay)
+      : new Date(currentMonth.getFullYear(), currentMonth.getMonth(), startDay - 1);
     const fmt = (date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     document.getElementById("currentMonthLabel").textContent = `${fmt(startDate)} - ${fmt(endDate)}, ${endDate.getFullYear()}`;
   }
@@ -141,6 +146,12 @@ function initListeners() {
     displayExpenses();
   });
 
+  // Search
+  document.getElementById("searchExpense").addEventListener("input", (e) => {
+    searchQuery = e.target.value.trim().toLowerCase();
+    displayExpenses();
+  });
+
   // Settings modal
   document.getElementById("settingsBtn").addEventListener("click", openSettingsModal);
   document.getElementById("cancelSettings").addEventListener("click", () => document.getElementById("settingsModal").classList.remove("show"));
@@ -185,28 +196,33 @@ function closeExportModal() { document.getElementById("exportModal").classList.r
 
 function openSettingsModal() {
   document.getElementById("settingStartDay").value = userSettings.month_start_day;
+  document.getElementById("settingEndDay").value = userSettings.month_end_day;
   document.getElementById("settingCurrency").value = userSettings.currency;
   document.getElementById("settingsModal").classList.add("show");
 }
 
 async function handleSaveSettings() {
   const day = parseInt(document.getElementById("settingStartDay").value);
+  const endDay = parseInt(document.getElementById("settingEndDay").value) || 0;
   const cur = document.getElementById("settingCurrency").value.trim() || 'Rs';
 
   if (day < 1 || day > 28) { toast("Start day must be 1-28", "error"); return; }
+  if (endDay < 0 || endDay > 28) { toast("End day must be 0-28", "error"); return; }
+  if (endDay > 0 && endDay === day) { toast("End day cannot be the same as start day", "error"); return; }
 
   try {
     const res = await fetch("/api/settings", {
       method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include",
-      body: JSON.stringify({ month_start_day: day, currency: cur })
+      body: JSON.stringify({ month_start_day: day, month_end_day: endDay, currency: cur })
     });
     if (res.ok) {
       userSettings.month_start_day = day;
+      userSettings.month_end_day = endDay;
       userSettings.currency = cur;
       document.getElementById("settingsModal").classList.remove("show");
       toast("Settings saved", "success");
       renderMonthLabel();
-      await loadAll(); // Reload everything according to new dates
+      await loadAll();
     } else {
       toast("Failed to save", "error");
     }
@@ -254,6 +270,15 @@ async function loadExpenses(month) {
 function displayExpenses() {
   const list = document.getElementById("expensesList");
   let filtered = currentFilter ? expenses.filter((e) => e.category === currentFilter) : expenses;
+  // Apply search query
+  if (searchQuery) {
+    filtered = filtered.filter((e) =>
+      (e.title && e.title.toLowerCase().includes(searchQuery)) ||
+      (e.notes && e.notes.toLowerCase().includes(searchQuery)) ||
+      (e.category && e.category.toLowerCase().includes(searchQuery)) ||
+      (e.amount && String(e.amount).includes(searchQuery))
+    );
+  }
   updateDailySummary(filtered);
   if (filtered.length === 0) { list.innerHTML = '<p class="empty-msg">No expenses logged this month.</p>'; return; }
   filtered.sort((a, b) => new Date(b.date) - new Date(a.date));

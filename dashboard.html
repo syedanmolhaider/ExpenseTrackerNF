@@ -66,6 +66,12 @@
           <input type="number" id="settingStartDay" min="1" max="28" value="1" />
         </div>
         <div class="form-field mt-10">
+          <label for="settingEndDay">Financial Month End Day (1-28, 0 = auto)</label>
+          <input type="number" id="settingEndDay" min="0" max="28" value="0" />
+          <small style="color:var(--text-muted); margin-top:2px;">Set to 0 to auto-calculate (day before start day).
+            E.g. Start=25 → End=24.</small>
+        </div>
+        <div class="form-field mt-10">
           <label for="settingCurrency">Currency Symbol</label>
           <input type="text" id="settingCurrency" value="Rs" />
         </div>
@@ -280,8 +286,12 @@
           </div>
         </div>
 
-        <!-- Filter & Import/Export -->
-        <div class="card controls-row">
+        <!-- Search, Filter & Import/Export -->
+        <div class="card controls-row" style="flex-wrap: wrap;">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="searchExpense" class="search-input" placeholder="Search expenses..." />
+          </div>
           <select id="filterCategory" class="filter-select">
             <option value="">All Categories</option>
             <option value="Food">🍔 Food</option>
