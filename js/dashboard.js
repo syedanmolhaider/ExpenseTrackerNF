@@ -424,14 +424,24 @@ function displayBudget() {
         </div>
       </div>`;
 
-    // Individual sub-items with exact title matching
+    // Individual sub-items with flexible title matching
     items.forEach((item) => {
       const limit = parseFloat(item.amount);
       const shareOfCategory = categoryLimit > 0 ? (limit / categoryLimit) : 0;
-      const itemSpent = expenses.filter(e =>
-        e.category === cat &&
-        e.title.toLowerCase().includes(item.title.toLowerCase().trim())
-      ).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+      let itemSpent = 0;
+      if (items.length === 1) {
+        // If there's only 1 item in the category, all category expenses belong to it
+        itemSpent = categorySpent;
+      } else {
+        // Otherwise, match by flexible title bounds
+        itemSpent = expenses.filter(e => {
+          if (e.category !== cat) return false;
+          const eTitle = e.title.toLowerCase().trim();
+          const bTitle = item.title.toLowerCase().trim();
+          return eTitle.includes(bTitle) || bTitle.includes(eTitle);
+        }).reduce((s, e) => s + parseFloat(e.amount), 0);
+      }
 
       const subRemaining = limit - itemSpent;
       const subIsOver = subRemaining < 0;
