@@ -9,7 +9,6 @@ let expenses = [];
 let allExpenses = [];
 let budgetItems = [];
 let incomeEntries = [];
-let availableBalance = 0;
 let currentFilter = "";
 let userSettings = { month_start_day: 1, currency: "Rs" };
 
@@ -137,17 +136,11 @@ function initListeners() {
   // Import
   document.getElementById("importFile").addEventListener("change", handleImport);
 
-  // Balance modal
-  document.getElementById("editBalanceBtn").addEventListener("click", openBalanceModal);
-  document.getElementById("cancelBalance").addEventListener("click", closeBalanceModal);
-  document.getElementById("saveBalance").addEventListener("click", handleSaveBalance);
-
   // Edit modal close
   document.querySelectorAll(".close-modal").forEach((btn) => btn.addEventListener("click", closeEditModal));
 
   // Overlay clicks
   document.getElementById("settingsModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) document.getElementById("settingsModal").classList.remove("show"); });
-  document.getElementById("balanceModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeBalanceModal(); });
   document.getElementById("editModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditModal(); });
   const editBudgetModal = document.getElementById("editBudgetModal");
   if (editBudgetModal) editBudgetModal.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditBudgetModal(); });
@@ -157,7 +150,7 @@ function initListeners() {
 
   // Keyboard: Escape
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeBalanceModal(); closeEditModal(); closeExportModal(); closeEditBudgetModal(); document.getElementById("settingsModal").classList.remove("show"); }
+    if (e.key === "Escape") { closeEditModal(); closeExportModal(); closeEditBudgetModal(); document.getElementById("settingsModal").classList.remove("show"); }
   });
 }
 
@@ -204,7 +197,7 @@ function switchTab(tabName) {
 // ------ Load All Data ------
 async function loadAll() {
   const month = getMonthKey();
-  await Promise.all([loadExpenses(month), loadBudget(month), loadBalance(month), loadIncome(month)]);
+  await Promise.all([loadExpenses(month), loadBudget(month), loadIncome(month)]);
   updateBalanceBar();
   if (document.getElementById("panel-trends").classList.contains("active")) renderCharts();
 }
@@ -536,15 +529,6 @@ async function deleteIncome(id) {
 // =============================================
 // BALANCE
 // =============================================
-async function loadBalance(month) {
-  try {
-    const res = await fetch(`/api/balance?month=${month}`, { credentials: "include" });
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    availableBalance = data.balance || 0;
-  } catch { availableBalance = 0; }
-}
-
 function updateBalanceBar() {
   const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
@@ -554,36 +538,17 @@ function updateBalanceBar() {
   const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
   const budgetSpent = expenses.filter(e => budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
-  // Remaining Balance should not double subtract! It is simply Available + Income - Total Daily Spent.
-  const remaining = availableBalance + incomeTotal - dailySpent;
+  // Remaining Balance is simply Income - Total Daily Spent.
+  const remaining = incomeTotal - dailySpent;
 
   document.getElementById("balanceIncome").textContent = `${fmtCurr(incomeTotal)}`;
-  document.getElementById("balanceAvailable").textContent = `${fmtCurr(availableBalance)}`;
   document.getElementById("balanceBudgetTotal").textContent = `${fmtCurr(budgetTotal)}`;
-  document.getElementById("balanceBudgetSpent").textContent = `${fmtCurr(budgetSpent)}`;
+  if (document.getElementById("balanceBudgetSpent")) document.getElementById("balanceBudgetSpent").textContent = `${fmtCurr(budgetSpent)}`;
   document.getElementById("balanceDailySpent").textContent = `${fmtCurr(dailySpent)}`;
 
   const el = document.getElementById("balanceRemaining");
   el.textContent = `${fmtCurr(remaining)}`;
-  el.className = remaining < 0 ? "balance-value text-red" : remaining < (availableBalance + incomeTotal) * 0.2 ? "balance-value text-orange" : "balance-value text-accent";
-}
-
-// Balance Modal
-function openBalanceModal() {
-  document.getElementById("balanceInput").value = availableBalance || "";
-  document.getElementById("balanceModal").classList.add("show");
-  document.getElementById("balanceInput").focus();
-}
-function closeBalanceModal() { document.getElementById("balanceModal").classList.remove("show"); }
-
-async function handleSaveBalance() {
-  const val = parseFloat(document.getElementById("balanceInput").value);
-  if (isNaN(val) || val < 0) { toast("Enter a valid balance", "error"); return; }
-  try {
-    const res = await fetch("/api/balance", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ month: getMonthKey(), balance: val }) });
-    if (res.ok) { availableBalance = val; closeBalanceModal(); updateBalanceBar(); toast("Balance updated", "success"); }
-    else toast("Failed", "error");
-  } catch { toast("Network error", "error"); }
+  el.className = remaining < 0 ? "balance-value text-red" : remaining < incomeTotal * 0.2 ? "balance-value text-orange" : "balance-value text-accent";
 }
 
 // =============================================
@@ -733,7 +698,7 @@ function exportFullReport() {
   const budgetedCats = new Set(budgetItems.map(i => i.category || 'Other'));
   const budgetSpent = expenses.filter(e => budgetedCats.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const remaining = availableBalance + incomeTotal - dailySpent;
+  const remaining = incomeTotal - dailySpent;
 
   const catTotals = {};
   expenses.forEach((e) => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
@@ -743,7 +708,6 @@ function exportFullReport() {
   r += `Generated: ${new Date().toLocaleString()}\n${"=".repeat(50)}\n\n`;
   r += `BALANCE OVERVIEW\n${"-".repeat(30)}\n`;
   r += `Income:             ${fmtCurr(incomeTotal)}\n`;
-  r += `Available Balance:  ${fmtCurr(availableBalance)}\n`;
   r += `Budget Planned:     ${fmtCurr(budgetTotal)}\n`;
   r += `Budgeted Spent:     ${fmtCurr(budgetSpent)}\n`;
   r += `Total Daily Spent:  ${fmtCurr(dailySpent)}\n`;
@@ -882,7 +846,8 @@ function renderBudgetProgress() {
   let categories = [];
   let planned = [];
   let spentData = [];
-  let overallLimit = 0; let overallSpent = 0;
+  let overallLimit = 0;
+  let overallSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Group items by category to resolve DB duplicates
   const groupedBudgets = {};
@@ -894,7 +859,6 @@ function renderBudgetProgress() {
   Object.entries(groupedBudgets).forEach(([cat, limit]) => {
     const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
     overallLimit += limit;
-    overallSpent += spent;
     categories.push(`${getCatIcon(cat)} ${cat}`);
     planned.push(limit);
     spentData.push(spent);

@@ -38,13 +38,6 @@
         <label>Income</label>
         <span class="balance-value text-green" id="balanceIncome">Rs 0</span>
       </div>
-      <div class="balance-item" id="balanceAvailableWrap">
-        <label>Available Balance</label>
-        <div class="balance-editable">
-          <span class="balance-value" id="balanceAvailable">Rs 0</span>
-          <button class="btn-tiny" id="editBalanceBtn" title="Set balance">✎</button>
-        </div>
-      </div>
       <div class="balance-item">
         <label>Budget Planned</label>
         <span class="balance-value text-blue" id="balanceBudgetTotal">Rs 0</span>
@@ -60,19 +53,6 @@
       <div class="balance-item highlight">
         <label>Remaining</label>
         <span class="balance-value text-accent" id="balanceRemaining">Rs 0</span>
-      </div>
-    </div>
-
-    <!-- Set Balance Modal -->
-    <div class="modal-overlay" id="balanceModal">
-      <div class="modal-box">
-        <h3>Set Available Balance</h3>
-        <p class="modal-desc">Enter your total available money for this month.</p>
-        <input type="number" id="balanceInput" placeholder="e.g. 50000" min="0" step="1" />
-        <div class="modal-actions">
-          <button class="btn btn-ghost" id="cancelBalance">Cancel</button>
-          <button class="btn btn-primary" id="saveBalance">Save</button>
-        </div>
       </div>
     </div>
 
