@@ -414,15 +414,19 @@ function displayBudget() {
         </div>
       </div>`;
 
-    // Individual sub-items with proportional spending
+    // Individual sub-items with exact title matching
     items.forEach((item) => {
       const limit = parseFloat(item.amount);
       const shareOfCategory = categoryLimit > 0 ? (limit / categoryLimit) : 0;
-      const proportionalSpent = categorySpent * shareOfCategory;
-      const subRemaining = limit - proportionalSpent;
+      const itemSpent = expenses.filter(e =>
+        e.category === cat &&
+        e.title.toLowerCase().includes(item.title.toLowerCase().trim())
+      ).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+      const subRemaining = limit - itemSpent;
       const subIsOver = subRemaining < 0;
-      const subPct = limit > 0 ? Math.min((proportionalSpent / limit) * 100, 100) : 0;
-      const subPctUsed = limit > 0 ? ((proportionalSpent / limit) * 100).toFixed(0) : 0;
+      const subPct = limit > 0 ? Math.min((itemSpent / limit) * 100, 100) : 0;
+      const subPctUsed = limit > 0 ? ((itemSpent / limit) * 100).toFixed(0) : 0;
       const sharePct = (shareOfCategory * 100).toFixed(0);
 
       html += `
@@ -443,7 +447,7 @@ function displayBudget() {
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color:var(--text-muted); margin-bottom: 4px;">
           <span>Limit: ${fmtCurr(limit)}</span>
-          <span>Est. Spent: <span style="color:var(--orange)">${fmtCurr(proportionalSpent)}</span></span>
+          <span>Spent: <span style="color:var(--orange)">${fmtCurr(itemSpent)}</span></span>
           <span>${subIsOver ? 'Over:' : 'Left:'} <span class="${subIsOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(subRemaining))}</span></span>
         </div>
         <div class="progress-bar" style="height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;">
