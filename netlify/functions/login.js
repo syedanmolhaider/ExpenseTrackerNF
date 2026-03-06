@@ -24,6 +24,10 @@ exports.handler = async (event) => {
       return createResponse(400, { error: "Email and password are required" });
     }
 
+    if (email.length > 255 || password.length > 72) {
+      return createResponse(400, { error: "Invalid email or password" });
+    }
+
     // Find user by email
     const result = await query(
       "SELECT id, name, email, password_hash FROM users WHERE email = $1",

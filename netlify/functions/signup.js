@@ -32,9 +32,15 @@ exports.handler = async (event) => {
       });
     }
 
-    if (password.length < 6) {
+    if (password.length < 6 || password.length > 72) {
       return createResponse(400, {
-        error: "Password must be at least 6 characters",
+        error: "Password must be between 6 and 72 characters",
+      });
+    }
+
+    if (name.length > 100 || email.length > 255) {
+      return createResponse(400, {
+        error: "Name or email exceeds maximum length",
       });
     }
 

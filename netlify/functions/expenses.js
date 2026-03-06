@@ -48,6 +48,12 @@ exports.handler = async (event) => {
         });
       }
 
+      if (title.length > 255 || category.length > 100 || (notes && notes.length > 1000)) {
+        return createResponse(400, {
+          error: "Payload size limits exceeded (Title max 255, Category max 100, Notes max 1000)",
+        });
+      }
+
       const result = await query(
         `INSERT INTO expenses (user_id, title, amount, category, date, notes) 
          VALUES ($1, $2, $3, $4, $5, $6) 
@@ -63,7 +69,7 @@ exports.handler = async (event) => {
 
     // Handle PUT request - update expense
     if (event.httpMethod === "PUT") {
-      const pathParts = event.path.split("/");
+      const pathParts = event.path.replace(/\/$/, "").split("/");
       const expenseId = pathParts[pathParts.length - 1];
 
       if (!expenseId) {
@@ -82,6 +88,12 @@ exports.handler = async (event) => {
       if (isNaN(amount) || parseFloat(amount) <= 0) {
         return createResponse(400, {
           error: "Amount must be a positive number",
+        });
+      }
+
+      if (title.length > 255 || category.length > 100 || (notes && notes.length > 1000)) {
+        return createResponse(400, {
+          error: "Payload size limits exceeded (Title max 255, Category max 100, Notes max 1000)",
         });
       }
 
@@ -119,7 +131,7 @@ exports.handler = async (event) => {
 
     // Handle DELETE request - delete expense
     if (event.httpMethod === "DELETE") {
-      const pathParts = event.path.split("/");
+      const pathParts = event.path.replace(/\/$/, "").split("/");
       const expenseId = pathParts[pathParts.length - 1];
 
       if (!expenseId) {

@@ -1,17 +1,20 @@
 const jwt = require("jsonwebtoken");
 const cookie = require("cookie");
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "fallback-secret-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("CRITICAL FATAL: JWT_SECRET environment variable is missing in production!");
+}
+const SECRET = JWT_SECRET || "fallback-dev-secret-only";
 const COOKIE_NAME = "auth_token";
 
 function generateToken(userId) {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ userId }, SECRET, { expiresIn: "7d" });
 }
 
 function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, SECRET);
   } catch (error) {
     return null;
   }

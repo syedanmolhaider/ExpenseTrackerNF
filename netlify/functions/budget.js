@@ -15,7 +15,7 @@ exports.handler = async (event) => {
         }
 
         const userId = decoded.userId;
-        const pathParts = event.path.split("/");
+        const pathParts = event.path.replace(/\/$/, "").split("/");
         const params = event.queryStringParameters || {};
 
         // Determine if this is an item-specific request (has ID in path)
@@ -59,6 +59,10 @@ exports.handler = async (event) => {
 
             if (isNaN(amount) || parseFloat(amount) <= 0) {
                 return createResponse(400, { error: "Amount must be a positive number" });
+            }
+
+            if (title.length > 255 || category.length > 100) {
+                return createResponse(400, { error: "Payload limits exceeded (Title max 255, Category max 100)" });
             }
 
             const result = await query(
@@ -112,6 +116,10 @@ exports.handler = async (event) => {
 
             if (!title || !category || !amount) {
                 return createResponse(400, { error: "Title, category, and amount are required" });
+            }
+
+            if (title.length > 255 || category.length > 100) {
+                return createResponse(400, { error: "Payload limits exceeded (Title max 255, Category max 100)" });
             }
 
             const result = await query(

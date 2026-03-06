@@ -14,6 +14,16 @@ let currentFilter = "";
 let searchQuery = "";
 let userSettings = { month_start_day: 1, month_end_day: 0, currency: "Rs" };
 
+// ------ Global Interceptor ------
+const originalFetch = window.fetch;
+window.fetch = async function (...args) {
+  const response = await originalFetch.apply(this, args);
+  if (response.status === 401 && !args[0].includes('/api/me') && !args[0].includes('/api/login')) {
+    window.location.href = '/index.html';
+  }
+  return response;
+};
+
 // ------ Init ------
 document.addEventListener("DOMContentLoaded", async () => {
   await checkAuth();
