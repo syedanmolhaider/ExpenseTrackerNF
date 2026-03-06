@@ -1354,7 +1354,7 @@ function fmtCurr(n) {
   return `${userSettings.currency} ${numText}`;
 }
 
-function getCatIcon(c) { return ({ Food: "🍔", Transport: "🚗", Entertainment: "🎬", Shopping: "🛍️", Bills: "📄", Healthcare: "⚕️", Education: "📚", Loan: "🏦", Rent: "🏠", Other: "📦" })[c] || "📦"; }
+function getCatIcon(c) { return ({ Food: "🍔", Transport: "🚗", Entertainment: "🎬", Shopping: "🛍️", Bills: "📄", Healthcare: "⚕️", Education: "📚", Loan: "🏦", Rent: "🏠", Parents: "👨‍👩‍👧", Investment: "📈", Unexpected: "⚠️", Maintenance: "🛠️", Household: "🪑", "Personal Care": "🧴", Savings: "💰", "Dining Out": "🍽️", Other: "📦" })[c] || "📦"; }
 function toast(msg, type = "") { const el = document.getElementById("toast"); el.textContent = msg; el.className = "toast show " + type; clearTimeout(el._tid); el._tid = setTimeout(() => el.className = "toast", 2500); }
 
 // Globals for inline onclick
