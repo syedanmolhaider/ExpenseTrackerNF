@@ -104,8 +104,12 @@ function initListeners() {
 
   document.getElementById("logoutBtn").addEventListener("click", handleLogout);
   document.getElementById("addBudgetForm").addEventListener("submit", handleAddBudget);
+  const cloneBtn = document.getElementById("cloneBudgetBtn");
+  if (cloneBtn) cloneBtn.addEventListener("click", handleCloneBudget);
   document.getElementById("addExpenseForm").addEventListener("submit", handleAddExpense);
   document.getElementById("editExpenseForm").addEventListener("submit", handleEditExpense);
+  const editBudgetForm = document.getElementById("editBudgetForm");
+  if (editBudgetForm) editBudgetForm.addEventListener("submit", handleEditBudget);
   document.getElementById("addIncomeForm").addEventListener("submit", handleAddIncome);
 
   document.getElementById("filterCategory").addEventListener("change", (e) => {
@@ -145,13 +149,15 @@ function initListeners() {
   document.getElementById("settingsModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) document.getElementById("settingsModal").classList.remove("show"); });
   document.getElementById("balanceModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeBalanceModal(); });
   document.getElementById("editModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditModal(); });
+  const editBudgetModal = document.getElementById("editBudgetModal");
+  if (editBudgetModal) editBudgetModal.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditBudgetModal(); });
 
   // Reset All
   document.getElementById("resetAllBtn").addEventListener("click", handleResetAll);
 
   // Keyboard: Escape
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeBalanceModal(); closeEditModal(); closeExportModal(); document.getElementById("settingsModal").classList.remove("show"); }
+    if (e.key === "Escape") { closeBalanceModal(); closeEditModal(); closeExportModal(); closeEditBudgetModal(); document.getElementById("settingsModal").classList.remove("show"); }
   });
 }
 
@@ -318,24 +324,43 @@ async function loadBudget(month) {
 
 function displayBudget() {
   const list = document.getElementById("budgetList");
-  if (budgetItems.length === 0) { list.innerHTML = '<p class="empty-msg">No budget items yet. Add your first one above!</p>'; return; }
-  list.innerHTML = budgetItems.map((item) => `
-    <div class="budget-item ${item.is_done ? "done" : ""}">
-      <button class="budget-check ${item.is_done ? "checked" : ""}" onclick="toggleBudget('${item.id}')" aria-label="${item.is_done ? "Mark undone" : "Mark done"}" title="${item.is_done ? "Mark undone" : "Mark done"}">
-        ${item.is_done ? "✓" : ""}
-      </button>
-      <div class="budget-info"><div class="budget-title">${esc(item.title)}</div></div>
-      <div class="budget-amount">${fmtCurr(item.amount)}</div>
-      <div class="budget-actions"><button class="btn-sm delete" onclick="deleteBudget('${item.id}')">✕</button></div>
-    </div>`).join("");
+  if (budgetItems.length === 0) { list.innerHTML = '<p class="empty-msg">No budget limits defined for this cycle.</p>'; return; }
+  list.innerHTML = budgetItems.map((item) => {
+    const limit = parseFloat(item.amount);
+    const spent = expenses.filter(e => e.category === item.title).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const remaining = limit - spent;
+    const isOver = remaining < 0;
+    return `
+    <div class="budget-item ${isOver ? "over-budget" : ""}" style="display: flex; flex-direction: column; align-items: stretch; padding: 15px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div class="budget-title" style="font-weight: bold; font-size: 1.1rem;">${getCatIcon(item.title)} ${esc(item.title)}</div>
+        <div class="budget-actions">
+          <button class="btn-sm" onclick="openEditBudgetModal('${item.id}')">Edit</button>
+          <button class="btn-sm delete" onclick="deleteBudget('${item.id}')">✕</button>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px;">
+        <span>Limit: <strong>${fmtCurr(limit)}</strong></span>
+        <span>Spent: <span style="color:var(--orange)">${fmtCurr(spent)}</span></span>
+        <span>${isOver ? 'Overspent:' : 'Remaining:'} <strong class="${isOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(remaining))}</strong></span>
+      </div>
+      <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+        <div class="progress-bar-fill" style="height: 100%; width:${Math.min((spent / limit) * 100, 100)}%; background:${isOver ? 'var(--red)' : 'var(--accent)'}"></div>
+      </div>
+    </div>`;
+  }).join("");
 }
 
 function updateBudgetSummary() {
-  const total = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const done = budgetItems.filter((i) => i.is_done).reduce((s, i) => s + parseFloat(i.amount), 0);
-  document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(total)}`;
-  document.getElementById("budgetTotalDone").textContent = `${fmtCurr(done)}`;
-  document.getElementById("budgetTotalPending").textContent = `${fmtCurr(total - done)}`;
+  const totalLimit = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
+  const totalSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === i.title).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+  const remaining = totalLimit - totalSpent;
+  document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(totalLimit)}`;
+  if (document.getElementById("budgetTotalSpent")) document.getElementById("budgetTotalSpent").textContent = `${fmtCurr(totalSpent)}`;
+  if (document.getElementById("budgetTotalRemaining")) {
+    document.getElementById("budgetTotalRemaining").textContent = `${fmtCurr(remaining)}`;
+    document.getElementById("budgetTotalRemaining").className = remaining < 0 ? "summary-num text-red" : "summary-num text-green";
+  }
 }
 
 async function handleAddBudget(e) {
@@ -343,22 +368,77 @@ async function handleAddBudget(e) {
   const title = document.getElementById("budgetTitle").value.trim();
   const amount = document.getElementById("budgetAmount").value;
   if (!title || !amount) return;
+  // Duplicate check
+  if (budgetItems.some(i => i.title === title)) {
+    toast("Category budget already exists! Please edit it.", "error");
+    return;
+  }
   try {
     const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, amount: parseFloat(amount), month: getMonthKey() }) });
-    if (res.ok) { e.target.reset(); toast("Budget item added", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
+    if (res.ok) { e.target.reset(); toast("Budget limit added", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
     else { const d = await res.json(); toast(d.error || "Failed", "error"); }
   } catch { toast("Network error", "error"); }
 }
 
-async function toggleBudget(id) {
+async function handleCloneBudget() {
+  const lastMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+  const lastMonthKey = getMonthKey(lastMonth);
   try {
-    const res = await fetch(`/api/budget/${id}/toggle`, { method: "PUT", credentials: "include" });
-    if (res.ok) { await loadBudget(getMonthKey()); updateBalanceBar(); }
-  } catch { toast("Failed to toggle", "error"); }
+    const res = await fetch(`/api/budget?month=${lastMonthKey}`, { credentials: "include" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    const oldItems = data.items || [];
+    if (oldItems.length === 0) { toast("No budget items in previous cycle.", "error"); return; }
+
+    let cloned = 0;
+    for (const item of oldItems) {
+      if (!budgetItems.some(i => i.title === item.title)) {
+        await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title: item.title, amount: parseFloat(item.amount), month: getMonthKey() }) });
+        cloned++;
+      }
+    }
+    if (cloned > 0) {
+      toast(`${cloned} budget items cloned`, "success");
+      await loadBudget(getMonthKey());
+      updateBalanceBar();
+    } else {
+      toast("No new budget items to clone (already exist)", "error");
+    }
+  } catch { toast("Failed to clone budget", "error"); }
+}
+
+function openEditBudgetModal(id) {
+  const item = budgetItems.find((e) => e.id === id);
+  if (!item) return;
+  document.getElementById("editBudgetId").value = item.id;
+  document.getElementById("editBudgetTitle").value = item.title;
+  document.getElementById("editBudgetAmount").value = item.amount;
+  document.getElementById("editBudgetModal").classList.add("show");
+}
+
+function closeEditBudgetModal() {
+  const modal = document.getElementById("editBudgetModal");
+  if (modal) modal.classList.remove("show");
+}
+
+async function handleEditBudget(e) {
+  e.preventDefault();
+  const id = document.getElementById("editBudgetId").value;
+  const form = e.target;
+  const data = { title: form.title.value.trim(), amount: form.amount.value };
+  try {
+    const res = await fetch(`/api/budget/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
+    if (res.ok) { closeEditBudgetModal(); toast("Budget limit updated", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
+    else toast("Failed to update", "error");
+  } catch { toast("Network error", "error"); }
+}
+
+async function toggleBudget(id) {
+  // Legacy function no longer used in new strictly separated architecture
 }
 
 async function deleteBudget(id) {
-  if (!confirm("Delete this budget item?")) return;
+  if (!confirm("Delete this budget limit?")) return;
   try {
     const res = await fetch(`/api/budget/${id}`, { method: "DELETE", credentials: "include" });
     if (res.ok) { toast("Deleted", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
@@ -463,9 +543,13 @@ async function loadBalance(month) {
 function updateBalanceBar() {
   const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const budgetSpent = budgetItems.filter((i) => i.is_done).reduce((s, i) => s + parseFloat(i.amount), 0);
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const remaining = availableBalance + incomeTotal - budgetSpent - dailySpent;
+
+  // In strictly separated logic: Budget Planned serves as purely a limit. "Budget Spent" is only tracking subset of daily spent.
+  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === i.title).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+
+  // Remaining Balance should not double subtract! It is simply Available + Income - Total Daily Spent.
+  const remaining = availableBalance + incomeTotal - dailySpent;
 
   document.getElementById("balanceIncome").textContent = `${fmtCurr(incomeTotal)}`;
   document.getElementById("balanceAvailable").textContent = `${fmtCurr(availableBalance)}`;
@@ -606,7 +690,10 @@ function exportExpensesJSON() {
 
 function exportBudgetCSV() {
   if (budgetItems.length === 0) { toast("No budget items", "error"); return; }
-  const csv = ["Title,Amount,Status", ...budgetItems.map((i) => `"${i.title}","${i.amount}","${i.is_done ? "Done" : "Pending"}"`)].join("\n");
+  const csv = ["Category Limit,Planned Amount,Amount Spent,Variance", ...budgetItems.map((i) => {
+    const spent = expenses.filter(e => e.category === i.title).reduce((s, e) => s + parseFloat(e.amount), 0);
+    return `"${i.title}","${i.amount}","${spent}","${parseFloat(i.amount) - spent}"`;
+  })].join("\n");
   downloadFile(csv, `budget-${getMonthKey()}.csv`, "text/csv");
   toast("Budget CSV exported", "success");
 }
@@ -636,9 +723,9 @@ function exportTemplate() {
 function exportFullReport() {
   const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const budgetSpent = budgetItems.filter((i) => i.is_done).reduce((s, i) => s + parseFloat(i.amount), 0);
+  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === i.title).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const remaining = availableBalance + incomeTotal - budgetSpent - dailySpent;
+  const remaining = availableBalance + incomeTotal - dailySpent;
 
   const catTotals = {};
   expenses.forEach((e) => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
@@ -650,14 +737,17 @@ function exportFullReport() {
   r += `Income:             ${fmtCurr(incomeTotal)}\n`;
   r += `Available Balance:  ${fmtCurr(availableBalance)}\n`;
   r += `Budget Planned:     ${fmtCurr(budgetTotal)}\n`;
-  r += `Budget Spent:       ${fmtCurr(budgetSpent)}\n`;
-  r += `Daily Expenses:     ${fmtCurr(dailySpent)}\n`;
+  r += `Budgeted Spent:     ${fmtCurr(budgetSpent)}\n`;
+  r += `Total Daily Spent:  ${fmtCurr(dailySpent)}\n`;
   r += `Remaining:          ${fmtCurr(remaining)}\n\n`;
   r += `INCOME RECORDS (${incomeEntries.length} entries)\n${"-".repeat(30)}\n`;
   incomeEntries.forEach((e) => { r += `${e.date} | ${e.title} | ${e.source} | + ${fmtCurr(e.amount)}${e.notes ? " | " + e.notes : ""}\n`; });
   r += "\n";
   r += `BUDGET PLAN (${budgetItems.length} items)\n${"-".repeat(30)}\n`;
-  budgetItems.forEach((i) => { r += `[${i.is_done ? "✓" : " "}] ${i.title} — ${fmtCurr(i.amount)}\n`; });
+  budgetItems.forEach((i) => {
+    const spent = expenses.filter(e => e.category === i.title).reduce((s, e) => s + parseFloat(e.amount), 0);
+    r += `${i.title} Limit: ${fmtCurr(i.amount)} | Spent: ${fmtCurr(spent)} | Variance: ${fmtCurr(parseFloat(i.amount) - spent)}\n`;
+  });
   r += "\n";
   r += `CATEGORY BREAKDOWN\n${"-".repeat(30)}\n`;
   Object.entries(catTotals).sort((a, b) => b[1] - a[1]).forEach(([cat, amt]) => {
@@ -737,9 +827,25 @@ function renderDailyChart() {
 function renderBudgetProgress() {
   const el = document.getElementById("budgetProgress");
   if (budgetItems.length === 0) { el.innerHTML = '<p class="chart-empty">No budget items.</p>'; return; }
-  const totalDone = budgetItems.filter((i) => i.is_done).length; const totalItems = budgetItems.length; const overallPct = ((totalDone / totalItems) * 100).toFixed(0);
-  let html = `<div class="progress-item"><div class="progress-header"><span class="progress-name">Overall</span><span class="progress-status ${totalDone === totalItems ? "done" : "pending"}">${totalDone}/${totalItems} (${overallPct}%)</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${overallPct}%; background:${totalDone === totalItems ? "var(--green)" : "var(--accent)"}"></div></div></div>`;
-  budgetItems.forEach((item) => { html += `<div class="progress-item"><div class="progress-header"><span class="progress-name">${esc(item.title)}</span><span class="progress-status ${item.is_done ? "done" : "pending"}">${fmtCurr(item.amount)} — ${item.is_done ? "✓ Done" : "Pending"}</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${item.is_done ? 100 : 0}%; background:${item.is_done ? "var(--green)" : "var(--orange)"}"></div></div></div>`; });
+
+  let html = '';
+  let overallLimit = 0; let overallSpent = 0;
+
+  budgetItems.forEach((item) => {
+    const limit = parseFloat(item.amount);
+    const spent = expenses.filter(e => e.category === item.title).reduce((s, e) => s + parseFloat(e.amount), 0);
+    overallLimit += limit; overallSpent += spent;
+
+    const pct = Math.min((spent / limit) * 100, 100).toFixed(0);
+    const isOver = spent > limit;
+
+    html += `<div class="progress-item"><div class="progress-header"><span class="progress-name">${esc(item.title)}</span><span class="progress-status ${isOver ? "text-red" : "pending"}">${fmtCurr(spent)} / ${fmtCurr(limit)}</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%; background:${isOver ? "var(--red)" : "var(--accent)"}"></div></div></div>`;
+  });
+
+  const overallPct = overallLimit > 0 ? Math.min((overallSpent / overallLimit) * 100, 100).toFixed(0) : 0;
+  const overallIsOver = overallSpent > overallLimit;
+  html = `<div class="progress-item"><div class="progress-header"><span class="progress-name">Overall Budget Categories</span><span class="progress-status ${overallIsOver ? "text-red" : "pending"}">${fmtCurr(overallSpent)} / ${fmtCurr(overallLimit)} (${overallPct}%)</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${overallPct}%; background:${overallIsOver ? "var(--red)" : "var(--green)"}"></div></div></div>` + html;
+
   el.innerHTML = html;
 }
 
