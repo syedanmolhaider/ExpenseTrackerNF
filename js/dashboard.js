@@ -1167,10 +1167,10 @@ function renderCategoryChart() {
   const options = {
     series: data,
     theme: { mode: 'dark' },
-    chart: { type: 'donut', height: 320, background: 'transparent', foreColor: '#e2e8f0' },
+    chart: { type: 'pie', height: 320, background: 'transparent', foreColor: '#e2e8f0' },
     labels: labels.map(c => getCatIcon(c) + ' ' + c),
     colors: CHART_COLORS,
-    plotOptions: { pie: { donut: { size: '65%' } } },
+    plotOptions: { pie: { expandOnClick: true } },
     dataLabels: { enabled: true, formatter: function (val) { return val.toFixed(1) + "%" } },
     legend: { position: 'bottom' },
     stroke: { show: false },
@@ -1193,7 +1193,11 @@ function renderDailyChart() {
   const eYear = currentMonth.getFullYear();
   const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
   const eDate = startDay > 1 ? startDay - 1 : 0;
-  const endDate = new Date(eYear, eMonth, eDate);
+
+  const cycleEndDate = new Date(eYear, eMonth, eDate);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  const endDate = cycleEndDate > today ? today : cycleEndDate;
 
   const dayTotals = {};
   let curr = new Date(startDate);
@@ -1252,12 +1256,20 @@ function renderBudgetProgress() {
     groupedBudgets[cat] = (groupedBudgets[cat] || 0) + parseFloat(item.amount);
   });
 
+  let sortableBudgets = [];
   Object.entries(groupedBudgets).forEach(([cat, limit]) => {
     const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
     overallLimit += limit;
-    categories.push(`${getCatIcon(cat)} ${cat}`);
-    planned.push(limit);
-    spentData.push(spent);
+    sortableBudgets.push({ cat, limit, spent });
+  });
+
+  // Sort high to low by limit
+  sortableBudgets.sort((a, b) => b.limit - a.limit);
+
+  sortableBudgets.forEach(b => {
+    categories.push(`${getCatIcon(b.cat)} ${b.cat}`);
+    planned.push(b.limit);
+    spentData.push(b.spent);
   });
 
   categories.unshift('Overall Budget');
