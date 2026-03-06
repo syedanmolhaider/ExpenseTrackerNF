@@ -220,7 +220,6 @@ async function loadExpenses(month) {
     allExpenses = data.expenses || [];
     expenses = allExpenses.filter((exp) => getFinancialMonthKey(new Date(exp.date)) === month);
     displayExpenses();
-    updateDailySummary();
   } catch {
     document.getElementById("expensesList").innerHTML = '<p class="empty-msg" style="color:var(--red)">Failed to load expenses.</p>';
   }
@@ -229,6 +228,7 @@ async function loadExpenses(month) {
 function displayExpenses() {
   const list = document.getElementById("expensesList");
   let filtered = currentFilter ? expenses.filter((e) => e.category === currentFilter) : expenses;
+  updateDailySummary(filtered);
   if (filtered.length === 0) { list.innerHTML = '<p class="empty-msg">No expenses logged this month.</p>'; return; }
   filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
   list.innerHTML = filtered.map((exp) => `
@@ -251,13 +251,13 @@ function displayExpenses() {
     </div>`).join("");
 }
 
-function updateDailySummary() {
-  const total = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+function updateDailySummary(filteredData = expenses) {
+  const total = filteredData.reduce((s, e) => s + parseFloat(e.amount), 0);
   const today = new Date().toISOString().split("T")[0];
-  const todayTotal = expenses.filter((e) => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const todayTotal = filteredData.filter((e) => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
   document.getElementById("dailyTotalSpent").textContent = `${fmtCurr(total)}`;
   document.getElementById("dailyTodaySpent").textContent = `${fmtCurr(todayTotal)}`;
-  document.getElementById("dailyTotalEntries").textContent = expenses.length;
+  document.getElementById("dailyTotalEntries").textContent = filteredData.length;
 }
 
 async function handleAddExpense(e) {
@@ -354,7 +354,8 @@ function displayBudget() {
 
 function updateBudgetSummary() {
   const totalLimit = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const totalSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === (i.category || 'Other')).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+  const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
+  const totalSpent = expenses.filter(e => budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
   const remaining = totalLimit - totalSpent;
   document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(totalLimit)}`;
   if (document.getElementById("budgetTotalSpent")) document.getElementById("budgetTotalSpent").textContent = `${fmtCurr(totalSpent)}`;
@@ -549,8 +550,9 @@ function updateBalanceBar() {
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
-  // In strictly separated logic: Budget Planned serves as purely a limit. "Budget Spent" is only tracking subset of daily spent.
-  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === (i.category || 'Other')).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+  // Compute Budget Spent ensuring no double deductions across duplicates
+  const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
+  const budgetSpent = expenses.filter(e => budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
   // Remaining Balance should not double subtract! It is simply Available + Income - Total Daily Spent.
   const remaining = availableBalance + incomeTotal - dailySpent;
@@ -728,7 +730,8 @@ function exportTemplate() {
 function exportFullReport() {
   const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === (i.category || 'Other')).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+  const budgetedCats = new Set(budgetItems.map(i => i.category || 'Other'));
+  const budgetSpent = expenses.filter(e => budgetedCats.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const remaining = availableBalance + incomeTotal - dailySpent;
 
@@ -881,12 +884,18 @@ function renderBudgetProgress() {
   let spentData = [];
   let overallLimit = 0; let overallSpent = 0;
 
+  // Group items by category to resolve DB duplicates
+  const groupedBudgets = {};
   budgetItems.forEach((item) => {
     const cat = item.category || 'Other';
-    const limit = parseFloat(item.amount);
+    groupedBudgets[cat] = (groupedBudgets[cat] || 0) + parseFloat(item.amount);
+  });
+
+  Object.entries(groupedBudgets).forEach(([cat, limit]) => {
     const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
-    overallLimit += limit; overallSpent += spent;
-    categories.push(item.title);
+    overallLimit += limit;
+    overallSpent += spent;
+    categories.push(`${getCatIcon(cat)} ${cat}`);
     planned.push(limit);
     spentData.push(spent);
   });
