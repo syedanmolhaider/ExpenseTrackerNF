@@ -244,6 +244,10 @@ body {
 }
 
 /* Switch Form */
+.mt-10 {
+  margin-top: 10px;
+}
+
 .switch-form {
   text-align: center;
   margin-top: 20px;

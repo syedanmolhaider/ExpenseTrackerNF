@@ -26,6 +26,7 @@
       </div>
       <div class="topbar-right">
         <span class="user-badge" id="userName">User</span>
+        <button id="settingsBtn" class="btn-icon" title="Settings">⚙️</button>
         <button id="resetAllBtn" class="btn-icon" title="Reset All Data" style="color:var(--text-muted)">🗑</button>
         <button id="logoutBtn" class="btn-icon" title="Logout">⏻</button>
       </div>
@@ -71,6 +72,26 @@
         <div class="modal-actions">
           <button class="btn btn-ghost" id="cancelBalance">Cancel</button>
           <button class="btn btn-primary" id="saveBalance">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal">
+      <div class="modal-box">
+        <h3>App Settings</h3>
+        <p class="modal-desc">Configure your preferences.</p>
+        <div class="form-field">
+          <label for="settingStartDay">Financial Month Start Day (1-28)</label>
+          <input type="number" id="settingStartDay" min="1" max="28" value="1" />
+        </div>
+        <div class="form-field mt-10">
+          <label for="settingCurrency">Currency Symbol</label>
+          <input type="text" id="settingCurrency" value="Rs" />
+        </div>
+        <div class="modal-actions" style="margin-top:20px">
+          <button class="btn btn-ghost" id="cancelSettings">Cancel</button>
+          <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
         </div>
       </div>
     </div>
