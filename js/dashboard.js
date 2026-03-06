@@ -803,14 +803,15 @@ function renderCategoryChart() {
 
   const options = {
     series: data,
-    chart: { type: 'donut', height: 320, background: 'transparent' },
+    theme: { mode: 'dark' },
+    chart: { type: 'donut', height: 320, background: 'transparent', foreColor: '#e2e8f0' },
     labels: labels.map(c => getCatIcon(c) + ' ' + c),
     colors: CHART_COLORS,
     plotOptions: { pie: { donut: { size: '65%' } } },
     dataLabels: { enabled: true, formatter: function (val) { return val.toFixed(1) + "%" } },
     legend: { position: 'bottom' },
     stroke: { show: false },
-    tooltip: { theme: 'light', y: { formatter: function (val) { return fmtCurr(val) } } }
+    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val) } } }
   };
   apexInstances.cat = new ApexCharts(el, options);
   apexInstances.cat.render();
@@ -852,14 +853,15 @@ function renderDailyChart() {
 
   const options = {
     series: [{ name: 'Spent', data: data }],
-    chart: { type: 'area', height: 300, toolbar: { show: false }, background: 'transparent' },
+    theme: { mode: 'dark' },
+    chart: { type: 'area', height: 300, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
     colors: ['#0984e3'],
     fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.1, stops: [0, 90, 100] } },
     dataLabels: { enabled: false },
     stroke: { curve: 'smooth', width: 3 },
     xaxis: { categories: categories, tickAmount: Math.min(categories.length, 10) },
     yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
-    tooltip: { theme: 'light', y: { formatter: function (val) { return fmtCurr(val) } } }
+    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val) } } }
   };
 
   apexInstances.daily = new ApexCharts(el, options);
@@ -901,18 +903,19 @@ function renderBudgetProgress() {
       { name: 'Planned Limit', data: planned },
       { name: 'Actual Spent', data: spentData }
     ],
-    chart: { type: 'bar', height: Math.max(250, categories.length * 60), toolbar: { show: false }, background: 'transparent' },
+    theme: { mode: 'dark' },
+    chart: { type: 'bar', height: Math.max(250, categories.length * 60), toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
     plotOptions: { bar: { horizontal: true, dataLabels: { position: 'top' }, borderRadius: 4, barHeight: '70%' } },
     colors: ['#00b894', '#e74c3c'],
     dataLabels: {
       enabled: true, offsetX: 25,
-      style: { fontSize: '12px', colors: ['#333'] },
+      style: { fontSize: '12px', colors: ['#e2e8f0'] },
       formatter: function (val) { return val > 0 ? fmtCurr(val) : ''; }
     },
     stroke: { show: true, width: 2, colors: ['transparent'] },
     xaxis: { categories: categories, labels: { formatter: function (val) { return fmtCurr(val); } } },
     yaxis: { labels: { style: { fontWeight: 'bold' } } },
-    tooltip: { theme: 'light', shared: true, intersect: false, y: { formatter: function (val) { return fmtCurr(val); } } }
+    tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: function (val) { return fmtCurr(val); } } }
   };
 
   apexInstances.budget = new ApexCharts(el, options);
