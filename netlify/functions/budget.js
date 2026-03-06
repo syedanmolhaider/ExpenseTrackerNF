@@ -25,6 +25,12 @@ exports.handler = async (event) => {
         const isToggle = lastPart === "toggle";
         const itemId = isToggle ? secondLast : (lastPart !== "budget" ? lastPart : null);
 
+        // Auto migrate category column (fails silently if already exists)
+        try {
+            await query("ALTER TABLE budget_items ADD COLUMN category VARCHAR(100) DEFAULT 'Other'");
+            await query("UPDATE budget_items SET category = title WHERE category = 'Other' OR category IS NULL");
+        } catch (e) { }
+
         // Handle GET - fetch budget items for a month
         if (event.httpMethod === "GET") {
             const month = params.month;
@@ -33,7 +39,7 @@ exports.handler = async (event) => {
             }
 
             const result = await query(
-                `SELECT id, title, amount, is_done, created_at, updated_at 
+                `SELECT id, title, category, amount, is_done, created_at, updated_at 
          FROM budget_items 
          WHERE user_id = $1 AND month = $2 
          ORDER BY is_done ASC, created_at ASC`,
@@ -45,10 +51,10 @@ exports.handler = async (event) => {
 
         // Handle POST - create new budget item
         if (event.httpMethod === "POST") {
-            const { title, amount, month } = JSON.parse(event.body);
+            const { title, category, amount, month } = JSON.parse(event.body);
 
-            if (!title || !amount || !month) {
-                return createResponse(400, { error: "Title, amount, and month are required" });
+            if (!title || !category || !amount || !month) {
+                return createResponse(400, { error: "Title, category, amount, and month are required" });
             }
 
             if (isNaN(amount) || parseFloat(amount) <= 0) {
@@ -56,10 +62,10 @@ exports.handler = async (event) => {
             }
 
             const result = await query(
-                `INSERT INTO budget_items (user_id, title, amount, month) 
-         VALUES ($1, $2, $3, $4) 
-         RETURNING id, title, amount, is_done, created_at, updated_at`,
-                [userId, title, parseFloat(amount), month]
+                `INSERT INTO budget_items (user_id, title, category, amount, month) 
+         VALUES ($1, $2, $3, $4, $5) 
+         RETURNING id, title, category, amount, is_done, created_at, updated_at`,
+                [userId, title, category, parseFloat(amount), month]
             );
 
             return createResponse(201, {
@@ -102,18 +108,18 @@ exports.handler = async (event) => {
             }
 
             // Regular update
-            const { title, amount } = JSON.parse(event.body);
+            const { title, category, amount } = JSON.parse(event.body);
 
-            if (!title || !amount) {
-                return createResponse(400, { error: "Title and amount are required" });
+            if (!title || !category || !amount) {
+                return createResponse(400, { error: "Title, category, and amount are required" });
             }
 
             const result = await query(
                 `UPDATE budget_items 
-         SET title = $1, amount = $2, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $3 AND user_id = $4 
-         RETURNING id, title, amount, is_done, created_at, updated_at`,
-                [title, parseFloat(amount), itemId, userId]
+         SET title = $1, category = $2, amount = $3, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $4 AND user_id = $5 
+         RETURNING id, title, category, amount, is_done, created_at, updated_at`,
+                [title, category, parseFloat(amount), itemId, userId]
             );
 
             return createResponse(200, {

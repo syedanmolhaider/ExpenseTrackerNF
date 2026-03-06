@@ -327,13 +327,14 @@ function displayBudget() {
   if (budgetItems.length === 0) { list.innerHTML = '<p class="empty-msg">No budget limits defined for this cycle.</p>'; return; }
   list.innerHTML = budgetItems.map((item) => {
     const limit = parseFloat(item.amount);
-    const spent = expenses.filter(e => e.category === item.title).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const cat = item.category || 'Other';
+    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
     const remaining = limit - spent;
     const isOver = remaining < 0;
     return `
     <div class="budget-item ${isOver ? "over-budget" : ""}" style="display: flex; flex-direction: column; align-items: stretch; padding: 15px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div class="budget-title" style="font-weight: bold; font-size: 1.1rem;">${getCatIcon(item.title)} ${esc(item.title)}</div>
+        <div class="budget-title" style="font-weight: bold; font-size: 1.1rem;">${getCatIcon(cat)} ${esc(item.title)} <span style="font-weight:normal; font-size:0.9rem; color:var(--text-muted)">(${esc(cat)})</span></div>
         <div class="budget-actions">
           <button class="btn-sm" onclick="openEditBudgetModal('${item.id}')">Edit</button>
           <button class="btn-sm delete" onclick="deleteBudget('${item.id}')">✕</button>
@@ -353,7 +354,7 @@ function displayBudget() {
 
 function updateBudgetSummary() {
   const totalLimit = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const totalSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === i.title).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+  const totalSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === (i.category || 'Other')).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
   const remaining = totalLimit - totalSpent;
   document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(totalLimit)}`;
   if (document.getElementById("budgetTotalSpent")) document.getElementById("budgetTotalSpent").textContent = `${fmtCurr(totalSpent)}`;
@@ -366,15 +367,16 @@ function updateBudgetSummary() {
 async function handleAddBudget(e) {
   e.preventDefault();
   const title = document.getElementById("budgetTitle").value.trim();
+  const category = document.getElementById("budgetCategory").value;
   const amount = document.getElementById("budgetAmount").value;
-  if (!title || !amount) return;
+  if (!title || !category || !amount) return;
   // Duplicate check
-  if (budgetItems.some(i => i.title === title)) {
-    toast("Category budget already exists! Please edit it.", "error");
+  if (budgetItems.some(i => (i.category || 'Other') === category)) {
+    toast("A budget limit for this category already exists!", "error");
     return;
   }
   try {
-    const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, amount: parseFloat(amount), month: getMonthKey() }) });
+    const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, category, amount: parseFloat(amount), month: getMonthKey() }) });
     if (res.ok) { e.target.reset(); toast("Budget limit added", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
     else { const d = await res.json(); toast(d.error || "Failed", "error"); }
   } catch { toast("Network error", "error"); }
@@ -392,8 +394,9 @@ async function handleCloneBudget() {
 
     let cloned = 0;
     for (const item of oldItems) {
-      if (!budgetItems.some(i => i.title === item.title)) {
-        await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title: item.title, amount: parseFloat(item.amount), month: getMonthKey() }) });
+      const cat = item.category || 'Other';
+      if (!budgetItems.some(i => (i.category || 'Other') === cat)) {
+        await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title: item.title, category: cat, amount: parseFloat(item.amount), month: getMonthKey() }) });
         cloned++;
       }
     }
@@ -412,6 +415,7 @@ function openEditBudgetModal(id) {
   if (!item) return;
   document.getElementById("editBudgetId").value = item.id;
   document.getElementById("editBudgetTitle").value = item.title;
+  document.getElementById("editBudgetCategory").value = item.category || "Other";
   document.getElementById("editBudgetAmount").value = item.amount;
   document.getElementById("editBudgetModal").classList.add("show");
 }
@@ -425,7 +429,7 @@ async function handleEditBudget(e) {
   e.preventDefault();
   const id = document.getElementById("editBudgetId").value;
   const form = e.target;
-  const data = { title: form.title.value.trim(), amount: form.amount.value };
+  const data = { title: form.title.value.trim(), category: form.category.value, amount: form.amount.value };
   try {
     const res = await fetch(`/api/budget/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
     if (res.ok) { closeEditBudgetModal(); toast("Budget limit updated", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
@@ -546,7 +550,7 @@ function updateBalanceBar() {
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // In strictly separated logic: Budget Planned serves as purely a limit. "Budget Spent" is only tracking subset of daily spent.
-  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === i.title).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === (i.category || 'Other')).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
 
   // Remaining Balance should not double subtract! It is simply Available + Income - Total Daily Spent.
   const remaining = availableBalance + incomeTotal - dailySpent;
@@ -690,9 +694,10 @@ function exportExpensesJSON() {
 
 function exportBudgetCSV() {
   if (budgetItems.length === 0) { toast("No budget items", "error"); return; }
-  const csv = ["Category Limit,Planned Amount,Amount Spent,Variance", ...budgetItems.map((i) => {
-    const spent = expenses.filter(e => e.category === i.title).reduce((s, e) => s + parseFloat(e.amount), 0);
-    return `"${i.title}","${i.amount}","${spent}","${parseFloat(i.amount) - spent}"`;
+  const csv = ["Budget Name,Category Limit,Planned Amount,Amount Spent,Variance", ...budgetItems.map((i) => {
+    const cat = i.category || 'Other';
+    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
+    return `"${i.title}","${cat}","${i.amount}","${spent}","${parseFloat(i.amount) - spent}"`;
   })].join("\n");
   downloadFile(csv, `budget-${getMonthKey()}.csv`, "text/csv");
   toast("Budget CSV exported", "success");
@@ -723,7 +728,7 @@ function exportTemplate() {
 function exportFullReport() {
   const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === i.title).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
+  const budgetSpent = budgetItems.reduce((s, i) => s + expenses.filter(e => e.category === (i.category || 'Other')).reduce((sum, e) => sum + parseFloat(e.amount), 0), 0);
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const remaining = availableBalance + incomeTotal - dailySpent;
 
@@ -745,8 +750,9 @@ function exportFullReport() {
   r += "\n";
   r += `BUDGET PLAN (${budgetItems.length} items)\n${"-".repeat(30)}\n`;
   budgetItems.forEach((i) => {
-    const spent = expenses.filter(e => e.category === i.title).reduce((s, e) => s + parseFloat(e.amount), 0);
-    r += `${i.title} Limit: ${fmtCurr(i.amount)} | Spent: ${fmtCurr(spent)} | Variance: ${fmtCurr(parseFloat(i.amount) - spent)}\n`;
+    const cat = i.category || 'Other';
+    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
+    r += `${i.title} (${cat}) Limit: ${fmtCurr(i.amount)} | Spent: ${fmtCurr(spent)} | Variance: ${fmtCurr(parseFloat(i.amount) - spent)}\n`;
   });
   r += "\n";
   r += `CATEGORY BREAKDOWN\n${"-".repeat(30)}\n`;
@@ -832,14 +838,15 @@ function renderBudgetProgress() {
   let overallLimit = 0; let overallSpent = 0;
 
   budgetItems.forEach((item) => {
+    const cat = item.category || 'Other';
     const limit = parseFloat(item.amount);
-    const spent = expenses.filter(e => e.category === item.title).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
     overallLimit += limit; overallSpent += spent;
 
     const pct = Math.min((spent / limit) * 100, 100).toFixed(0);
     const isOver = spent > limit;
 
-    html += `<div class="progress-item"><div class="progress-header"><span class="progress-name">${esc(item.title)}</span><span class="progress-status ${isOver ? "text-red" : "pending"}">${fmtCurr(spent)} / ${fmtCurr(limit)}</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%; background:${isOver ? "var(--red)" : "var(--accent)"}"></div></div></div>`;
+    html += `<div class="progress-item"><div class="progress-header"><span class="progress-name">${esc(item.title)} <small>(${esc(cat)})</small></span><span class="progress-status ${isOver ? "text-red" : "pending"}">${fmtCurr(spent)} / ${fmtCurr(limit)}</span></div><div class="progress-bar"><div class="progress-bar-fill" style="width:${pct}%; background:${isOver ? "var(--red)" : "var(--accent)"}"></div></div></div>`;
   });
 
   const overallPct = overallLimit > 0 ? Math.min((overallSpent / overallLimit) * 100, 100).toFixed(0) : 0;

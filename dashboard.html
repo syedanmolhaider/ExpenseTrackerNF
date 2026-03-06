@@ -124,7 +124,8 @@
             <button class="btn btn-ghost btn-sm" id="cloneBudgetBtn">📋 Clone Previous Month</button>
           </div>
           <form id="addBudgetForm" class="inline-form">
-            <select id="budgetTitle" required>
+            <input type="text" id="budgetTitle" placeholder="Name (e.g. Groceries)" required style="flex:1;" />
+            <select id="budgetCategory" required>
               <option value="">Select Category</option>
               <option value="Food">🍔 Food</option>
               <option value="Transport">🚗 Transport</option>
@@ -137,7 +138,8 @@
               <option value="Rent">🏠 Rent</option>
               <option value="Other">📦 Other</option>
             </select>
-            <input type="number" id="budgetAmount" placeholder="Limit (Rs)" step="0.01" min="0.01" required />
+            <input type="number" id="budgetAmount" placeholder="Limit (Rs)" step="0.01" min="0.01" required
+              style="max-width:120px;" />
             <button type="submit" class="btn btn-primary">+ Add Limit</button>
           </form>
         </div>
@@ -414,8 +416,12 @@
       <form id="editBudgetForm" class="form-grid">
         <input type="hidden" id="editBudgetId" />
         <div class="form-field" style="grid-column: span 2;">
-          <label for="editBudgetTitle">Category</label>
-          <select id="editBudgetTitle" name="title" required>
+          <label for="editBudgetTitle">Name / Title</label>
+          <input type="text" id="editBudgetTitle" name="title" required />
+        </div>
+        <div class="form-field" style="grid-column: span 2;">
+          <label for="editBudgetCategory">Category Type</label>
+          <select id="editBudgetCategory" name="category" required>
             <option value="Food">🍔 Food</option>
             <option value="Transport">🚗 Transport</option>
             <option value="Entertainment">🎬 Entertainment</option>
