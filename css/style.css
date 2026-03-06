@@ -678,6 +678,65 @@ body {
   border-radius: var(--radius-sm);
 }
 
+/* Budget Category Group */
+.budget-category-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+
+.budget-category-group:hover {
+  border-color: var(--border-light);
+}
+
+.budget-category-group:last-child {
+  margin-bottom: 0;
+}
+
+.budget-cat-header {
+  padding: 14px 16px;
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border);
+}
+
+.budget-cat-header.over-budget {
+  background: var(--red-dim);
+  border-bottom-color: rgba(231, 76, 60, 0.2);
+}
+
+.budget-sub-item {
+  padding: 10px 16px 10px 24px;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+
+.budget-sub-item:last-child {
+  border-bottom: none;
+}
+
+.budget-sub-item:hover {
+  background: var(--bg-hover);
+}
+
+.budget-sub-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.budget-sub-pct {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
 .budget-check {
   width: 22px;
   height: 22px;

@@ -345,31 +345,70 @@ async function loadBudget(month) {
 function displayBudget() {
   const list = document.getElementById("budgetList");
   if (budgetItems.length === 0) { list.innerHTML = '<p class="empty-msg">No budget limits defined for this cycle.</p>'; return; }
-  list.innerHTML = budgetItems.map((item) => {
-    const limit = parseFloat(item.amount);
+
+  // Group items by category
+  const grouped = {};
+  budgetItems.forEach((item) => {
     const cat = item.category || 'Other';
-    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
-    const remaining = limit - spent;
-    const isOver = remaining < 0;
-    return `
-    <div class="budget-item ${isOver ? "over-budget" : ""}" style="display: flex; flex-direction: column; align-items: stretch; padding: 15px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div class="budget-title" style="font-weight: bold; font-size: 1.1rem;">${getCatIcon(cat)} ${esc(item.title)} <span style="font-weight:normal; font-size:0.9rem; color:var(--text-muted)">(${esc(cat)})</span></div>
-        <div class="budget-actions">
-          <button class="btn-sm" onclick="openEditBudgetModal('${item.id}')">Edit</button>
-          <button class="btn-sm delete" onclick="deleteBudget('${item.id}')">✕</button>
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  });
+
+  let html = '';
+  Object.entries(grouped).forEach(([cat, items]) => {
+    const categoryLimit = items.reduce((s, i) => s + parseFloat(i.amount), 0);
+    const categorySpent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const categoryRemaining = categoryLimit - categorySpent;
+    const isOver = categoryRemaining < 0;
+    const pct = categoryLimit > 0 ? Math.min((categorySpent / categoryLimit) * 100, 100) : 0;
+
+    html += `<div class="budget-category-group">`;
+    // Category header with totals
+    html += `
+      <div class="budget-cat-header ${isOver ? 'over-budget' : ''}">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-weight: 700; font-size: 1.05rem;">${getCatIcon(cat)} ${esc(cat)}</div>
+          <div style="font-size: 0.85rem;">
+            ${isOver ? '<span class="text-red" style="font-weight:700">⚠ Over Budget</span>' : '<span class="text-green" style="font-weight:600">✓ On Track</span>'}
+          </div>
         </div>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px;">
-        <span>Limit: <strong>${fmtCurr(limit)}</strong></span>
-        <span>Spent: <span style="color:var(--orange)">${fmtCurr(spent)}</span></span>
-        <span>${isOver ? 'Overspent:' : 'Remaining:'} <strong class="${isOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(remaining))}</strong></span>
-      </div>
-      <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
-        <div class="progress-bar-fill" style="height: 100%; width:${Math.min((spent / limit) * 100, 100)}%; background:${isOver ? 'var(--red)' : 'var(--accent)'}"></div>
-      </div>
-    </div>`;
-  }).join("");
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 6px; color:var(--text-secondary);">
+          <span>Limit: <strong style="color:var(--text-primary)">${fmtCurr(categoryLimit)}</strong></span>
+          <span>Spent: <span style="color:var(--orange); font-weight:600">${fmtCurr(categorySpent)}</span></span>
+          <span>${isOver ? 'Overspent:' : 'Left:'} <strong class="${isOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(categoryRemaining))}</strong></span>
+        </div>
+        <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+          <div class="progress-bar-fill" style="height: 100%; width:${pct}%; background:${isOver ? 'var(--red)' : 'var(--accent)'}; transition: width 0.3s ease;"></div>
+        </div>
+      </div>`;
+
+    // Individual sub-items
+    items.forEach((item) => {
+      const limit = parseFloat(item.amount);
+      const itemPct = categoryLimit > 0 ? ((limit / categoryLimit) * 100).toFixed(0) : 0;
+      html += `
+      <div class="budget-sub-item">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="budget-sub-dot"></span>
+            <span style="font-weight: 600; font-size: 0.9rem;">${esc(item.title)}</span>
+            <span class="budget-sub-pct">${itemPct}%</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700; font-size: 0.9rem;">${fmtCurr(limit)}</span>
+            <div class="budget-actions">
+              <button class="btn-sm" onclick="openEditBudgetModal('${item.id}')">Edit</button>
+              <button class="btn-sm delete" onclick="deleteBudget('${item.id}')">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  list.innerHTML = html;
 }
 
 function updateBudgetSummary() {
@@ -391,11 +430,7 @@ async function handleAddBudget(e) {
   const category = document.getElementById("budgetCategory").value;
   const amount = document.getElementById("budgetAmount").value;
   if (!title || !category || !amount) return;
-  // Duplicate check
-  if (budgetItems.some(i => (i.category || 'Other') === category)) {
-    toast("A budget limit for this category already exists!", "error");
-    return;
-  }
+  // No duplicate restriction — multiple items per category allowed (e.g. Milk + Lunch under Food)
   try {
     const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, category, amount: parseFloat(amount), month: getMonthKey() }) });
     if (res.ok) { e.target.reset(); toast("Budget limit added", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
@@ -416,7 +451,8 @@ async function handleCloneBudget() {
     let cloned = 0;
     for (const item of oldItems) {
       const cat = item.category || 'Other';
-      if (!budgetItems.some(i => (i.category || 'Other') === cat)) {
+      // Check by title+category to allow multiple items per category
+      if (!budgetItems.some(i => i.title === item.title && (i.category || 'Other') === cat)) {
         await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title: item.title, category: cat, amount: parseFloat(item.amount), month: getMonthKey() }) });
         cloned++;
       }
@@ -490,33 +526,68 @@ function displayNextBudget() {
     list.innerHTML = '<p class="empty-msg">No budget items planned for next month yet. Add items above or copy from current month!</p>';
     return;
   }
-  list.innerHTML = nextBudgetItems.map((item) => {
-    const limit = parseFloat(item.amount);
+
+  // Group by category
+  const grouped = {};
+  nextBudgetItems.forEach((item) => {
     const cat = item.category || 'Other';
-    // Compare with current month's same-category budget
-    const currentItem = budgetItems.find(b => (b.category || 'Other') === cat);
-    const currentLimit = currentItem ? parseFloat(currentItem.amount) : 0;
-    const diff = limit - currentLimit;
-    const diffLabel = currentItem ? (diff > 0 ? `▲ ${fmtCurr(diff)}` : diff < 0 ? `▼ ${fmtCurr(Math.abs(diff))}` : '= Same') : 'New';
-    const diffClass = currentItem ? (diff > 0 ? 'text-orange' : diff < 0 ? 'text-green' : 'text-blue') : 'text-accent';
-    return `
-    <div class="budget-item next-budget-item" style="display: flex; flex-direction: column; align-items: stretch; padding: 15px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <div class="budget-title" style="font-weight: bold; font-size: 1.1rem;">${getCatIcon(cat)} ${esc(item.title)} <span style="font-weight:normal; font-size:0.9rem; color:var(--text-muted)">(${esc(cat)})</span></div>
-        <div class="budget-actions">
-          <button class="btn-sm" onclick="openEditNextBudgetModal('${item.id}')">Edit</button>
-          <button class="btn-sm delete" onclick="deleteNextBudget('${item.id}')">✕</button>
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(item);
+  });
+
+  let html = '';
+  Object.entries(grouped).forEach(([cat, items]) => {
+    const categoryLimit = items.reduce((s, i) => s + parseFloat(i.amount), 0);
+    // Compare with current month's total for this category
+    const currentCatLimit = budgetItems.filter(b => (b.category || 'Other') === cat).reduce((s, i) => s + parseFloat(i.amount), 0);
+    const diff = categoryLimit - currentCatLimit;
+    const diffLabel = currentCatLimit > 0 ? (diff > 0 ? `▲ ${fmtCurr(diff)} more` : diff < 0 ? `▼ ${fmtCurr(Math.abs(diff))} less` : '= Same') : 'New Category';
+    const diffClass = currentCatLimit > 0 ? (diff > 0 ? 'text-orange' : diff < 0 ? 'text-green' : 'text-blue') : 'text-accent';
+
+    html += `<div class="budget-category-group next-budget-item">`;
+    // Category header
+    html += `
+      <div class="budget-cat-header">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-weight: 700; font-size: 1.05rem;">${getCatIcon(cat)} ${esc(cat)}</div>
+          <span class="${diffClass}" style="font-weight:600; font-size: 0.85rem;">${diffLabel}</span>
         </div>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 5px;">
-        <span>Planned Limit: <strong>${fmtCurr(limit)}</strong></span>
-        <span>vs Current: <span class="${diffClass}" style="font-weight:600">${diffLabel}</span></span>
-      </div>
-      <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
-        <div class="progress-bar-fill" style="height: 100%; width:100%; background:var(--accent)"></div>
-      </div>
-    </div>`;
-  }).join("");
+        <div style="display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 6px; color:var(--text-secondary);">
+          <span>Next Month Limit: <strong style="color:var(--text-primary)">${fmtCurr(categoryLimit)}</strong></span>
+          <span>Current Month: <span style="color:var(--text-muted); font-weight:500">${currentCatLimit > 0 ? fmtCurr(currentCatLimit) : '—'}</span></span>
+        </div>
+        <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
+          <div class="progress-bar-fill" style="height: 100%; width:100%; background:var(--accent)"></div>
+        </div>
+      </div>`;
+
+    // Sub-items
+    items.forEach((item) => {
+      const limit = parseFloat(item.amount);
+      const itemPct = categoryLimit > 0 ? ((limit / categoryLimit) * 100).toFixed(0) : 0;
+      html += `
+      <div class="budget-sub-item">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="budget-sub-dot"></span>
+            <span style="font-weight: 600; font-size: 0.9rem;">${esc(item.title)}</span>
+            <span class="budget-sub-pct">${itemPct}%</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-weight: 700; font-size: 0.9rem;">${fmtCurr(limit)}</span>
+            <div class="budget-actions">
+              <button class="btn-sm" onclick="openEditNextBudgetModal('${item.id}')">Edit</button>
+              <button class="btn-sm delete" onclick="deleteNextBudget('${item.id}')">✕</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  list.innerHTML = html;
 }
 
 function updateNextBudgetSummary() {
@@ -560,11 +631,7 @@ async function handleAddNextBudget(e) {
   const category = document.getElementById("nextBudgetCategory").value;
   const amount = document.getElementById("nextBudgetAmount").value;
   if (!title || !category || !amount) return;
-  // Duplicate check
-  if (nextBudgetItems.some(i => (i.category || 'Other') === category)) {
-    toast("A budget limit for this category already exists in next month!", "error");
-    return;
-  }
+  // No duplicate restriction — multiple items per category allowed
   try {
     const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, category, amount: parseFloat(amount), month: getNextMonthKey() }) });
     if (res.ok) { e.target.reset(); toast("Next month budget item added", "success"); await loadNextBudget(getNextMonthKey()); }
@@ -584,7 +651,7 @@ async function handleCopyCurrentBudget() {
   let skipped = 0;
   for (const item of budgetItems) {
     const cat = item.category || 'Other';
-    if (nextBudgetItems.some(i => (i.category || 'Other') === cat)) {
+    if (nextBudgetItems.some(i => i.title === item.title && (i.category || 'Other') === cat)) {
       skipped++;
       continue;
     }
