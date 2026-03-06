@@ -1194,6 +1194,168 @@ body {
 }
 
 /* ===============================================
+   KPI DASHBOARD
+   =============================================== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.kpi-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), #0984e3, #00b894);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.kpi-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(108, 92, 231, 0.12);
+}
+
+.kpi-card:hover::before {
+  opacity: 1;
+}
+
+.kpi-card:nth-child(1)::before {
+  background: linear-gradient(90deg, #6c5ce7, #a29bfe);
+}
+
+.kpi-card:nth-child(2)::before {
+  background: linear-gradient(90deg, #0984e3, #74b9ff);
+}
+
+.kpi-card:nth-child(3)::before {
+  background: linear-gradient(90deg, #f39c12, #fdcb6e);
+}
+
+.kpi-card:nth-child(4)::before {
+  background: linear-gradient(90deg, #00b894, #55efc4);
+}
+
+.kpi-card:nth-child(5)::before {
+  background: linear-gradient(90deg, #e74c3c, #ff7979);
+}
+
+.kpi-card:nth-child(6)::before {
+  background: linear-gradient(90deg, #6c5ce7, #fd79a8);
+}
+
+.kpi-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.kpi-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.kpi-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.kpi-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.kpi-sub.positive {
+  color: var(--green);
+}
+
+.kpi-sub.negative {
+  color: var(--red);
+}
+
+.kpi-sub.warning {
+  color: var(--orange);
+}
+
+.kpi-sub.info {
+  color: var(--accent-light);
+}
+
+/* 2-Column Chart Row */
+.chart-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 0;
+}
+
+.chart-row-2col .card {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .kpi-card {
+    padding: 14px 12px;
+    gap: 10px;
+  }
+
+  .kpi-icon {
+    font-size: 1.4rem;
+  }
+
+  .kpi-value {
+    font-size: 1.05rem;
+  }
+
+  .chart-row-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 400px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===============================================
    NEXT MONTH BUDGET PLAN
    =============================================== */
 .next-month-header-card {

@@ -1146,7 +1146,408 @@ function downloadFile(content, filename, type) {
 const CHART_COLORS = ["#6c5ce7", "#0984e3", "#00b894", "#f39c12", "#e74c3c", "#a29bfe", "#fd79a8", "#636e72"];
 let apexInstances = {};
 
-function renderCharts() { renderCategoryChart(); renderDailyChart(); renderBudgetProgress(); renderTopExpenses(); renderMonthComparison(); }
+function renderCharts() {
+  renderKPIs();
+  renderIncomeVsExpenseChart();
+  renderSavingsGauge();
+  renderSpendingVelocity();
+  renderWeeklyHeatmap();
+  renderCategoryChart();
+  renderDailyChart();
+  renderBudgetProgress();
+  renderTopExpenses();
+  renderMonthComparison();
+}
+
+// =============================================
+// KPIs
+// =============================================
+function renderKPIs() {
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
+
+  // Days calculation
+  const startDay = userSettings.month_start_day;
+  const now = new Date();
+  const cycleStartDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const eYear = currentMonth.getFullYear();
+  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
+  const eDate = startDay > 1 ? startDay - 1 : 0;
+  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
+
+  const daysElapsed = Math.max(1, Math.ceil((Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24)));
+  const totalDays = Math.max(1, Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)));
+  const daysLeft = Math.max(0, totalDays - daysElapsed);
+
+  // 1. Average Daily Spend
+  const avgDaily = totalSpent / daysElapsed;
+  const el1 = document.getElementById("kpiAvgDailyVal");
+  const sub1 = document.getElementById("kpiAvgDailySub");
+  if (el1) el1.textContent = fmtCurr(avgDaily);
+  if (sub1) {
+    if (incomeTotal > 0) {
+      const budgetedDaily = incomeTotal / totalDays;
+      const diff = ((avgDaily - budgetedDaily) / budgetedDaily * 100).toFixed(0);
+      if (avgDaily <= budgetedDaily) {
+        sub1.textContent = `✅ ${Math.abs(diff)}% under target`;
+        sub1.className = "kpi-sub positive";
+      } else {
+        sub1.textContent = `⚠️ ${diff}% over target`;
+        sub1.className = "kpi-sub negative";
+      }
+    } else {
+      sub1.textContent = `Over ${daysElapsed} days`;
+      sub1.className = "kpi-sub";
+    }
+  }
+
+  // 2. Days Left
+  const el2 = document.getElementById("kpiDaysLeftVal");
+  const sub2 = document.getElementById("kpiDaysLeftSub");
+  if (el2) el2.textContent = daysLeft;
+  if (sub2) {
+    const pctDone = ((daysElapsed / totalDays) * 100).toFixed(0);
+    sub2.textContent = `${pctDone}% of cycle complete`;
+    sub2.className = "kpi-sub info";
+  }
+
+  // 3. Projected Month Spend
+  const projectedSpend = avgDaily * totalDays;
+  const el3 = document.getElementById("kpiProjectedVal");
+  const sub3 = document.getElementById("kpiProjectedSub");
+  if (el3) el3.textContent = fmtCurr(projectedSpend);
+  if (sub3) {
+    if (budgetTotal > 0) {
+      const projPct = ((projectedSpend / budgetTotal) * 100).toFixed(0);
+      const overUnder = projectedSpend > budgetTotal ? "over budget" : "within budget";
+      sub3.textContent = `${projPct}% of budget — ${overUnder}`;
+      sub3.className = projectedSpend > budgetTotal ? "kpi-sub negative" : "kpi-sub positive";
+    } else if (incomeTotal > 0) {
+      const projPct = ((projectedSpend / incomeTotal) * 100).toFixed(0);
+      sub3.textContent = `${projPct}% of income`;
+      sub3.className = projectedSpend > incomeTotal ? "kpi-sub negative" : "kpi-sub positive";
+    } else {
+      sub3.textContent = `Based on ${daysElapsed} day avg`;
+      sub3.className = "kpi-sub";
+    }
+  }
+
+  // 4. Savings Rate
+  const savingsRate = incomeTotal > 0 ? ((incomeTotal - totalSpent) / incomeTotal * 100) : 0;
+  const el4 = document.getElementById("kpiSavingsRateVal");
+  const sub4 = document.getElementById("kpiSavingsRateSub");
+  if (el4) el4.textContent = `${savingsRate.toFixed(1)}%`;
+  if (sub4) {
+    if (incomeTotal === 0) {
+      sub4.textContent = "No income recorded";
+      sub4.className = "kpi-sub";
+    } else if (savingsRate >= 30) {
+      sub4.textContent = "🌟 Excellent savings!";
+      sub4.className = "kpi-sub positive";
+    } else if (savingsRate >= 15) {
+      sub4.textContent = "👍 Good savings rate";
+      sub4.className = "kpi-sub positive";
+    } else if (savingsRate >= 0) {
+      sub4.textContent = "⚠️ Low savings — review budget";
+      sub4.className = "kpi-sub warning";
+    } else {
+      sub4.textContent = `❌ Deficit: ${fmtCurr(Math.abs(incomeTotal - totalSpent))}`;
+      sub4.className = "kpi-sub negative";
+    }
+  }
+
+  // 5. Largest Category
+  const catTotals = {};
+  expenses.forEach(e => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
+  const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+  const el5 = document.getElementById("kpiTopCategoryVal");
+  const sub5 = document.getElementById("kpiTopCategorySub");
+  if (el5) el5.textContent = topCat ? `${getCatIcon(topCat[0])} ${topCat[0]}` : "—";
+  if (sub5) {
+    if (topCat) {
+      const pct = totalSpent > 0 ? ((topCat[1] / totalSpent) * 100).toFixed(0) : 0;
+      sub5.textContent = `${fmtCurr(topCat[1])} (${pct}% of total)`;
+      sub5.className = pct > 40 ? "kpi-sub warning" : "kpi-sub info";
+    } else {
+      sub5.textContent = "No expenses yet";
+      sub5.className = "kpi-sub";
+    }
+  }
+
+  // 6. Budget Utilization
+  const budgetUtilPct = budgetTotal > 0 ? ((totalSpent / budgetTotal) * 100) : 0;
+  const el6 = document.getElementById("kpiBudgetUtilVal");
+  const sub6 = document.getElementById("kpiBudgetUtilSub");
+  if (el6) el6.textContent = `${budgetUtilPct.toFixed(0)}%`;
+  if (sub6) {
+    if (budgetTotal === 0) {
+      sub6.textContent = "No budget set";
+      sub6.className = "kpi-sub";
+    } else if (budgetUtilPct > 100) {
+      sub6.textContent = `🚨 Over budget by ${fmtCurr(totalSpent - budgetTotal)}`;
+      sub6.className = "kpi-sub negative";
+    } else if (budgetUtilPct > 80) {
+      sub6.textContent = `⚠️ ${fmtCurr(budgetTotal - totalSpent)} remaining`;
+      sub6.className = "kpi-sub warning";
+    } else {
+      sub6.textContent = `✅ ${fmtCurr(budgetTotal - totalSpent)} remaining`;
+      sub6.className = "kpi-sub positive";
+    }
+  }
+}
+
+// =============================================
+// INCOME VS EXPENSES CHART
+// =============================================
+function renderIncomeVsExpenseChart() {
+  const el = document.getElementById("incomeVsExpenseChart");
+  if (!el) return;
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const savings = incomeTotal - totalSpent;
+
+  if (incomeTotal === 0 && totalSpent === 0) {
+    if (apexInstances.incVsExp) { apexInstances.incVsExp.destroy(); delete apexInstances.incVsExp; }
+    el.innerHTML = '<p class="chart-empty">No income or expense data.</p>';
+    return;
+  }
+
+  if (apexInstances.incVsExp) { apexInstances.incVsExp.destroy(); }
+  el.innerHTML = '';
+
+  const options = {
+    series: [
+      { name: 'Income', data: [incomeTotal] },
+      { name: 'Expenses', data: [totalSpent] },
+      { name: savings >= 0 ? 'Savings' : 'Deficit', data: [Math.abs(savings)] }
+    ],
+    theme: { mode: 'dark' },
+    chart: { type: 'bar', height: 200, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
+    plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 6, dataLabels: { position: 'top' } } },
+    colors: ['#00b894', '#e74c3c', savings >= 0 ? '#0984e3' : '#f39c12'],
+    dataLabels: {
+      enabled: true, offsetY: -20,
+      style: { fontSize: '13px', colors: ['#e2e8f0'], fontWeight: '700' },
+      formatter: function (val) { return fmtCurr(val); }
+    },
+    stroke: { show: true, width: 2, colors: ['transparent'] },
+    xaxis: { categories: ['This Month'], labels: { show: false } },
+    yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
+    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val); } } },
+    legend: { position: 'bottom' },
+    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+  };
+
+  apexInstances.incVsExp = new ApexCharts(el, options);
+  apexInstances.incVsExp.render();
+}
+
+// =============================================
+// SAVINGS RATE GAUGE
+// =============================================
+function renderSavingsGauge() {
+  const el = document.getElementById("savingsGaugeChart");
+  if (!el) return;
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const savingsRate = incomeTotal > 0 ? Math.max(0, ((incomeTotal - totalSpent) / incomeTotal * 100)) : 0;
+
+  if (incomeTotal === 0) {
+    if (apexInstances.savGauge) { apexInstances.savGauge.destroy(); delete apexInstances.savGauge; }
+    el.innerHTML = '<p class="chart-empty">No income data for gauge.</p>';
+    return;
+  }
+
+  if (apexInstances.savGauge) { apexInstances.savGauge.destroy(); }
+  el.innerHTML = '';
+
+  const gaugeColor = savingsRate >= 30 ? '#00b894' : savingsRate >= 15 ? '#f39c12' : '#e74c3c';
+
+  const options = {
+    series: [Math.min(savingsRate, 100)],
+    chart: { type: 'radialBar', height: 280, background: 'transparent' },
+    plotOptions: {
+      radialBar: {
+        startAngle: -135, endAngle: 135,
+        hollow: { size: '65%', background: 'transparent' },
+        track: { background: 'rgba(255,255,255,0.06)', strokeWidth: '100%' },
+        dataLabels: {
+          name: { fontSize: '14px', color: '#a0aec0', offsetY: 24 },
+          value: {
+            fontSize: '2.2rem', fontWeight: '800', color: '#e2e8f0', offsetY: -16,
+            formatter: function (val) { return val.toFixed(1) + '%'; }
+          }
+        }
+      }
+    },
+    fill: { type: 'gradient', gradient: { shade: 'dark', type: 'horizontal', shadeIntensity: 0.5, gradientToColors: [gaugeColor], stops: [0, 100] } },
+    colors: [gaugeColor],
+    stroke: { lineCap: 'round' },
+    labels: ['Savings Rate']
+  };
+
+  apexInstances.savGauge = new ApexCharts(el, options);
+  apexInstances.savGauge.render();
+}
+
+// =============================================
+// SPENDING VELOCITY (Cumulative Spending Over Time)
+// =============================================
+function renderSpendingVelocity() {
+  const el = document.getElementById("spendingVelocityChart");
+  if (!el) return;
+
+  if (expenses.length === 0) {
+    if (apexInstances.velocity) { apexInstances.velocity.destroy(); delete apexInstances.velocity; }
+    el.innerHTML = '<p class="chart-empty">No expense data.</p>';
+    return;
+  }
+
+  const startDay = userSettings.month_start_day;
+  const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const eYear = currentMonth.getFullYear();
+  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
+  const eDate = startDay > 1 ? startDay - 1 : 0;
+  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
+  const today = new Date(); today.setHours(23, 59, 59, 999);
+  const endDate = cycleEndDate > today ? today : cycleEndDate;
+
+  const totalDays = Math.ceil((cycleEndDate - startDate) / (1000 * 60 * 60 * 24));
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
+  const targetTotal = budgetTotal > 0 ? budgetTotal : (incomeTotal > 0 ? incomeTotal : 0);
+
+  const categories = [];
+  const cumulativeData = [];
+  const idealData = [];
+  let cumulative = 0;
+  let curr = new Date(startDate);
+
+  while (curr <= endDate) {
+    const dateStr = curr.toISOString().split('T')[0];
+    const dayLabel = `${curr.getDate()} ${curr.toLocaleString('en-US', { month: 'short' })}`;
+    categories.push(dayLabel);
+
+    const daySpend = expenses.filter(e => e.date === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
+    cumulative += daySpend;
+    cumulativeData.push(cumulative);
+
+    const dayIndex = Math.ceil((curr - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    idealData.push(targetTotal > 0 ? Math.round((targetTotal / totalDays) * dayIndex) : 0);
+
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  if (apexInstances.velocity) { apexInstances.velocity.destroy(); }
+  el.innerHTML = '';
+
+  const series = [{ name: 'Actual Cumulative', data: cumulativeData }];
+  if (targetTotal > 0) series.push({ name: 'Ideal Pace', data: idealData });
+
+  const options = {
+    series: series,
+    theme: { mode: 'dark' },
+    chart: { type: 'area', height: 280, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
+    colors: ['#6c5ce7', '#636e72'],
+    fill: {
+      type: ['gradient', 'solid'],
+      gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.05, stops: [0, 90, 100] },
+      opacity: [0.8, 0]
+    },
+    stroke: { curve: 'smooth', width: [3, 2], dashArray: [0, 5] },
+    dataLabels: { enabled: false },
+    xaxis: { categories: categories, tickAmount: Math.min(categories.length, 8) },
+    yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
+    tooltip: { theme: 'dark', shared: true, y: { formatter: function (val) { return fmtCurr(val); } } },
+    legend: { position: 'bottom' },
+    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+  };
+
+  apexInstances.velocity = new ApexCharts(el, options);
+  apexInstances.velocity.render();
+}
+
+// =============================================
+// WEEKLY HEATMAP
+// =============================================
+function renderWeeklyHeatmap() {
+  const el = document.getElementById("weeklyHeatmap");
+  if (!el) return;
+
+  if (expenses.length === 0) {
+    if (apexInstances.heatmap) { apexInstances.heatmap.destroy(); delete apexInstances.heatmap; }
+    el.innerHTML = '<p class="chart-empty">No expense data for heatmap.</p>';
+    return;
+  }
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const startDay = userSettings.month_start_day;
+  const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const eYear = currentMonth.getFullYear();
+  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
+  const eDate = startDay > 1 ? startDay - 1 : 0;
+  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
+  const today = new Date(); today.setHours(23, 59, 59, 999);
+  const endDate = cycleEndDate > today ? today : cycleEndDate;
+
+  // Build week data
+  const weeks = {};
+  let curr = new Date(startDate);
+  let weekNum = 1;
+
+  while (curr <= endDate) {
+    if (curr.getDay() === 0 && curr > startDate) weekNum++;
+    const wk = `Week ${weekNum}`;
+    if (!weeks[wk]) weeks[wk] = {};
+    const dayName = dayNames[curr.getDay()];
+    const dateStr = curr.toISOString().split('T')[0];
+    const daySpend = expenses.filter(e => e.date === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
+    weeks[wk][dayName] = (weeks[wk][dayName] || 0) + daySpend;
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  // Build series for heatmap
+  const series = dayNames.map(day => ({
+    name: day,
+    data: Object.keys(weeks).map(wk => ({ x: wk, y: weeks[wk][day] || 0 }))
+  })).reverse();
+
+  if (apexInstances.heatmap) { apexInstances.heatmap.destroy(); }
+  el.innerHTML = '';
+
+  const options = {
+    series: series,
+    theme: { mode: 'dark' },
+    chart: { type: 'heatmap', height: 260, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
+    dataLabels: { enabled: false },
+    colors: ['#6c5ce7'],
+    plotOptions: {
+      heatmap: {
+        shadeIntensity: 0.7, radius: 4,
+        colorScale: {
+          ranges: [
+            { from: 0, to: 0, color: 'rgba(255,255,255,0.03)', name: 'No Spend' },
+            { from: 1, to: 500, color: '#a29bfe', name: 'Low' },
+            { from: 501, to: 2000, color: '#6c5ce7', name: 'Medium' },
+            { from: 2001, to: 5000, color: '#0984e3', name: 'High' },
+            { from: 5001, to: 999999, color: '#e74c3c', name: 'Very High' }
+          ]
+        }
+      }
+    },
+    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val); } } },
+    xaxis: { type: 'category' },
+    stroke: { width: 2, colors: ['var(--bg-primary)'] }
+  };
+
+  apexInstances.heatmap = new ApexCharts(el, options);
+  apexInstances.heatmap.render();
+}
+
+// =============================================
+// EXISTING CHARTS (Category, Daily, Budget Progress, Top, Comparison)
+// =============================================
 
 function renderCategoryChart() {
   const el = document.getElementById("categoryChart");
@@ -1376,3 +1777,4 @@ window.deleteBudget = deleteBudget;
 window.deleteIncome = deleteIncome;
 window.openEditNextBudgetModal = openEditNextBudgetModal;
 window.deleteNextBudget = deleteNextBudget;
+

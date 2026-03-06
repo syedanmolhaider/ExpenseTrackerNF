@@ -426,6 +426,83 @@
 
       <!-- ========== TRENDS SECTION ========== -->
       <section class="tab-panel" id="panel-trends">
+
+        <!-- KPI Dashboard Row -->
+        <div class="kpi-grid" id="kpiGrid">
+          <div class="kpi-card" id="kpiAvgDaily">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-body">
+              <span class="kpi-label">Avg Daily Spend</span>
+              <span class="kpi-value" id="kpiAvgDailyVal">Rs 0</span>
+              <span class="kpi-sub" id="kpiAvgDailySub">—</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpiDaysLeft">
+            <div class="kpi-icon">⏳</div>
+            <div class="kpi-body">
+              <span class="kpi-label">Days Left in Cycle</span>
+              <span class="kpi-value" id="kpiDaysLeftVal">0</span>
+              <span class="kpi-sub" id="kpiDaysLeftSub">—</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpiProjected">
+            <div class="kpi-icon">🎯</div>
+            <div class="kpi-body">
+              <span class="kpi-label">Projected Month Spend</span>
+              <span class="kpi-value" id="kpiProjectedVal">Rs 0</span>
+              <span class="kpi-sub" id="kpiProjectedSub">—</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpiSavingsRate">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-body">
+              <span class="kpi-label">Savings Rate</span>
+              <span class="kpi-value" id="kpiSavingsRateVal">0%</span>
+              <span class="kpi-sub" id="kpiSavingsRateSub">—</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpiTopCategory">
+            <div class="kpi-icon">🏆</div>
+            <div class="kpi-body">
+              <span class="kpi-label">Largest Category</span>
+              <span class="kpi-value" id="kpiTopCategoryVal">—</span>
+              <span class="kpi-sub" id="kpiTopCategorySub">—</span>
+            </div>
+          </div>
+          <div class="kpi-card" id="kpiBudgetUtil">
+            <div class="kpi-icon">📋</div>
+            <div class="kpi-body">
+              <span class="kpi-label">Budget Utilization</span>
+              <span class="kpi-value" id="kpiBudgetUtilVal">0%</span>
+              <span class="kpi-sub" id="kpiBudgetUtilSub">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Income vs Expenses Chart -->
+        <div class="card">
+          <h2 class="card-title">💹 Income vs Expenses Flow</h2>
+          <div id="incomeVsExpenseChart" class="chart-area"></div>
+        </div>
+
+        <!-- Savings Rate Gauge + Spending Velocity side-by-side -->
+        <div class="chart-row-2col">
+          <div class="card">
+            <h2 class="card-title">🎯 Savings Rate Gauge</h2>
+            <div id="savingsGaugeChart" class="chart-area"></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title">⚡ Spending Velocity</h2>
+            <div id="spendingVelocityChart" class="chart-area"></div>
+          </div>
+        </div>
+
+        <!-- Weekly Spending Heatmap -->
+        <div class="card">
+          <h2 class="card-title">🗓️ Weekly Spending Heatmap</h2>
+          <div id="weeklyHeatmap" class="chart-area"></div>
+        </div>
+
         <!-- Category Breakdown -->
         <div class="card">
           <h2 class="card-title">📊 Spending by Category</h2>
