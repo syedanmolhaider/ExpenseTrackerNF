@@ -330,7 +330,7 @@ function openEditModal(id) {
   document.getElementById("editExpenseTitle").value = exp.title;
   document.getElementById("editExpenseAmount").value = exp.amount;
   document.getElementById("editExpenseCategory").value = exp.category;
-  document.getElementById("editExpenseDate").value = exp.date;
+  document.getElementById("editExpenseDate").value = exp.date ? exp.date.split("T")[0] : "";
   document.getElementById("editExpenseNotes").value = exp.notes || "";
   document.getElementById("editModal").classList.add("show");
 }
