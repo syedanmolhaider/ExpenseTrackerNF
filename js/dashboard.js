@@ -398,7 +398,8 @@ function displayBudget() {
   let html = '';
   Object.entries(grouped).forEach(([cat, items]) => {
     const categoryLimit = items.reduce((s, i) => s + parseFloat(i.amount), 0);
-    const categorySpent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const catExpenses = expenses.filter(e => e.category === cat);
+    const categorySpent = catExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
     const categoryRemaining = categoryLimit - categorySpent;
     const isOver = categoryRemaining < 0;
     const pct = categoryLimit > 0 ? Math.min((categorySpent / categoryLimit) * 100, 100) : 0;
@@ -424,24 +425,47 @@ function displayBudget() {
         </div>
       </div>`;
 
-    // Individual sub-items with flexible title matching
-    items.forEach((item) => {
+    // Allocate expenses to items to prevent double-counting
+    let itemSpends = items.map(() => 0);
+    let unallocatedSpent = 0;
+
+    if (items.length === 1) {
+      itemSpends[0] = categorySpent;
+    } else {
+      catExpenses.forEach((e) => {
+        const eTitle = e.title.toLowerCase().trim();
+        let matchedIdx = -1;
+
+        // Exact match first
+        for (let i = 0; i < items.length; i++) {
+          if (eTitle === items[i].title.toLowerCase().trim()) {
+            matchedIdx = i; break;
+          }
+        }
+
+        // Partial match fallback
+        if (matchedIdx === -1) {
+          for (let i = 0; i < items.length; i++) {
+            const bTitle = items[i].title.toLowerCase().trim();
+            if (eTitle.includes(bTitle) || bTitle.includes(eTitle)) {
+              matchedIdx = i; break;
+            }
+          }
+        }
+
+        if (matchedIdx !== -1) {
+          itemSpends[matchedIdx] += parseFloat(e.amount);
+        } else {
+          unallocatedSpent += parseFloat(e.amount);
+        }
+      });
+    }
+
+    // Individual sub-items
+    items.forEach((item, idx) => {
       const limit = parseFloat(item.amount);
       const shareOfCategory = categoryLimit > 0 ? (limit / categoryLimit) : 0;
-
-      let itemSpent = 0;
-      if (items.length === 1) {
-        // If there's only 1 item in the category, all category expenses belong to it
-        itemSpent = categorySpent;
-      } else {
-        // Otherwise, match by flexible title bounds
-        itemSpent = expenses.filter(e => {
-          if (e.category !== cat) return false;
-          const eTitle = e.title.toLowerCase().trim();
-          const bTitle = item.title.toLowerCase().trim();
-          return eTitle.includes(bTitle) || bTitle.includes(eTitle);
-        }).reduce((s, e) => s + parseFloat(e.amount), 0);
-      }
+      const itemSpent = itemSpends[idx];
 
       const subRemaining = limit - itemSpent;
       const subIsOver = subRemaining < 0;
@@ -475,6 +499,29 @@ function displayBudget() {
         </div>
       </div>`;
     });
+
+    if (unallocatedSpent > 0 && items.length > 1) {
+      html += `
+      <div class="budget-sub-item">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="budget-sub-dot over"></span>
+            <span style="font-weight: 600; font-size: 0.9rem;">Uncategorized / Other</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+             <span class="budget-pct-badge sm over">Unplanned</span>
+          </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color:var(--text-muted); margin-bottom: 4px;">
+          <span>Limit: ${fmtCurr(0)}</span>
+          <span>Spent: <span style="color:var(--orange)">${fmtCurr(unallocatedSpent)}</span></span>
+          <span>Over: <span class="text-red">${fmtCurr(unallocatedSpent)}</span></span>
+        </div>
+        <div class="progress-bar" style="height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;">
+          <div class="progress-bar-fill" style="height: 100%; width:100%; background:var(--red); transition: width 0.3s ease;"></div>
+        </div>
+      </div>`;
+    }
 
     html += `</div>`;
   });
