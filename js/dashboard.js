@@ -535,8 +535,8 @@ function exportBudgetCSV() {
 
 function exportIncomeCSV() {
   if (incomeEntries.length === 0) { toast("No income entries", "error"); return; }
-  const csv = ["Date,Title,Source,Amount,Notes", ...incomeEntries.map((e) => `"${e.date}","${e.title}","${e.source}","${e.amount}","${e.notes || "}"`)].join("\n");
-  downloadFile(csv, `income - ${ getMonthKey() }.csv`, "text/csv");
+  const csv = ["Date,Title,Source,Amount,Notes", ...incomeEntries.map((e) => `"${e.date}","${e.title}","${e.source}","${e.amount}","${e.notes || ""}"`)].join("\n");
+  downloadFile(csv, `income-${getMonthKey()}.csv`, "text/csv");
   toast("Income CSV exported", "success");
 }
 
@@ -566,31 +566,31 @@ function exportFullReport() {
   expenses.forEach((e) => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
 
   let r = `EXPENSE TRACKER — MONTHLY REPORT\n`;
-  r += `Month: ${ currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" }) } \n`;
-  r += `Generated: ${ new Date().toLocaleString() } \n${ "=".repeat(50) } \n\n`;
-  r += `BALANCE OVERVIEW\n${ "-".repeat(30) } \n`;
-  r += `Income:             Rs ${ fmtNum(incomeTotal) } \n`;
-  r += `Available Balance:  Rs ${ fmtNum(availableBalance) } \n`;
-  r += `Budget Planned:     Rs ${ fmtNum(budgetTotal) } \n`;
-  r += `Budget Spent:       Rs ${ fmtNum(budgetSpent) } \n`;
-  r += `Daily Expenses:     Rs ${ fmtNum(dailySpent) } \n`;
-  r += `Remaining:          Rs ${ fmtNum(remaining) } \n\n`;
-  r += `INCOME RECORDS(${ incomeEntries.length } entries) \n${ "-".repeat(30) } \n`;
-  incomeEntries.forEach((e) => { r += `${ e.date } | ${ e.title } | ${ e.source } | + Rs ${ fmtNum(e.amount) }${ e.notes ? " | " + e.notes : "" } \n`; });
+  r += `Month: ${currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })} \n`;
+  r += `Generated: ${new Date().toLocaleString()} \n${"=".repeat(50)} \n\n`;
+  r += `BALANCE OVERVIEW\n${"-".repeat(30)} \n`;
+  r += `Income:             Rs ${fmtNum(incomeTotal)} \n`;
+  r += `Available Balance:  Rs ${fmtNum(availableBalance)} \n`;
+  r += `Budget Planned:     Rs ${fmtNum(budgetTotal)} \n`;
+  r += `Budget Spent:       Rs ${fmtNum(budgetSpent)} \n`;
+  r += `Daily Expenses:     Rs ${fmtNum(dailySpent)} \n`;
+  r += `Remaining:          Rs ${fmtNum(remaining)} \n\n`;
+  r += `INCOME RECORDS(${incomeEntries.length} entries) \n${"-".repeat(30)} \n`;
+  incomeEntries.forEach((e) => { r += `${e.date} | ${e.title} | ${e.source} | + Rs ${fmtNum(e.amount)}${e.notes ? " | " + e.notes : ""} \n`; });
   r += "\n";
-  r += `BUDGET PLAN(${ budgetItems.length } items) \n${ "-".repeat(30) } \n`;
-  budgetItems.forEach((i) => { r += `[${ i.is_done ? "✓" : " " }] ${ i.title } — Rs ${ fmtNum(i.amount) } \n`; });
+  r += `BUDGET PLAN(${budgetItems.length} items) \n${"-".repeat(30)} \n`;
+  budgetItems.forEach((i) => { r += `[${i.is_done ? "✓" : " "}] ${i.title} — Rs ${fmtNum(i.amount)} \n`; });
   r += "\n";
-  r += `CATEGORY BREAKDOWN\n${ "-".repeat(30) } \n`;
+  r += `CATEGORY BREAKDOWN\n${"-".repeat(30)} \n`;
   Object.entries(catTotals).sort((a, b) => b[1] - a[1]).forEach(([cat, amt]) => {
-    r += `${ cat }: Rs ${ fmtNum(amt) } (${ dailySpent > 0 ? ((amt / dailySpent) * 100).toFixed(1) : 0 }%) \n`;
+    r += `${cat}: Rs ${fmtNum(amt)} (${dailySpent > 0 ? ((amt / dailySpent) * 100).toFixed(1) : 0}%) \n`;
   });
   r += "\n";
-  r += `ALL EXPENSES(${ expenses.length } entries) \n${ "-".repeat(30) } \n`;
+  r += `ALL EXPENSES(${expenses.length} entries) \n${"-".repeat(30)} \n`;
   expenses.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach((e) => {
-    r += `${ e.date } | ${ e.title } | ${ e.category } | Rs ${ fmtNum(e.amount) }${ e.notes ? " | " + e.notes : "" } \n`;
+    r += `${e.date} | ${e.title} | ${e.category} | Rs ${fmtNum(e.amount)}${e.notes ? " | " + e.notes : ""} \n`;
   });
-  downloadFile(r, `full - report - ${ getMonthKey() }.txt`, "text/plain");
+  downloadFile(r, `full - report - ${getMonthKey()}.txt`, "text/plain");
   toast("Full report exported", "success");
 }
 
@@ -627,7 +627,7 @@ function renderDailyChart() {
   const dayTotals = {}; for (let d = 1; d <= daysInMonth; d++) dayTotals[d] = 0;
   expenses.forEach((e) => { const day = new Date(e.date).getDate(); if (dayTotals[day] !== undefined) dayTotals[day] += parseFloat(e.amount); });
   const maxDay = Math.max(...Object.values(dayTotals), 1);
-  el.innerHTML = `< div class="day-bars" > ${ Object.entries(dayTotals).map(([day, amt]) => `<div class="day-bar-col"><div class="day-bar" style="height:${Math.max((amt / maxDay) * 100, 2)}%; background:${amt > 0 ? "#6c5ce7" : "var(--border)"}">${amt > 0 ? `<div class="day-bar-tooltip">Day ${day}: Rs ${fmtNum(amt)}</div>` : ""}</div><div class="day-bar-label">${day % 5 === 0 || day === 1 ? day : ""}</div></div>`).join("") }</div > `;
+  el.innerHTML = `< div class="day-bars" > ${Object.entries(dayTotals).map(([day, amt]) => `<div class="day-bar-col"><div class="day-bar" style="height:${Math.max((amt / maxDay) * 100, 2)}%; background:${amt > 0 ? "#6c5ce7" : "var(--border)"}">${amt > 0 ? `<div class="day-bar-tooltip">Day ${day}: Rs ${fmtNum(amt)}</div>` : ""}</div><div class="day-bar-label">${day % 5 === 0 || day === 1 ? day : ""}</div></div>`).join("")}</div > `;
 }
 
 function renderBudgetProgress() {
@@ -652,7 +652,7 @@ function renderMonthComparison() {
   const lastMonthKey = getMonthKey(lastMonth);
   const lastLabel = lastMonth.toLocaleDateString("en-US", { month: "short" });
   const thisLabel = currentMonth.toLocaleDateString("en-US", { month: "short" });
-  const lastExpenses = allExpenses.filter((e) => { const d = new Date(e.date); return `${ d.getFullYear() } -${ String(d.getMonth() + 1).padStart(2, "0") } ` === lastMonthKey; });
+  const lastExpenses = allExpenses.filter((e) => { const d = new Date(e.date); return `${d.getFullYear()} -${String(d.getMonth() + 1).padStart(2, "0")} ` === lastMonthKey; });
   const thisTotal = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const lastTotal = lastExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const thisCats = {}, lastCats = {};
@@ -664,7 +664,7 @@ function renderMonthComparison() {
     if (p === 0) return '<span class="compare-change up">New</span>';
     const d = ((c - p) / p) * 100;
     if (Math.abs(d) < 1) return '<span class="compare-change same">~0%</span>';
-    return d > 0 ? `< span class="compare-change up" >▲ ${ d.toFixed(0) }%</span > ` : ` < span class="compare-change down" >▼ ${ Math.abs(d).toFixed(0) }%</span > `;
+    return d > 0 ? `< span class="compare-change up" >▲ ${d.toFixed(0)}%</span > ` : ` < span class="compare-change down" >▼ ${Math.abs(d).toFixed(0)}%</span > `;
   }
   let html = `< div class="compare-row" style = "font-weight:700;border-bottom:2px solid var(--border)" ><div class="compare-label">Category</div><div class="compare-values"><span class="compare-old">${lastLabel}</span><span class="compare-new">${thisLabel}</span><span style="min-width:60px;text-align:center">Change</span></div></div > `;
   html += `< div class="compare-row" style = "background:var(--bg-hover);margin:0 -20px;padding:12px 20px;border-radius:var(--radius-sm)" ><div class="compare-label" style="font-weight:700">Total</div><div class="compare-values"><span class="compare-old">Rs ${fmtNum(lastTotal)}</span><span class="compare-new">Rs ${fmtNum(thisTotal)}</span>${tag(thisTotal, lastTotal)}</div></div > `;
