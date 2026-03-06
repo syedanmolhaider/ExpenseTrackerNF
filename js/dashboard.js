@@ -225,6 +225,12 @@ function switchTab(tabName) {
 async function loadAll() {
   const month = getMonthKey();
   await Promise.all([loadExpenses(month), loadBudget(month), loadIncome(month), loadNextBudget(getNextMonthKey())]);
+  // Re-render budget AFTER expenses are loaded (fixes race condition where
+  // loadBudget finishes before loadExpenses, causing spent to show as 0)
+  displayBudget();
+  updateBudgetSummary();
+  displayNextBudget();
+  updateNextBudgetSummary();
   updateBalanceBar();
   if (document.getElementById("panel-trends").classList.contains("active")) renderCharts();
 }
