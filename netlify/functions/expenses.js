@@ -1,11 +1,16 @@
 const { query } = require("./utils/db");
 const { getUserFromRequest, createResponse } = require("./utils/auth");
+const { rateLimitCheck } = require("./utils/rate-limit");
 
 exports.handler = async (event) => {
   // Handle CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return createResponse(200, { message: "OK" });
   }
+
+  // Rate limit: 60 requests per minute per IP
+  const limited = rateLimitCheck(event, { maxRequests: 60, windowMs: 60000, prefix: "expenses" });
+  if (limited) return limited;
 
   try {
     // Authenticate user
@@ -15,16 +20,31 @@ exports.handler = async (event) => {
     }
 
     const userId = decoded.userId;
+    const params = event.queryStringParameters || {};
 
-    // Handle GET request - fetch all expenses for user
+    // Handle GET request - fetch expenses for user (with optional date range filter)
     if (event.httpMethod === "GET") {
-      const result = await query(
-        `SELECT id, title, amount, category, date, notes, created_at, updated_at 
+      let sql = `SELECT id, title, amount, category, date, notes, created_at, updated_at 
          FROM expenses 
-         WHERE user_id = $1 
-         ORDER BY date DESC, created_at DESC`,
-        [userId]
-      );
+         WHERE user_id = $1`;
+      const values = [userId];
+      let paramIdx = 2;
+
+      // Optional date range filtering for server-side pagination
+      if (params.from) {
+        sql += ` AND date >= $${paramIdx}`;
+        values.push(params.from);
+        paramIdx++;
+      }
+      if (params.to) {
+        sql += ` AND date <= $${paramIdx}`;
+        values.push(params.to);
+        paramIdx++;
+      }
+
+      sql += ` ORDER BY date DESC, created_at DESC`;
+
+      const result = await query(sql, values);
 
       return createResponse(200, {
         expenses: result.rows,

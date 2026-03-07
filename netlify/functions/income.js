@@ -1,10 +1,15 @@
 const { query } = require("./utils/db");
 const { getUserFromRequest, createResponse } = require("./utils/auth");
+const { rateLimitCheck } = require("./utils/rate-limit");
 
 exports.handler = async (event) => {
     if (event.httpMethod === "OPTIONS") {
         return createResponse(200, { message: "OK" });
     }
+
+    // Rate limit: 60 requests per minute per IP
+    const limited = rateLimitCheck(event, { maxRequests: 60, windowMs: 60000, prefix: "income" });
+    if (limited) return limited;
 
     try {
         const decoded = getUserFromRequest(event);
@@ -18,11 +23,30 @@ exports.handler = async (event) => {
         const lastPart = pathParts[pathParts.length - 1];
         const incomeId = lastPart !== "income" ? lastPart : null;
 
-        // GET — fetch income entries for a month (or all if no month param)
+        // GET — fetch income entries (with optional date filtering)
         if (event.httpMethod === "GET") {
             const month = params.month;
             let result;
-            if (month) {
+            if (params.from || params.to) {
+                // Date range filtering for server-side pagination
+                let sql = `SELECT id, title, amount, source, date, notes, created_at 
+           FROM income 
+           WHERE user_id = $1`;
+                const values = [userId];
+                let paramIdx = 2;
+                if (params.from) {
+                    sql += ` AND date >= $${paramIdx}`;
+                    values.push(params.from);
+                    paramIdx++;
+                }
+                if (params.to) {
+                    sql += ` AND date <= $${paramIdx}`;
+                    values.push(params.to);
+                    paramIdx++;
+                }
+                sql += ` ORDER BY date DESC, created_at DESC`;
+                result = await query(sql, values);
+            } else if (month) {
                 result = await query(
                     `SELECT id, title, amount, source, date, notes, created_at 
            FROM income 

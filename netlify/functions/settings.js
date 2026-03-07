@@ -1,10 +1,15 @@
 const { query } = require("./utils/db");
 const { getUserFromRequest, createResponse } = require("./utils/auth");
+const { rateLimitCheck } = require("./utils/rate-limit");
 
 exports.handler = async (event) => {
     if (event.httpMethod === "OPTIONS") {
         return createResponse(200, { message: "OK" });
     }
+
+    // Rate limit: 30 requests per minute per IP
+    const limited = rateLimitCheck(event, { maxRequests: 30, windowMs: 60000, prefix: "settings" });
+    if (limited) return limited;
 
     try {
         const decoded = getUserFromRequest(event);

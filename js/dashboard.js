@@ -79,8 +79,42 @@ function getFinancialMonthKey(d) {
 }
 
 // Returns the financial month key for the CURRENTLY VIEWED cycle
+// M6 FIX: Now uses the same logic as getFinancialMonthKey for consistency
 function getMonthKey(d = currentMonth) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return getFinancialMonthKey(d);
+}
+
+// Returns actual date range { from, to } for a given target month key
+// Accounts for custom financial month start/end days
+function getDateRangeForMonth(targetMonthKey, extraMonthsBefore = 0) {
+  const startDay = userSettings.month_start_day;
+  const [year, month] = targetMonthKey.split('-').map(Number);
+
+  let fromDate, toDate;
+
+  if (startDay === 1) {
+    // Standard calendar month
+    const fromYear = month - extraMonthsBefore <= 0 ? year - 1 : year;
+    const fromMonth = ((month - 1 - extraMonthsBefore + 12) % 12) + 1;
+    fromDate = `${fromYear}-${String(fromMonth).padStart(2, '0')}-01`;
+    // End is last day of target month
+    const lastDay = new Date(year, month, 0).getDate();
+    toDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else {
+    // Custom financial month: cycle starts on startDay of previous calendar month
+    // For target YYYY-MM, the cycle runs from (month-1)/startDay to month/(startDay-1)
+    const prevMonth = month - 1 <= 0 ? 12 : month - 1;
+    const prevYear = month - 1 <= 0 ? year - 1 : year;
+    const endDay = userSettings.month_end_day > 0 ? userSettings.month_end_day : startDay - 1;
+
+    // Start from extra months before
+    const extraPrevMonth = ((prevMonth - 1 - extraMonthsBefore + 12) % 12) + 1;
+    const extraPrevYear = prevMonth - extraMonthsBefore <= 0 ? prevYear - 1 : prevYear;
+    fromDate = `${extraPrevYear}-${String(extraPrevMonth).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
+    toDate = `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+  }
+
+  return { from: fromDate, to: toDate };
 }
 
 function renderMonthLabel() {
@@ -250,6 +284,9 @@ function switchTab(tabName) {
 // ------ Load All Data ------
 async function loadAll() {
   const month = getMonthKey();
+  showLoading('expensesList');
+  showLoading('budgetList');
+  showLoading('incomeList');
   await Promise.all([loadExpenses(month), loadBudget(month), loadIncome(month), loadNextBudget(getNextMonthKey())]);
   // Re-render budget AFTER expenses are loaded (fixes race condition where
   // loadBudget finishes before loadExpenses, causing spent to show as 0)
@@ -266,7 +303,10 @@ async function loadAll() {
 // =============================================
 async function loadExpenses(month) {
   try {
-    const res = await fetch("/api/expenses", { credentials: "include" });
+    // H2 FIX: Use server-side date range filtering
+    // Fetch current month + previous month for comparison charts
+    const { from, to } = getDateRangeForMonth(month, 1); // 1 extra month for vs-last-month
+    const res = await fetch(`/api/expenses?from=${from}&to=${to}`, { credentials: "include" });
     if (!res.ok) throw new Error();
     const data = await res.json();
     allExpenses = data.expenses || [];
@@ -328,7 +368,7 @@ async function handleAddExpense(e) {
   if (!data.title || !data.amount || !data.category || !data.date) return;
   try {
     const res = await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { form.reset(); setDefaultDate(); toast("Expense logged", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); }
+    if (res.ok) { form.reset(); setDefaultDate(); toast("Expense logged", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
     else { const r = await res.json(); toast(r.error || "Failed", "error"); }
   } catch { toast("Network error", "error"); }
 }
@@ -353,7 +393,7 @@ async function handleEditExpense(e) {
   const data = { title: form.title.value.trim(), amount: form.amount.value, category: form.category.value, date: form.date.value, notes: form.notes.value.trim() };
   try {
     const res = await fetch(`/api/expenses/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { closeEditModal(); toast("Updated", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); }
+    if (res.ok) { closeEditModal(); toast("Updated", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
     else toast("Failed to update", "error");
   } catch { toast("Network error", "error"); }
 }
@@ -362,7 +402,7 @@ async function handleDelete(id) {
   if (!confirm("Delete this expense?")) return;
   try {
     const res = await fetch(`/api/expenses/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) { toast("Deleted", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); }
+    if (res.ok) { toast("Deleted", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
   } catch { toast("Failed", "error"); }
 }
 
@@ -844,8 +884,9 @@ async function deleteNextBudget(id) {
 // =============================================
 async function loadIncome(month) {
   try {
-    // API returns ALL income entries, we filter on frontend to reuse the financial month logic easily
-    const res = await fetch(`/api/income`, { credentials: "include" });
+    // H2 FIX: Use server-side date range filtering
+    const { from, to } = getDateRangeForMonth(month, 0);
+    const res = await fetch(`/api/income?from=${from}&to=${to}`, { credentials: "include" });
     if (!res.ok) throw new Error();
     const data = await res.json();
     const allIncome = data.entries || [];
@@ -910,7 +951,7 @@ async function handleAddIncome(e) {
   if (!data.title || !data.amount || !data.date) return;
   try {
     const res = await fetch("/api/income", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { form.reset(); setDefaultDate("incomeDate"); toast("Income added", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); }
+    if (res.ok) { form.reset(); setDefaultDate("incomeDate"); toast("Income added", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
     else { const r = await res.json(); toast(r.error || "Failed", "error"); }
   } catch { toast("Network error", "error"); }
 }
@@ -919,7 +960,7 @@ async function deleteIncome(id) {
   if (!confirm("Delete this income entry?")) return;
   try {
     const res = await fetch(`/api/income/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) { toast("Deleted", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); }
+    if (res.ok) { toast("Deleted", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
   } catch { toast("Failed", "error"); }
 }
 
@@ -1147,6 +1188,14 @@ function downloadFile(content, filename, type) {
 // =============================================
 const CHART_COLORS = ["#6c5ce7", "#0984e3", "#00b894", "#f39c12", "#e74c3c", "#a29bfe", "#fd79a8", "#636e72"];
 let apexInstances = {};
+
+// L8 FIX: Re-render charts automatically when Trends tab is active
+function renderChartsIfActive() {
+  const trendsPanel = document.getElementById("panel-trends");
+  if (trendsPanel && trendsPanel.classList.contains("active")) {
+    renderCharts();
+  }
+}
 
 function renderCharts() {
   renderKPIs();
@@ -1715,8 +1764,10 @@ function renderTopExpenses() {
 
 function renderMonthComparison() {
   const el = document.getElementById("monthComparison");
+  // M6 FIX: Use getFinancialMonthKey for correct previous financial month
   const lastMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
-  const lastMonthKey = getMonthKey(lastMonth);
+  const thisMonthKey = getMonthKey(currentMonth);
+  const lastMonthKey = getFinancialMonthKey(lastMonth);
   const startDay = userSettings.month_start_day;
 
   let lastLabel, thisLabel;
@@ -1805,7 +1856,7 @@ async function handleEditIncome(e) {
   const data = { title: form.title.value.trim(), amount: form.amount.value, source: form.source.value, date: form.date.value, notes: form.notes.value.trim() };
   try {
     const res = await fetch(`/api/income/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { closeEditIncomeModal(); toast("Income updated", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); }
+    if (res.ok) { closeEditIncomeModal(); toast("Income updated", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
     else toast("Failed to update", "error");
   } catch { toast("Network error", "error"); }
 }

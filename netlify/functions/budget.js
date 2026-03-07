@@ -1,11 +1,16 @@
 const { query } = require("./utils/db");
 const { getUserFromRequest, createResponse } = require("./utils/auth");
+const { rateLimitCheck } = require("./utils/rate-limit");
 
 exports.handler = async (event) => {
     // Handle CORS preflight
     if (event.httpMethod === "OPTIONS") {
         return createResponse(200, { message: "OK" });
     }
+
+    // Rate limit: 60 requests per minute per IP
+    const limited = rateLimitCheck(event, { maxRequests: 60, windowMs: 60000, prefix: "budget" });
+    if (limited) return limited;
 
     try {
         // Authenticate user

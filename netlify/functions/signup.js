@@ -6,12 +6,17 @@ const {
   createResponse,
   isValidEmail,
 } = require("./utils/auth");
+const { rateLimitCheck } = require("./utils/rate-limit");
 
 exports.handler = async (event) => {
   // Handle CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return createResponse(200, { message: "OK" });
   }
+
+  // Rate limit: 5 signup attempts per minute per IP
+  const limited = rateLimitCheck(event, { maxRequests: 5, windowMs: 60000, prefix: "signup" });
+  if (limited) return limited;
 
   if (event.httpMethod !== "POST") {
     return createResponse(405, { error: "Method not allowed" });
