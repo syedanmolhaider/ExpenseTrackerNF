@@ -578,6 +578,79 @@ function displayBudget() {
     html += `</div>`;
   });
 
+  // ===== UNPLANNED SPENDING SECTION =====
+  // Find expenses in categories that have NO budget items at all
+  const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
+  const unplannedExpenses = expenses.filter(e => !budgetedCategories.has(e.category));
+
+  if (unplannedExpenses.length > 0) {
+    // Group unplanned expenses by category
+    const unplannedGrouped = {};
+    unplannedExpenses.forEach(e => {
+      const cat = e.category || 'Other';
+      if (!unplannedGrouped[cat]) unplannedGrouped[cat] = [];
+      unplannedGrouped[cat].push(e);
+    });
+
+    const totalUnplanned = unplannedExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+
+    html += `
+    <div class="budget-category-group unplanned-section">
+      <div class="budget-cat-header over-budget" style="border-left: 3px solid var(--red); padding-left: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <div style="font-weight: 700; font-size: 1.1rem; color: var(--red);">⚠️ Unplanned Spending <span class="budget-cat-count">${unplannedExpenses.length} expense${unplannedExpenses.length > 1 ? 's' : ''} in ${Object.keys(unplannedGrouped).length} categor${Object.keys(unplannedGrouped).length > 1 ? 'ies' : 'y'}</span></div>
+          <span class="budget-pct-badge over">No Budget Set</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color:var(--text-secondary);">
+          <span>Limit: <strong style="color:var(--text-muted)">Not Set</strong></span>
+          <span>Total Spent: <span style="color:var(--red); font-weight:700">${fmtCurr(totalUnplanned)}</span></span>
+        </div>
+        <div style="font-size: 0.8rem; color:var(--text-muted); margin-bottom: 6px;">
+          These expenses don't have matching budget limits. Add budget items for these categories to track them properly.
+        </div>
+        <div class="progress-bar" style="height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;">
+          <div class="progress-bar-fill" style="height: 100%; width:100%; background:var(--red); transition: width 0.3s ease;"></div>
+        </div>
+      </div>`;
+
+    // Show each unplanned category with its expenses
+    Object.entries(unplannedGrouped).forEach(([cat, catExps]) => {
+      const catTotal = catExps.reduce((s, e) => s + parseFloat(e.amount), 0);
+      catExps.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      html += `
+      <div class="budget-sub-item" style="border-left: 2px solid var(--red); margin-left: 4px; padding-left: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="budget-sub-dot over"></span>
+            <span style="font-weight: 700; font-size: 0.95rem;">${getCatIcon(cat)} ${esc(cat)}</span>
+            <span class="budget-sub-pct">${catExps.length} expense${catExps.length > 1 ? 's' : ''}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-weight: 700; color: var(--red);">${fmtCurr(catTotal)}</span>
+            <span class="budget-pct-badge sm over">Unplanned</span>
+          </div>
+        </div>`;
+
+      // List each individual expense in this unplanned category
+      catExps.forEach(exp => {
+        html += `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0 4px 24px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid rgba(255,255,255,0.04);">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--red); font-size: 0.7rem;">●</span>
+            <span style="font-weight: 500;">${esc(exp.title)}</span>
+            <span style="color: var(--text-muted); font-size: 0.75rem;">${fmtDate(exp.date)}</span>
+          </div>
+          <span style="font-weight: 600; color: var(--orange);">${fmtCurr(exp.amount)}</span>
+        </div>`;
+      });
+
+      html += `</div>`;
+    });
+
+    html += `</div>`;
+  }
+
   list.innerHTML = html;
 }
 
@@ -585,12 +658,19 @@ function updateBudgetSummary() {
   const totalLimit = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
   const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
   const totalSpent = expenses.filter(e => budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  const unplannedSpent = expenses.filter(e => !budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
   const remaining = totalLimit - totalSpent;
   document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(totalLimit)}`;
   if (document.getElementById("budgetTotalSpent")) document.getElementById("budgetTotalSpent").textContent = `${fmtCurr(totalSpent)}`;
   if (document.getElementById("budgetTotalRemaining")) {
     document.getElementById("budgetTotalRemaining").textContent = `${fmtCurr(remaining)}`;
     document.getElementById("budgetTotalRemaining").className = remaining < 0 ? "summary-num text-red" : "summary-num text-green";
+  }
+  // Update unplanned spending display
+  const unplannedEl = document.getElementById("budgetUnplannedSpent");
+  if (unplannedEl) {
+    unplannedEl.textContent = `${fmtCurr(unplannedSpent)}`;
+    unplannedEl.className = unplannedSpent > 0 ? "summary-num text-red" : "summary-num text-green";
   }
 }
 
