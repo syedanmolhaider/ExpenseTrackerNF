@@ -1550,7 +1550,7 @@ function renderDailyRoomGauge() {
 
   if (budgetPerDay <= 0 && todaySpent === 0) {
     if (apexInstances.dailyRoomGauge) { apexInstances.dailyRoomGauge.destroy(); delete apexInstances.dailyRoomGauge; }
-    el.innerHTML = '<p class="chart-empty">No daily budget data available.</p>';
+    el.innerHTML = '<p class="chart-empty">📊 No daily budget data available.<br><small>Add income and budget items to see your daily spending room.</small></p>';
     return;
   }
 
@@ -1615,7 +1615,7 @@ function renderSpendingPace() {
 
   if (target === 0) {
     if (apexInstances.spendPace) { apexInstances.spendPace.destroy(); delete apexInstances.spendPace; }
-    el.innerHTML = '<p class="chart-empty">Set a budget or add income to see spending pace.</p>';
+    el.innerHTML = '<p class="chart-empty">📊 Set a budget or add income to see spending pace.<br><small>Go to Budget Plan or Income tab to get started.</small></p>';
     return;
   }
 
@@ -1682,7 +1682,7 @@ function renderCategoryDailyAllowance() {
 
   if (budgetItems.length === 0) {
     if (apexInstances.catDaily) { apexInstances.catDaily.destroy(); delete apexInstances.catDaily; }
-    el.innerHTML = '<p class="chart-empty">No budget items set. Add budget limits to see per-category daily allowances.</p>';
+    el.innerHTML = '<p class="chart-empty">📋 No budget items set.<br><small>Add budget limits in the Budget Plan tab to see per-category daily allowances.</small></p>';
     return;
   }
 
@@ -1724,7 +1724,7 @@ function renderCategoryDailyAllowance() {
     });
 
   if (categories.length === 0) {
-    el.innerHTML = '<p class="chart-empty">No budget categories to display.</p>';
+    el.innerHTML = '<p class="chart-empty">📋 No budget categories to display.</p>';
     return;
   }
 
@@ -1784,7 +1784,7 @@ function renderIncomeVsExpenseChart() {
 
   if (incomeTotal === 0 && totalSpent === 0) {
     if (apexInstances.incVsExp) { apexInstances.incVsExp.destroy(); delete apexInstances.incVsExp; }
-    el.innerHTML = '<p class="chart-empty">No income or expense data.</p>';
+    el.innerHTML = '<p class="chart-empty">💹 No income or expense data yet.<br><small>Add income and log expenses to see the flow chart.</small></p>';
     return;
   }
 
@@ -1830,7 +1830,7 @@ function renderSavingsGauge() {
 
   if (incomeTotal === 0) {
     if (apexInstances.savGauge) { apexInstances.savGauge.destroy(); delete apexInstances.savGauge; }
-    el.innerHTML = '<p class="chart-empty">No income data for gauge.</p>';
+    el.innerHTML = '<p class="chart-empty">🎯 No income data for savings gauge.<br><small>Add income entries to track your savings rate.</small></p>';
     return;
   }
 
@@ -1875,7 +1875,7 @@ function renderSpendingVelocity() {
 
   if (expenses.length === 0) {
     if (apexInstances.velocity) { apexInstances.velocity.destroy(); delete apexInstances.velocity; }
-    el.innerHTML = '<p class="chart-empty">No expense data.</p>';
+    el.innerHTML = '<p class="chart-empty">⚡ No expense data yet.<br><small>Log expenses in the Daily Tracker to see spending velocity.</small></p>';
     return;
   }
 
@@ -1952,7 +1952,7 @@ function renderWeeklyHeatmap() {
 
   if (expenses.length === 0) {
     if (apexInstances.heatmap) { apexInstances.heatmap.destroy(); delete apexInstances.heatmap; }
-    el.innerHTML = '<p class="chart-empty">No expense data for heatmap.</p>';
+    el.innerHTML = '<p class="chart-empty">🗓️ No expense data for heatmap.<br><small>Log expenses to see your weekly spending patterns.</small></p>';
     return;
   }
 
@@ -2039,7 +2039,7 @@ function renderCategoryChart() {
   const el = document.getElementById("categoryChart");
   if (expenses.length === 0) {
     if (apexInstances.cat) { apexInstances.cat.destroy(); delete apexInstances.cat; }
-    el.innerHTML = '<p class="chart-empty">No expense data.</p>';
+    el.innerHTML = '<p class="chart-empty">📊 No expense data yet.<br><small>Log expenses to see spending by category.</small></p>';
     return;
   }
   const catTotals = {}; expenses.forEach((e) => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
@@ -2071,7 +2071,7 @@ function renderDailyChart() {
   const el = document.getElementById("dailyChart");
   if (expenses.length === 0) {
     if (apexInstances.daily) { apexInstances.daily.destroy(); delete apexInstances.daily; }
-    el.innerHTML = '<p class="chart-empty">No expense data.</p>';
+    el.innerHTML = '<p class="chart-empty">📅 No expense data yet.<br><small>Log expenses to see daily spending trends.</small></p>';
     return;
   }
 
@@ -2126,7 +2126,7 @@ function renderBudgetProgress() {
   const el = document.getElementById("budgetProgress");
   if (budgetItems.length === 0) {
     if (apexInstances.budget) { apexInstances.budget.destroy(); delete apexInstances.budget; }
-    el.innerHTML = '<p class="chart-empty">No budget items.</p>';
+    el.innerHTML = '<p class="chart-empty">✅ No budget items set.<br><small>Add budget limits to track spending progress.</small></p>';
     return;
   }
 
@@ -2192,7 +2192,7 @@ function renderBudgetProgress() {
 
 function renderTopExpenses() {
   const el = document.getElementById("topExpenses");
-  if (expenses.length === 0) { el.innerHTML = '<p class="chart-empty">No expenses yet.</p>'; return; }
+  if (expenses.length === 0) { el.innerHTML = '<p class="chart-empty">🔥 No expenses yet.<br><small>Log expenses to see your top spending items.</small></p>'; return; }
   el.innerHTML = [...expenses].sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount)).slice(0, 5).map((e, i) => `
     <div class="top-item"><div class="top-rank">#${i + 1}</div><div class="top-info"><div class="top-title">${esc(e.title)}</div><div class="top-cat">${getCatIcon(e.category)} ${esc(e.category)} · ${fmtDate(e.date)}</div></div><div class="top-amount">${fmtCurr(e.amount)}</div></div>`).join("");
 }
@@ -2231,7 +2231,7 @@ function renderMonthComparison() {
   let html = `<div class="compare-row" style="font-weight:700;border-bottom:2px solid var(--border)"><div class="compare-label">Category</div><div class="compare-values"><span class="compare-old">${lastLabel}</span><span class="compare-new">${thisLabel}</span><span style="min-width:60px;text-align:center">Change</span></div></div>`;
   html += `<div class="compare-row" style="background:var(--bg-hover);margin:0 -20px;padding:12px 20px;border-radius:var(--radius-sm)"><div class="compare-label" style="font-weight:700">Total</div><div class="compare-values"><span class="compare-old">${fmtCurr(lastTotal)}</span><span class="compare-new">${fmtCurr(thisTotal)}</span>${tag(thisTotal, lastTotal)}</div></div>`;
   allCats.forEach((cat) => { const c = thisCats[cat] || 0, p = lastCats[cat] || 0; html += `<div class="compare-row"><div class="compare-label">${getCatIcon(cat)} ${cat}</div><div class="compare-values"><span class="compare-old">${fmtCurr(p)}</span><span class="compare-new">${fmtCurr(c)}</span>${tag(c, p)}</div></div>`; });
-  if (allCats.length === 0 && thisTotal === 0 && lastTotal === 0) html = '<p class="chart-empty">No data to compare.</p>';
+  if (allCats.length === 0 && thisTotal === 0 && lastTotal === 0) html = '<p class="chart-empty">📉 No data to compare.<br><small>Spend in at least two months to see comparison.</small></p>';
   el.innerHTML = html;
 }
 
