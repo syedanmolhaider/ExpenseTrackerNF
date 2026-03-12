@@ -1651,7 +1651,7 @@ function renderSpendingPace() {
     xaxis: { categories: ['Progress'], max: 100, labels: { formatter: function (val) { return val + '%'; } } },
     yaxis: { labels: { show: false } },
     tooltip: {
-      theme: 'dark', shared: true,
+      theme: 'dark', shared: false,
       y: { formatter: function (val) { return val.toFixed(1) + '%'; } }
     },
     legend: { position: 'bottom' },
@@ -1939,7 +1939,7 @@ function renderSpendingVelocity() {
     dataLabels: { enabled: false },
     xaxis: { categories: categories, tickAmount: Math.min(categories.length, 8) },
     yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
-    tooltip: { theme: 'dark', shared: true, y: { formatter: function (val) { return fmtCurr(val); } } },
+    tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: function (val) { return fmtCurr(val); } } },
     legend: { position: 'bottom' },
     grid: { borderColor: 'rgba(255,255,255,0.05)' }
   };
