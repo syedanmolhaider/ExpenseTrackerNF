@@ -1279,6 +1279,10 @@ function renderChartsIfActive() {
 
 function renderCharts() {
   renderKPIs();
+  renderDailySpendingRoom();
+  renderDailyRoomGauge();
+  renderSpendingPace();
+  renderCategoryDailyAllowance();
   renderIncomeVsExpenseChart();
   renderSavingsGauge();
   renderSpendingVelocity();
@@ -1426,6 +1430,346 @@ function renderKPIs() {
       sub6.className = "kpi-sub positive";
     }
   }
+}
+
+// =============================================
+// DAILY SPENDING ROOM (KPI summary cards)
+// =============================================
+function getCycleDates() {
+  const startDay = userSettings.month_start_day;
+  const cycleStartDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const eYear = currentMonth.getFullYear();
+  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
+  const eDate = startDay > 1 ? startDay - 1 : 0;
+  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
+  const now = new Date();
+  const daysElapsed = Math.max(1, Math.ceil((Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24)));
+  const totalDays = Math.max(1, Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)));
+  const daysLeft = Math.max(0, totalDays - daysElapsed);
+  return { cycleStartDate, cycleEndDate, daysElapsed, totalDays, daysLeft };
+}
+
+function renderDailySpendingRoom() {
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const availableBalance = incomeTotal - totalSpent;
+  const { daysLeft, totalDays, daysElapsed } = getCycleDates();
+
+  const budgetPerDay = daysLeft > 0 ? availableBalance / daysLeft : 0;
+  const today = new Date().toISOString().split('T')[0];
+  const todaySpent = expenses.filter(e => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+  // Available Balance
+  const elBal = document.getElementById('drAvailableBalance');
+  const subBal = document.getElementById('drAvailableSub');
+  if (elBal) {
+    elBal.textContent = fmtCurr(availableBalance);
+    elBal.className = `daily-room-kpi-value ${availableBalance < 0 ? 'text-red' : 'text-green'}`;
+  }
+  if (subBal) {
+    if (availableBalance < 0) {
+      subBal.textContent = `⚠ Deficit of ${fmtCurr(Math.abs(availableBalance))}`;
+      subBal.className = 'daily-room-kpi-sub negative';
+    } else {
+      const savPct = incomeTotal > 0 ? ((availableBalance / incomeTotal) * 100).toFixed(0) : 0;
+      subBal.textContent = `${savPct}% of income remaining`;
+      subBal.className = 'daily-room-kpi-sub positive';
+    }
+  }
+
+  // Days Remaining
+  const elDays = document.getElementById('drDaysRemaining');
+  const subDays = document.getElementById('drDaysRemainingSub');
+  if (elDays) elDays.textContent = daysLeft;
+  if (subDays) {
+    const pctDone = ((daysElapsed / totalDays) * 100).toFixed(0);
+    subDays.textContent = `${pctDone}% of ${totalDays}-day cycle done`;
+    subDays.className = 'daily-room-kpi-sub info';
+  }
+
+  // Budget Per Day
+  const elBpd = document.getElementById('drBudgetPerDay');
+  const subBpd = document.getElementById('drBudgetPerDaySub');
+  if (elBpd) {
+    elBpd.textContent = budgetPerDay > 0 ? fmtCurr(budgetPerDay) : (daysLeft === 0 ? 'Cycle ended' : fmtCurr(0));
+    elBpd.className = `daily-room-kpi-value ${budgetPerDay <= 0 ? 'text-red' : budgetPerDay < (incomeTotal / totalDays) * 0.5 ? 'text-orange' : 'text-accent'}`;
+  }
+  if (subBpd) {
+    if (daysLeft > 0 && incomeTotal > 0) {
+      const idealDaily = incomeTotal / totalDays;
+      const diff = ((budgetPerDay - idealDaily) / idealDaily * 100).toFixed(0);
+      subBpd.textContent = budgetPerDay >= idealDaily ? `✅ ${Math.abs(diff)}% above target pace` : `⚠ ${Math.abs(diff)}% below target pace`;
+      subBpd.className = budgetPerDay >= idealDaily ? 'daily-room-kpi-sub positive' : 'daily-room-kpi-sub negative';
+    } else {
+      subBpd.textContent = `${fmtCurr(availableBalance)} ÷ ${daysLeft} days`;
+      subBpd.className = 'daily-room-kpi-sub';
+    }
+  }
+
+  // Today's Spent
+  const elToday = document.getElementById('drTodaySpent');
+  const subToday = document.getElementById('drTodaySub');
+  if (elToday) {
+    elToday.textContent = fmtCurr(todaySpent);
+    elToday.className = `daily-room-kpi-value ${budgetPerDay > 0 && todaySpent > budgetPerDay ? 'text-red' : todaySpent > budgetPerDay * 0.8 ? 'text-orange' : 'text-green'}`;
+  }
+  if (subToday) {
+    if (budgetPerDay > 0) {
+      const todayRoom = budgetPerDay - todaySpent;
+      subToday.textContent = todayRoom >= 0 ? `${fmtCurr(todayRoom)} room left today` : `Over by ${fmtCurr(Math.abs(todayRoom))}`;
+      subToday.className = todayRoom >= 0 ? 'daily-room-kpi-sub positive' : 'daily-room-kpi-sub negative';
+    } else {
+      subToday.textContent = 'No daily budget';
+      subToday.className = 'daily-room-kpi-sub';
+    }
+  }
+
+  // Update subtitle
+  const subtitle = document.getElementById('dailyRoomSubtitle');
+  if (subtitle && daysLeft > 0 && budgetPerDay > 0) {
+    subtitle.textContent = `You can spend up to ${fmtCurr(budgetPerDay)} per day for the next ${daysLeft} days`;
+  } else if (subtitle && daysLeft === 0) {
+    subtitle.textContent = 'This cycle has ended';
+  }
+}
+
+// =============================================
+// DAILY ROOM GAUGE (Today's spending vs daily allowance)
+// =============================================
+function renderDailyRoomGauge() {
+  const el = document.getElementById('dailyRoomGaugeChart');
+  if (!el) return;
+
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const availableBalance = incomeTotal - totalSpent;
+  const { daysLeft } = getCycleDates();
+  const budgetPerDay = daysLeft > 0 ? availableBalance / daysLeft : 0;
+  const today = new Date().toISOString().split('T')[0];
+  const todaySpent = expenses.filter(e => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+  if (budgetPerDay <= 0 && todaySpent === 0) {
+    if (apexInstances.dailyRoomGauge) { apexInstances.dailyRoomGauge.destroy(); delete apexInstances.dailyRoomGauge; }
+    el.innerHTML = '<p class="chart-empty">No daily budget data available.</p>';
+    return;
+  }
+
+  const usedPct = budgetPerDay > 0 ? Math.min((todaySpent / budgetPerDay) * 100, 150) : (todaySpent > 0 ? 100 : 0);
+  const gaugeColor = usedPct <= 60 ? '#00b894' : usedPct <= 85 ? '#f39c12' : '#e74c3c';
+  const roomLeft = Math.max(0, budgetPerDay - todaySpent);
+
+  if (apexInstances.dailyRoomGauge) { apexInstances.dailyRoomGauge.destroy(); }
+  el.innerHTML = '';
+
+  const options = {
+    series: [Math.min(usedPct, 100)],
+    chart: { type: 'radialBar', height: 280, background: 'transparent' },
+    plotOptions: {
+      radialBar: {
+        startAngle: -135, endAngle: 135,
+        hollow: { size: '60%', background: 'transparent' },
+        track: { background: 'rgba(255,255,255,0.06)', strokeWidth: '100%' },
+        dataLabels: {
+          name: {
+            fontSize: '13px', color: '#a0aec0', offsetY: 30,
+            formatter: function () { return roomLeft > 0 ? `${fmtCurr(roomLeft)} left` : 'Over budget!'; }
+          },
+          value: {
+            fontSize: '2rem', fontWeight: '800', color: '#e2e8f0', offsetY: -12,
+            formatter: function (val) { return val.toFixed(0) + '% used'; }
+          }
+        }
+      }
+    },
+    fill: {
+      type: 'gradient',
+      gradient: {
+        shade: 'dark', type: 'horizontal', shadeIntensity: 0.5,
+        gradientToColors: [gaugeColor], stops: [0, 100]
+      }
+    },
+    colors: [gaugeColor],
+    stroke: { lineCap: 'round' },
+    labels: ['Daily Budget']
+  };
+
+  apexInstances.dailyRoomGauge = new ApexCharts(el, options);
+  apexInstances.dailyRoomGauge.render();
+}
+
+// =============================================
+// SPENDING PACE (Budget consumed % vs Time elapsed %)
+// =============================================
+function renderSpendingPace() {
+  const el = document.getElementById('spendingPaceChart');
+  if (!el) return;
+
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
+  const target = budgetTotal > 0 ? budgetTotal : (incomeTotal > 0 ? incomeTotal : 0);
+  const { daysElapsed, totalDays } = getCycleDates();
+
+  const timeElapsedPct = ((daysElapsed / totalDays) * 100).toFixed(1);
+  const budgetConsumedPct = target > 0 ? ((totalSpent / target) * 100).toFixed(1) : 0;
+
+  if (target === 0) {
+    if (apexInstances.spendPace) { apexInstances.spendPace.destroy(); delete apexInstances.spendPace; }
+    el.innerHTML = '<p class="chart-empty">Set a budget or add income to see spending pace.</p>';
+    return;
+  }
+
+  if (apexInstances.spendPace) { apexInstances.spendPace.destroy(); }
+  el.innerHTML = '';
+
+  const spendColor = parseFloat(budgetConsumedPct) > parseFloat(timeElapsedPct) ? '#e74c3c' : '#00b894';
+
+  const options = {
+    series: [
+      { name: 'Time Elapsed', data: [parseFloat(timeElapsedPct)] },
+      { name: 'Budget Used', data: [Math.min(parseFloat(budgetConsumedPct), 100)] }
+    ],
+    theme: { mode: 'dark' },
+    chart: { type: 'bar', height: 220, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
+    plotOptions: {
+      bar: { horizontal: true, columnWidth: '60%', borderRadius: 6, barHeight: '50%',
+        dataLabels: { position: 'center' }
+      }
+    },
+    colors: ['#636e72', spendColor],
+    dataLabels: {
+      enabled: true,
+      style: { fontSize: '14px', fontWeight: '700', colors: ['#e2e8f0'] },
+      formatter: function (val) { return val.toFixed(1) + '%'; }
+    },
+    stroke: { show: true, width: 2, colors: ['transparent'] },
+    xaxis: { categories: ['Progress'], max: 100, labels: { formatter: function (val) { return val + '%'; } } },
+    yaxis: { labels: { show: false } },
+    tooltip: {
+      theme: 'dark', shared: true,
+      y: { formatter: function (val) { return val.toFixed(1) + '%'; } }
+    },
+    legend: { position: 'bottom' },
+    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+  };
+
+  apexInstances.spendPace = new ApexCharts(el, options);
+  apexInstances.spendPace.render();
+
+  // Update subtitle
+  const subtitle = document.getElementById('spendingPaceSubtitle');
+  if (subtitle) {
+    const diff = parseFloat(budgetConsumedPct) - parseFloat(timeElapsedPct);
+    if (diff > 5) {
+      subtitle.textContent = `⚠ Spending ${Math.abs(diff).toFixed(0)}% ahead of pace — slow down!`;
+      subtitle.style.color = '#e74c3c';
+    } else if (diff < -5) {
+      subtitle.textContent = `✅ Spending ${Math.abs(diff).toFixed(0)}% behind pace — great job!`;
+      subtitle.style.color = '#00b894';
+    } else {
+      subtitle.textContent = `On track — budget usage matches cycle progress`;
+      subtitle.style.color = '#a29bfe';
+    }
+  }
+}
+
+// =============================================
+// PER-CATEGORY DAILY ALLOWANCE
+// =============================================
+function renderCategoryDailyAllowance() {
+  const el = document.getElementById('categoryDailyAllowanceChart');
+  if (!el) return;
+
+  if (budgetItems.length === 0) {
+    if (apexInstances.catDaily) { apexInstances.catDaily.destroy(); delete apexInstances.catDaily; }
+    el.innerHTML = '<p class="chart-empty">No budget items set. Add budget limits to see per-category daily allowances.</p>';
+    return;
+  }
+
+  const { daysLeft } = getCycleDates();
+
+  // Group budget by category
+  const catBudgets = {};
+  budgetItems.forEach(item => {
+    const cat = item.category || 'Other';
+    catBudgets[cat] = (catBudgets[cat] || 0) + parseFloat(item.amount);
+  });
+
+  // Calculate spent per category
+  const catSpent = {};
+  expenses.forEach(e => {
+    if (catBudgets[e.category] !== undefined) {
+      catSpent[e.category] = (catSpent[e.category] || 0) + parseFloat(e.amount);
+    }
+  });
+
+  // Build data
+  const categories = [];
+  const dailyAllowance = [];
+  const dailyUsed = [];
+  const icons = [];
+
+  Object.entries(catBudgets)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([cat, budget]) => {
+      const spent = catSpent[cat] || 0;
+      const remaining = budget - spent;
+      const perDay = daysLeft > 0 ? remaining / daysLeft : 0;
+      const today = new Date().toISOString().split('T')[0];
+      const todayCatSpent = expenses.filter(e => e.category === cat && e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+      categories.push(`${getCatIcon(cat)} ${cat}`);
+      dailyAllowance.push(Math.max(0, perDay));
+      dailyUsed.push(todayCatSpent);
+    });
+
+  if (categories.length === 0) {
+    el.innerHTML = '<p class="chart-empty">No budget categories to display.</p>';
+    return;
+  }
+
+  if (apexInstances.catDaily) { apexInstances.catDaily.destroy(); }
+  el.innerHTML = '';
+
+  const options = {
+    series: [
+      { name: 'Daily Allowance', data: dailyAllowance },
+      { name: "Today's Spent", data: dailyUsed }
+    ],
+    theme: { mode: 'dark' },
+    chart: {
+      type: 'bar', height: Math.max(220, categories.length * 55),
+      toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0'
+    },
+    plotOptions: {
+      bar: { horizontal: true, borderRadius: 5, barHeight: '65%',
+        dataLabels: { position: 'top' }
+      }
+    },
+    colors: ['#6c5ce7', '#f39c12'],
+    dataLabels: {
+      enabled: true, offsetX: 25,
+      style: { fontSize: '11px', fontWeight: '600', colors: ['#e2e8f0'] },
+      formatter: function (val) { return val > 0 ? fmtCurr(val) : ''; }
+    },
+    stroke: { show: true, width: 2, colors: ['transparent'] },
+    xaxis: {
+      categories: categories,
+      labels: { formatter: function (val) { return fmtCurr(val); } }
+    },
+    yaxis: {
+      labels: { style: { fontWeight: 'bold', fontSize: '12px' } }
+    },
+    tooltip: {
+      theme: 'dark', shared: true, intersect: false,
+      y: { formatter: function (val) { return fmtCurr(val); } }
+    },
+    legend: { position: 'bottom' },
+    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+  };
+
+  apexInstances.catDaily = new ApexCharts(el, options);
+  apexInstances.catDaily.render();
 }
 
 // =============================================
@@ -1647,6 +1991,16 @@ function renderWeeklyHeatmap() {
   if (apexInstances.heatmap) { apexInstances.heatmap.destroy(); }
   el.innerHTML = '';
 
+  // Compute dynamic ranges based on actual spending data
+  const allDaySpends = [];
+  Object.values(weeks).forEach(wk => {
+    Object.values(wk).forEach(val => { if (val > 0) allDaySpends.push(val); });
+  });
+  const maxSpend = allDaySpends.length > 0 ? Math.max(...allDaySpends) : 5000;
+  const q1 = Math.round(maxSpend * 0.2) || 100;
+  const q2 = Math.round(maxSpend * 0.5) || 500;
+  const q3 = Math.round(maxSpend * 0.8) || 2000;
+
   const options = {
     series: series,
     theme: { mode: 'dark' },
@@ -1655,21 +2009,22 @@ function renderWeeklyHeatmap() {
     colors: ['#6c5ce7'],
     plotOptions: {
       heatmap: {
-        shadeIntensity: 0.7, radius: 4,
+        radius: 4,
+        enableShades: false,
         colorScale: {
           ranges: [
-            { from: 0, to: 0, color: 'rgba(255,255,255,0.03)', name: 'No Spend' },
-            { from: 1, to: 500, color: '#a29bfe', name: 'Low' },
-            { from: 501, to: 2000, color: '#6c5ce7', name: 'Medium' },
-            { from: 2001, to: 5000, color: '#0984e3', name: 'High' },
-            { from: 5001, to: 999999, color: '#e74c3c', name: 'Very High' }
+            { from: -1, to: 0, color: '#1e2130', name: 'No Spend', foreColor: '#5a5f72' },
+            { from: 1, to: q1, color: '#a29bfe', name: 'Low' },
+            { from: q1 + 1, to: q2, color: '#6c5ce7', name: 'Medium' },
+            { from: q2 + 1, to: q3, color: '#0984e3', name: 'High' },
+            { from: q3 + 1, to: 9999999, color: '#e74c3c', name: 'Very High' }
           ]
         }
       }
     },
     tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val); } } },
     xaxis: { type: 'category' },
-    stroke: { width: 2, colors: ['var(--bg-primary)'] }
+    stroke: { width: 2, colors: ['#0f1117'] }
   };
 
   apexInstances.heatmap = new ApexCharts(el, options);

@@ -483,6 +483,70 @@
           </div>
         </div>
 
+        <!-- ===== DAILY SPENDING ROOM SECTION ===== -->
+        <div class="card daily-room-card">
+          <h2 class="card-title">🎯 Daily Spending Room</h2>
+          <p class="card-subtitle" id="dailyRoomSubtitle">How much you can spend per day for the rest of this cycle</p>
+          <div class="daily-room-grid">
+            <!-- Available Balance -->
+            <div class="daily-room-kpi">
+              <div class="daily-room-kpi-icon" style="background: rgba(0, 184, 148, 0.12); color: #00b894;">💰</div>
+              <div class="daily-room-kpi-body">
+                <span class="daily-room-kpi-label">Available Balance</span>
+                <span class="daily-room-kpi-value" id="drAvailableBalance">Rs 0</span>
+                <span class="daily-room-kpi-sub" id="drAvailableSub">Income - Total Spent</span>
+              </div>
+            </div>
+            <!-- Days Remaining -->
+            <div class="daily-room-kpi">
+              <div class="daily-room-kpi-icon" style="background: rgba(9, 132, 227, 0.12); color: #0984e3;">📅</div>
+              <div class="daily-room-kpi-body">
+                <span class="daily-room-kpi-label">Days Remaining</span>
+                <span class="daily-room-kpi-value" id="drDaysRemaining">0</span>
+                <span class="daily-room-kpi-sub" id="drDaysRemainingSub">in this cycle</span>
+              </div>
+            </div>
+            <!-- Budget Per Day -->
+            <div class="daily-room-kpi highlight-kpi">
+              <div class="daily-room-kpi-icon" style="background: rgba(108, 92, 231, 0.15); color: #a29bfe;">🔥</div>
+              <div class="daily-room-kpi-body">
+                <span class="daily-room-kpi-label">Budget Per Day</span>
+                <span class="daily-room-kpi-value" id="drBudgetPerDay">Rs 0</span>
+                <span class="daily-room-kpi-sub" id="drBudgetPerDaySub">remaining balance ÷ days left</span>
+              </div>
+            </div>
+            <!-- Today's Spent -->
+            <div class="daily-room-kpi">
+              <div class="daily-room-kpi-icon" style="background: rgba(243, 156, 18, 0.12); color: #f39c12;">⚡</div>
+              <div class="daily-room-kpi-body">
+                <span class="daily-room-kpi-label">Today's Spending</span>
+                <span class="daily-room-kpi-value" id="drTodaySpent">Rs 0</span>
+                <span class="daily-room-kpi-sub" id="drTodaySub">spent today so far</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Daily Spending Room Gauge + Remaining Per Day side-by-side -->
+        <div class="chart-row-2col">
+          <div class="card">
+            <h2 class="card-title">🎯 Today's Budget Room</h2>
+            <div id="dailyRoomGaugeChart" class="chart-area"></div>
+          </div>
+          <div class="card">
+            <h2 class="card-title">📊 Spending Pace</h2>
+            <p class="card-subtitle-sm" id="spendingPaceSubtitle">Budget consumed vs. cycle progress</p>
+            <div id="spendingPaceChart" class="chart-area"></div>
+          </div>
+        </div>
+
+        <!-- Per-Category Daily Allowance -->
+        <div class="card">
+          <h2 class="card-title">📋 Per-Category Daily Allowance</h2>
+          <p class="card-subtitle-sm">How much budget room per day remains for each category</p>
+          <div id="categoryDailyAllowanceChart" class="chart-area"></div>
+        </div>
+
         <!-- Income vs Expenses Chart -->
         <div class="card">
           <h2 class="card-title">💹 Income vs Expenses Flow</h2>
