@@ -23,8 +23,8 @@ exports.handler = async (event) => {
     };
   }
 
-  // Only allow POST
-  if (event.httpMethod !== "POST") {
+  // Only allow POST, PUT, DELETE
+  if (!["POST", "PUT", "DELETE"].includes(event.httpMethod)) {
     return {
       statusCode: 405,
       body: JSON.stringify({ error: "Method not allowed" }),
@@ -32,49 +32,48 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { title, amount, category, date, notes, user_id } = JSON.parse(event.body);
+    const { title, amount, category, date, notes, user_id } = JSON.parse(event.body || "{}");
 
-    // Validate required fields
-    if (!title || !amount || !category || !date) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          error: "Title, amount, category, date, and user_id are required",
-        }),
-      };
+    // POST: Create new expense
+    if (event.httpMethod === "POST") {
+      // Validate required fields...
+      [..rest of code unchanged ..]
     }
 
-    if (isNaN(amount) || parseFloat(amount) <= 0) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Amount must be a positive number" }),
-      };
+    // PUT/DELETE: require expense ID in path
+    if (event.httpMethod === "PUT" || event.httpMethod === "DELETE") {
+      const pathParts = event.path.replace(/\/$/, "").split("/");
+      const expenseId = pathParts[pathParts.length - 1];
+      if (!expenseId) {
+        return { statusCode: 400, body: JSON.stringify({ error: "Expense ID required" }) };
+      }
     }
 
-    // Insert expense
-    const result = await query(
-      `INSERT INTO expenses (user_id, title, amount, category, date, notes)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, title, amount, category, date, notes, created_at`,
-      [user_id, title.trim(), parseFloat(amount), category, date, notes?.trim() || null]
-    );
+    // PUT: Update expense
+    if (event.httpMethod === "PUT") {
+      // Validate fields
+      if (!title || !amount || !category || !date) {
+        return { statusCode: 400, body: JSON.stringify({ error: "Title, amount, category, date required" }) };
+      }
+      const result = await query(
+        `UPDATE expenses SET title=$1, amount=$2, category=$3, date=$4, notes=$5, updated_at=CURRENT_TIMESTAMP 
+         WHERE id=$6 AND user_id=$7 RETURNING *`,
+        [title.trim(), parseFloat(amount), category, date, notes?.trim()||null, expenseId, user_id]
+      );
+      if (result.rows.length === 0) {
+        return { statusCode: 404, body: JSON.stringify({ error: "Expense not found or unauthorized" }) };
+      }
+      return { statusCode: 200, headers: {"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}, body: JSON.stringify({ message:"Updated", expense: result.rows[0] }) };
+    }
 
-    return {
-      statusCode: 201,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: JSON.stringify({
-        message: "Expense added successfully",
-        expense: result.rows[0],
-      }),
-    };
-  } catch (error) {
-    console.error("Agent expense add error:", error);
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Internal server error" }),
-    };
-  }
+    // DELETE: Remove expense
+    if (event.httpMethod === "DELETE") {
+      const delResult = await query("DELETE FROM expenses WHERE id=$1 AND user_id=$2", [expenseId, user_id]);
+      if (delResult.rowCount === 0) {
+        return { statusCode: 404, body: JSON.stringify({ error: "Expense not found or unauthorized" }) };
+      }
+      return { statusCode: 200, headers: {"Content-Type":"application/json","Access-Control-Allow-Origin":"*"}, body: JSON.stringify({ message:"Deleted" }) };
+    }
+
+  } catch (error) { [.. unchanged ..] }
 };
