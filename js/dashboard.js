@@ -1050,19 +1050,31 @@ async function deleteIncome(id) {
 function updateBalanceBar() {
   const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
-  // Compute Budget Spent ensuring no double deductions across duplicates
-  const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
-  const budgetSpent = expenses.filter(e => budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  // Today's spending only
+  const today = new Date().toISOString().split('T')[0];
+  const todaySpent = expenses.filter(e => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
 
-  // Remaining Balance is simply Income - Total Daily Spent.
-  const remaining = incomeTotal - dailySpent;
+  // Remaining Balance = Income - Total Spent
+  const remaining = incomeTotal - totalSpent;
 
   document.getElementById("balanceIncome").textContent = `${fmtCurr(incomeTotal)}`;
   document.getElementById("balanceBudgetTotal").textContent = `${fmtCurr(budgetTotal)}`;
-  if (document.getElementById("balanceBudgetSpent")) document.getElementById("balanceBudgetSpent").textContent = `${fmtCurr(budgetSpent)}`;
-  document.getElementById("balanceDailySpent").textContent = `${fmtCurr(dailySpent)}`;
+
+  // Total Spent (all expenses — budgeted + unplanned)
+  const elTotalSpent = document.getElementById("balanceBudgetSpent");
+  if (elTotalSpent) {
+    elTotalSpent.textContent = `${fmtCurr(totalSpent)}`;
+    elTotalSpent.className = totalSpent > budgetTotal ? "balance-value text-red" : totalSpent > budgetTotal * 0.9 ? "balance-value text-orange" : "balance-value text-green";
+  }
+
+  // Today Spent
+  const elToday = document.getElementById("balanceDailySpent");
+  if (elToday) {
+    elToday.textContent = `${fmtCurr(todaySpent)}`;
+    elToday.className = "balance-value text-orange";
+  }
 
   const el = document.getElementById("balanceRemaining");
   el.textContent = `${fmtCurr(remaining)}`;
