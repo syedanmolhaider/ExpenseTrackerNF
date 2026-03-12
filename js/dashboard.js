@@ -1278,20 +1278,25 @@ function renderChartsIfActive() {
 }
 
 function renderCharts() {
-  renderKPIs();
-  renderDailySpendingRoom();
-  renderDailyRoomGauge();
-  renderSpendingPace();
-  renderCategoryDailyAllowance();
-  renderIncomeVsExpenseChart();
-  renderSavingsGauge();
-  renderSpendingVelocity();
-  renderWeeklyHeatmap();
-  renderCategoryChart();
-  renderDailyChart();
-  renderBudgetProgress();
-  renderTopExpenses();
-  renderMonthComparison();
+  const charts = [
+    renderKPIs,
+    renderDailySpendingRoom,
+    renderDailyRoomGauge,
+    renderSpendingPace,
+    renderCategoryDailyAllowance,
+    renderIncomeVsExpenseChart,
+    renderSavingsGauge,
+    renderSpendingVelocity,
+    renderWeeklyHeatmap,
+    renderCategoryChart,
+    renderDailyChart,
+    renderBudgetProgress,
+    renderTopExpenses,
+    renderMonthComparison
+  ];
+  charts.forEach(fn => {
+    try { fn(); } catch (err) { console.error(`Chart error in ${fn.name}:`, err); }
+  });
 }
 
 // =============================================
