@@ -355,7 +355,7 @@ function displayExpenses() {
 function updateDailySummary(filteredData = expenses) {
   const total = filteredData.reduce((s, e) => s + parseFloat(e.amount), 0);
   const today = new Date().toISOString().split("T")[0];
-  const todayTotal = filteredData.filter((e) => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const todayTotal = filteredData.filter((e) => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
   document.getElementById("dailyTotalSpent").textContent = `${fmtCurr(total)}`;
   document.getElementById("dailyTodaySpent").textContent = `${fmtCurr(todayTotal)}`;
   document.getElementById("dailyTotalEntries").textContent = filteredData.length;
@@ -1054,7 +1054,7 @@ function updateBalanceBar() {
 
   // Today's spending only
   const today = new Date().toISOString().split('T')[0];
-  const todaySpent = expenses.filter(e => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const todaySpent = expenses.filter(e => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Remaining Balance = Income - Total Spent
   const remaining = incomeTotal - totalSpent;
@@ -1474,7 +1474,7 @@ function renderDailySpendingRoom() {
 
   const budgetPerDay = daysLeft > 0 ? availableBalance / daysLeft : 0;
   const today = new Date().toISOString().split('T')[0];
-  const todaySpent = expenses.filter(e => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const todaySpent = expenses.filter(e => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Available Balance
   const elBal = document.getElementById('drAvailableBalance');
@@ -1563,7 +1563,7 @@ function renderDailyRoomGauge() {
   const { daysLeft } = getCycleDates();
   const budgetPerDay = daysLeft > 0 ? availableBalance / daysLeft : 0;
   const today = new Date().toISOString().split('T')[0];
-  const todaySpent = expenses.filter(e => e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const todaySpent = expenses.filter(e => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
 
   if (budgetPerDay <= 0 && todaySpent === 0) {
     if (apexInstances.dailyRoomGauge) { apexInstances.dailyRoomGauge.destroy(); delete apexInstances.dailyRoomGauge; }
@@ -1733,7 +1733,7 @@ function renderCategoryDailyAllowance() {
       const remaining = budget - spent;
       const perDay = daysLeft > 0 ? remaining / daysLeft : 0;
       const today = new Date().toISOString().split('T')[0];
-      const todayCatSpent = expenses.filter(e => e.category === cat && e.date === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+      const todayCatSpent = expenses.filter(e => e.category === cat && (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
 
       categories.push(`${getCatIcon(cat)} ${cat}`);
       dailyAllowance.push(Math.max(0, perDay));
@@ -1921,7 +1921,7 @@ function renderSpendingVelocity() {
     const dayLabel = `${curr.getDate()} ${curr.toLocaleString('en-US', { month: 'short' })}`;
     categories.push(dayLabel);
 
-    const daySpend = expenses.filter(e => e.date === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const daySpend = expenses.filter(e => (e.date || '').split('T')[0] === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
     cumulative += daySpend;
     cumulativeData.push(cumulative);
 
@@ -1994,7 +1994,7 @@ function renderWeeklyHeatmap() {
     if (!weeks[wk]) weeks[wk] = {};
     const dayName = dayNames[curr.getDay()];
     const dateStr = curr.toISOString().split('T')[0];
-    const daySpend = expenses.filter(e => e.date === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const daySpend = expenses.filter(e => (e.date || '').split('T')[0] === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
     weeks[wk][dayName] = (weeks[wk][dayName] || 0) + daySpend;
     curr.setDate(curr.getDate() + 1);
   }

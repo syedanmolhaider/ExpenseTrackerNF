@@ -128,6 +128,19 @@ The app supports custom financial month start days via `userSettings.month_start
 2. **Heatmap**: Must use `enableShades: false` when defining custom `colorScale.ranges`, otherwise shadeIntensity overrides the colors
 3. **renderCharts()** uses try-catch per chart to prevent cascading failures
 4. **PowerShell** — use `;` not `&&` to chain commands on Windows
+5. **ApexCharts tooltip** — never use `shared: true` without explicitly setting `intersect: false`, some chart types default intersect to true which conflicts
+
+---
+
+## 📊 Balance Bar Fields
+
+| Field | Element ID | Calculation | Notes |
+|---|---|---|---|
+| **Income** | `balanceIncome` | Sum of all income entries | Green text |
+| **Budget Planned** | `balanceBudgetTotal` | Sum of all budget item limits | Blue text |
+| **Total Spent** | `balanceBudgetSpent` | Sum of ALL expenses (budgeted + unplanned) | Green/Orange/Red based on vs budget |
+| **Today Spent** | `balanceDailySpent` | Sum of expenses where `date === today` only | Orange text |
+| **Remaining** | `balanceRemaining` | `Income - Total Spent` | Accent/Orange/Red based on level |
 
 ---
 
