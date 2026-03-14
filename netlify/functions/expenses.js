@@ -30,19 +30,40 @@ exports.handler = async (event) => {
     if (event.httpMethod === "GET") {
       console.log(`GET expenses for userId: ${userId}, params:`, params);
 
-      let sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.created_at, e.updated_at,
-                COALESCE(
-                  json_agg(
-                    json_build_object('id', t.id, 'name', t.name, 'color', t.color)
-                  ) FILTER (WHERE t.id IS NOT NULL),
-                  '[]'
-                ) as tags
-         FROM expenses e
-         LEFT JOIN expense_tag_map etm ON e.id = etm.expense_id
-         LEFT JOIN expense_tags t ON etm.tag_id = t.id
-         WHERE e.user_id = $1`;
-      const values = [userId];
-      let paramIdx = 2;
+      // Check if tag tables exist
+      let tagsExist = false;
+      try {
+        await query("SELECT 1 FROM expense_tags LIMIT 0");
+        await query("SELECT 1 FROM expense_tag_map LIMIT 0");
+        tagsExist = true;
+      } catch (err) {
+        console.log("Tag tables don't exist, fetching expenses without tags");
+      }
+
+      let sql, values, paramIdx;
+      
+      if (tagsExist) {
+        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.created_at, e.updated_at,
+                  COALESCE(
+                    json_agg(
+                      json_build_object('id', t.id, 'name', t.name, 'color', t.color)
+                    ) FILTER (WHERE t.id IS NOT NULL),
+                    '[]'
+                  ) as tags
+           FROM expenses e
+           LEFT JOIN expense_tag_map etm ON e.id = etm.expense_id
+           LEFT JOIN expense_tags t ON etm.tag_id = t.id
+           WHERE e.user_id = $1`;
+        values = [userId];
+        paramIdx = 2;
+      } else {
+        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.created_at, e.updated_at,
+                  '[]'::json as tags
+           FROM expenses e
+           WHERE e.user_id = $1`;
+        values = [userId];
+        paramIdx = 2;
+      }
 
       // Optional date range filtering for server-side pagination
       if (params.from) {
@@ -56,8 +77,8 @@ exports.handler = async (event) => {
         paramIdx++;
       }
 
-      // Optional tag filter
-      if (params.tag) {
+      // Optional tag filter (only if tags exist)
+      if (params.tag && tagsExist) {
         sql += ` AND EXISTS (
           SELECT 1 FROM expense_tag_map etm2 
           JOIN expense_tags t2 ON etm2.tag_id = t2.id 
