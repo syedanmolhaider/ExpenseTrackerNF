@@ -28,6 +28,8 @@ exports.handler = async (event) => {
 
     // Handle GET request - fetch expenses for user (with optional date range filter)
     if (event.httpMethod === "GET") {
+      console.log(`GET expenses for userId: ${userId}, params:`, params);
+
       let sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.created_at, e.updated_at,
                 COALESCE(
                   json_agg(
@@ -67,7 +69,9 @@ exports.handler = async (event) => {
 
       sql += ` GROUP BY e.id ORDER BY e.date DESC, e.created_at DESC`;
 
+      console.log("Executing SQL with values:", values);
       const result = await query(sql, values);
+      console.log(`Query returned ${result.rows.length} rows`);
 
       return createResponse(200, {
         expenses: result.rows,

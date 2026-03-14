@@ -34,14 +34,42 @@ window.fetch = async function (...args) {
 
 // ------ Init ------
 document.addEventListener("DOMContentLoaded", async () => {
-  await checkAuth();
-  await loadSettings();
-  renderMonthLabel();
-  renderNextMonthLabel();
-  initListeners();
-  setDefaultDate();
-  await loadAll();
+  try {
+    await checkAuth();
+    await loadSettings();
+    renderMonthLabel();
+    renderNextMonthLabel();
+    initListeners();
+    setDefaultDate();
+    await loadAll();
+  } catch (err) {
+    console.error("Dashboard initialization error:", err);
+    showError("Failed to initialize dashboard. Please refresh the page.");
+  }
 });
+
+function showError(message) {
+  const errorDiv = document.createElement("div");
+  errorDiv.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #e74c3c;
+    color: white;
+    padding: 15px 25px;
+    border-radius: 8px;
+    z-index: 10000;
+    font-weight: 500;
+    box-shadow: 0 4px 20px rgba(231, 76, 60, 0.4);
+  `;
+  errorDiv.textContent = message;
+  document.body.appendChild(errorDiv);
+
+  setTimeout(() => {
+    errorDiv.remove();
+  }, 5000);
+}
 
 // ------ Auth ------
 async function checkAuth() {
@@ -77,6 +105,19 @@ async function loadSettings() {
 }
 
 // ------ Month Helpers ------
+// Parse a date string (YYYY-MM-DD) as a local date to avoid timezone issues
+// new Date("2026-03-14") interprets as UTC midnight, which can shift to previous day
+// in negative timezone offsets. This function parses it as local time.
+function parseLocalDate(dateStr) {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split("T")[0].split("-");
+  return new Date(
+    parseInt(parts[0]),
+    parseInt(parts[1]) - 1,
+    parseInt(parts[2]),
+  );
+}
+
 // Returns the financial month key (YYYY-MM) for a given date
 function getFinancialMonthKey(d) {
   let y = d.getFullYear();
@@ -469,19 +510,53 @@ async function loadExpenses(month) {
     // H2 FIX: Use server-side date range filtering
     // Fetch current month + previous month for comparison charts
     const { from, to } = getDateRangeForMonth(month, 1); // 1 extra month for vs-last-month
+    console.log(
+      `Loading expenses for month: ${month}, from: ${from}, to: ${to}`,
+    );
     const res = await fetch(`/api/expenses?from=${from}&to=${to}`, {
       credentials: "include",
     });
-    if (!res.ok) throw new Error();
+    console.log(`Expenses API response status: ${res.status}`);
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      console.error("Expenses API error:", errorData);
+
+      // Check if it's a database table missing error
+      if (
+        errorData.error &&
+        errorData.error.includes("relation") &&
+        errorData.error.includes("does not exist")
+      ) {
+        document.getElementById("expensesList").innerHTML = `
+          <div style="padding: 20px; text-align: center;">
+            <p style="color: var(--orange); font-size: 16px; margin-bottom: 15px;">
+              ⚠️ Database tables not found
+            </p>
+            <p style="color: var(--text-secondary); margin-bottom: 15px;">
+              The database needs to be set up first.
+            </p>
+            <a href="/setup.html" style="color: var(--accent); text-decoration: underline;">
+              → Go to Database Setup
+            </a>
+          </div>
+        `;
+        return;
+      }
+
+      throw new Error(errorData.error || `HTTP ${res.status}`);
+    }
     const data = await res.json();
+    console.log(`Received ${data.expenses?.length || 0} expenses from API`);
     allExpenses = data.expenses || [];
     expenses = allExpenses.filter(
-      (exp) => getFinancialMonthKey(new Date(exp.date)) === month,
+      (exp) => getFinancialMonthKey(parseLocalDate(exp.date)) === month,
     );
+    console.log(`Filtered to ${expenses.length} expenses for current month`);
     displayExpenses();
-  } catch {
+  } catch (err) {
+    console.error("Failed to load expenses:", err);
     document.getElementById("expensesList").innerHTML =
-      '<p class="empty-msg" style="color:var(--red)">Failed to load expenses.</p>';
+      '<p class="empty-msg" style="color:var(--red)">Failed to load expenses. Check console for details.</p>';
   }
 }
 
@@ -3602,6 +3677,136 @@ async function updateTag(id, name, color) {
 
 let allCategories = [];
 
+// Default categories fallback (same as backend)
+const DEFAULT_CATEGORIES = [
+  {
+    id: "default_0",
+    name: "Food",
+    icon: "🍔",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_1",
+    name: "Transport",
+    icon: "🚗",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_2",
+    name: "Entertainment",
+    icon: "🎬",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_3",
+    name: "Shopping",
+    icon: "🛍️",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_4",
+    name: "Bills",
+    icon: "📄",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_5",
+    name: "Healthcare",
+    icon: "⚕️",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_6",
+    name: "Education",
+    icon: "📚",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_7",
+    name: "Loan",
+    icon: "🏦",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_8",
+    name: "Rent",
+    icon: "🏠",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_9",
+    name: "Parents",
+    icon: "👨‍👩‍👧",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_10",
+    name: "Investment",
+    icon: "📈",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_11",
+    name: "Unexpected",
+    icon: "⚠️",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_12",
+    name: "Maintenance",
+    icon: "🛠️",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_13",
+    name: "Household",
+    icon: "🪑",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_14",
+    name: "Personal Care",
+    icon: "🧴",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_15",
+    name: "Savings",
+    icon: "💰",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_16",
+    name: "Dining Out",
+    icon: "🍽️",
+    is_default: true,
+    usage_count: 0,
+  },
+  {
+    id: "default_17",
+    name: "Other",
+    icon: "📦",
+    is_default: true,
+    usage_count: 0,
+  },
+];
+
 // Load all categories
 async function loadCategories() {
   try {
@@ -3611,8 +3816,12 @@ async function loadCategories() {
     allCategories = data.categories || [];
     displayCategories();
     updateCategoryDropdowns();
-  } catch {
-    console.error("Failed to load categories");
+  } catch (err) {
+    console.error("Failed to load categories, using defaults:", err);
+    // Fallback to default categories if API fails
+    allCategories = [...DEFAULT_CATEGORIES];
+    displayCategories();
+    updateCategoryDropdowns();
   }
 }
 

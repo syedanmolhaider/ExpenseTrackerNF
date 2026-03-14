@@ -52,18 +52,25 @@ exports.handler = async (event) => {
 
     // GET — fetch all categories for user (defaults + custom)
     if (event.httpMethod === "GET") {
-      // Get custom categories from database
-      const customResult = await query(
-        `SELECT id, name, icon, is_default, created_at,
-                (SELECT COUNT(*) FROM expenses WHERE category = uc.name AND user_id = uc.user_id) as usage_count
-         FROM user_categories uc
-         WHERE user_id = $1
-         ORDER BY name ASC`,
-        [userId],
-      );
+      let customCategories = [];
+
+      // Try to get custom categories from database (table may not exist yet)
+      try {
+        const customResult = await query(
+          `SELECT id, name, icon, is_default, created_at,
+                  (SELECT COUNT(*) FROM expenses WHERE category = uc.name AND user_id = uc.user_id) as usage_count
+           FROM user_categories uc
+           WHERE user_id = $1
+           ORDER BY name ASC`,
+          [userId],
+        );
+        customCategories = customResult.rows;
+      } catch (err) {
+        // Table doesn't exist yet - just use default categories
+        console.log("user_categories table not found, using defaults only");
+      }
 
       // Combine default categories with custom ones
-      const customCategories = customResult.rows;
       const allCategories = [
         ...DEFAULT_CATEGORIES.map((cat, idx) => ({
           id: `default_${idx}`,
@@ -81,11 +88,15 @@ exports.handler = async (event) => {
       // Get usage counts for default categories
       for (const cat of allCategories) {
         if (cat.is_default) {
-          const usageResult = await query(
-            "SELECT COUNT(*) as count FROM expenses WHERE category = $1 AND user_id = $2",
-            [cat.name, userId],
-          );
-          cat.usage_count = parseInt(usageResult.rows[0].count) || 0;
+          try {
+            const usageResult = await query(
+              "SELECT COUNT(*) as count FROM expenses WHERE category = $1 AND user_id = $2",
+              [cat.name, userId],
+            );
+            cat.usage_count = parseInt(usageResult.rows[0].count) || 0;
+          } catch (err) {
+            cat.usage_count = 0;
+          }
         }
       }
 
@@ -117,30 +128,37 @@ exports.handler = async (event) => {
       }
 
       // Check for duplicate custom category
-      const existing = await query(
-        "SELECT id FROM user_categories WHERE user_id = $1 AND LOWER(name) = LOWER($2)",
-        [userId, name.trim()],
-      );
+      try {
+        const existing = await query(
+          "SELECT id FROM user_categories WHERE user_id = $1 AND LOWER(name) = LOWER($2)",
+          [userId, name.trim()],
+        );
 
-      if (existing.rows.length > 0) {
-        return createResponse(400, {
-          error: "A category with this name already exists",
+        if (existing.rows.length > 0) {
+          return createResponse(400, {
+            error: "A category with this name already exists",
+          });
+        }
+
+        const categoryIcon = icon || "📦";
+
+        const result = await query(
+          `INSERT INTO user_categories (user_id, name, icon, is_default)
+           VALUES ($1, $2, $3, false)
+           RETURNING id, name, icon, is_default, created_at`,
+          [userId, name.trim(), categoryIcon],
+        );
+
+        return createResponse(201, {
+          message: "Category created successfully",
+          category: { ...result.rows[0], usage_count: 0 },
+        });
+      } catch (err) {
+        console.error("Error creating category:", err.message);
+        return createResponse(500, {
+          error: "Database table not found. Please run database setup first.",
         });
       }
-
-      const categoryIcon = icon || "📦";
-
-      const result = await query(
-        `INSERT INTO user_categories (user_id, name, icon, is_default)
-         VALUES ($1, $2, $3, false)
-         RETURNING id, name, icon, is_default, created_at`,
-        [userId, name.trim(), categoryIcon],
-      );
-
-      return createResponse(201, {
-        message: "Category created successfully",
-        category: { ...result.rows[0], usage_count: 0 },
-      });
     }
 
     // PUT — update custom category
@@ -153,84 +171,91 @@ exports.handler = async (event) => {
 
       const { name, icon } = JSON.parse(event.body);
 
-      // Check ownership
-      const checkResult = await query(
-        "SELECT id, name FROM user_categories WHERE id = $1 AND user_id = $2",
-        [categoryId, userId],
-      );
+      try {
+        // Check ownership
+        const checkResult = await query(
+          "SELECT id, name FROM user_categories WHERE id = $1 AND user_id = $2",
+          [categoryId, userId],
+        );
 
-      if (checkResult.rows.length === 0) {
-        return createResponse(404, { error: "Category not found" });
-      }
-
-      const oldName = checkResult.rows[0].name;
-
-      // Build update query dynamically
-      const updates = [];
-      const values = [];
-      let paramIdx = 1;
-
-      if (name !== undefined) {
-        if (name.trim().length === 0) {
-          return createResponse(400, {
-            error: "Category name cannot be empty",
-          });
-        }
-        if (name.length > 100) {
-          return createResponse(400, {
-            error: "Category name must be 100 characters or less",
-          });
+        if (checkResult.rows.length === 0) {
+          return createResponse(404, { error: "Category not found" });
         }
 
-        // Check if new name conflicts with default category
-        const isDefault = DEFAULT_CATEGORIES.some(
-          (cat) => cat.name.toLowerCase() === name.trim().toLowerCase(),
-        );
-        if (isDefault) {
-          return createResponse(400, {
-            error: "Cannot rename to same name as default category",
-          });
+        const oldName = checkResult.rows[0].name;
+
+        // Build update query dynamically
+        const updates = [];
+        const values = [];
+        let paramIdx = 1;
+
+        if (name !== undefined) {
+          if (name.trim().length === 0) {
+            return createResponse(400, {
+              error: "Category name cannot be empty",
+            });
+          }
+          if (name.length > 100) {
+            return createResponse(400, {
+              error: "Category name must be 100 characters or less",
+            });
+          }
+
+          // Check if new name conflicts with default category
+          const isDefault = DEFAULT_CATEGORIES.some(
+            (cat) => cat.name.toLowerCase() === name.trim().toLowerCase(),
+          );
+          if (isDefault) {
+            return createResponse(400, {
+              error: "Cannot rename to same name as default category",
+            });
+          }
+
+          updates.push(`name = $${paramIdx}`);
+          values.push(name.trim());
+          paramIdx++;
         }
 
-        updates.push(`name = $${paramIdx}`);
-        values.push(name.trim());
-        paramIdx++;
-      }
+        if (icon !== undefined) {
+          updates.push(`icon = $${paramIdx}`);
+          values.push(icon || "📦");
+          paramIdx++;
+        }
 
-      if (icon !== undefined) {
-        updates.push(`icon = $${paramIdx}`);
-        values.push(icon || "📦");
-        paramIdx++;
-      }
+        if (updates.length === 0) {
+          return createResponse(400, { error: "No fields to update" });
+        }
 
-      if (updates.length === 0) {
-        return createResponse(400, { error: "No fields to update" });
-      }
-
-      values.push(categoryId, userId);
-      const result = await query(
-        `UPDATE user_categories SET ${updates.join(", ")}
-         WHERE id = $${paramIdx} AND user_id = $${paramIdx + 1}
-         RETURNING id, name, icon, is_default, created_at`,
-        values,
-      );
-
-      // If name changed, update all expenses with old category name
-      if (name && name.trim() !== oldName) {
-        await query(
-          "UPDATE expenses SET category = $1 WHERE category = $2 AND user_id = $3",
-          [name.trim(), oldName, userId],
+        values.push(categoryId, userId);
+        const result = await query(
+          `UPDATE user_categories SET ${updates.join(", ")}
+           WHERE id = $${paramIdx} AND user_id = $${paramIdx + 1}
+           RETURNING id, name, icon, is_default, created_at`,
+          values,
         );
-        await query(
-          "UPDATE budget_items SET category = $1 WHERE category = $2 AND user_id = $3",
-          [name.trim(), oldName, userId],
-        );
-      }
 
-      return createResponse(200, {
-        message: "Category updated successfully",
-        category: result.rows[0],
-      });
+        // If name changed, update all expenses with old category name
+        if (name && name.trim() !== oldName) {
+          await query(
+            "UPDATE expenses SET category = $1 WHERE category = $2 AND user_id = $3",
+            [name.trim(), oldName, userId],
+          );
+          await query(
+            "UPDATE budget_items SET category = $1 WHERE category = $2 AND user_id = $3",
+            [name.trim(), oldName, userId],
+          );
+        }
+
+        return createResponse(200, {
+          message: "Category updated successfully",
+          category: result.rows[0],
+        });
+      } catch (err) {
+        console.error("Error updating category:", err.message);
+        return createResponse(500, {
+          error: "Database table not found. Please run database setup first.",
+        });
+      }
     }
 
     // DELETE — delete custom category
@@ -241,47 +266,56 @@ exports.handler = async (event) => {
         });
       }
 
-      // Check ownership
-      const checkResult = await query(
-        "SELECT id, name FROM user_categories WHERE id = $1 AND user_id = $2",
-        [categoryId, userId],
-      );
+      try {
+        // Check ownership
+        const checkResult = await query(
+          "SELECT id, name FROM user_categories WHERE id = $1 AND user_id = $2",
+          [categoryId, userId],
+        );
 
-      if (checkResult.rows.length === 0) {
-        return createResponse(404, { error: "Category not found" });
-      }
+        if (checkResult.rows.length === 0) {
+          return createResponse(404, { error: "Category not found" });
+        }
 
-      const categoryName = checkResult.rows[0].name;
+        const categoryName = checkResult.rows[0].name;
 
-      // Check if category is in use
-      const expenseCount = await query(
-        "SELECT COUNT(*) as count FROM expenses WHERE category = $1 AND user_id = $2",
-        [categoryName, userId],
-      );
+        // Check if category is in use
+        const expenseCount = await query(
+          "SELECT COUNT(*) as count FROM expenses WHERE category = $1 AND user_id = $2",
+          [categoryName, userId],
+        );
 
-      const budgetCount = await query(
-        "SELECT COUNT(*) as count FROM budget_items WHERE category = $1 AND user_id = $2",
-        [categoryName, userId],
-      );
+        const budgetCount = await query(
+          "SELECT COUNT(*) as count FROM budget_items WHERE category = $1 AND user_id = $2",
+          [categoryName, userId],
+        );
 
-      const totalUsage =
-        parseInt(expenseCount.rows[0].count) +
-        parseInt(budgetCount.rows[0].count);
+        const totalUsage =
+          parseInt(expenseCount.rows[0].count) +
+          parseInt(budgetCount.rows[0].count);
 
-      if (totalUsage > 0) {
-        return createResponse(400, {
-          error: `Cannot delete category "${categoryName}" - it is used in ${totalUsage} expense(s) or budget item(s). Please reassign them first.`,
-          usage_count: totalUsage,
+        if (totalUsage > 0) {
+          return createResponse(400, {
+            error: `Cannot delete category "${categoryName}" - it is used in ${totalUsage} expense(s) or budget item(s). Please reassign them first.`,
+            usage_count: totalUsage,
+          });
+        }
+
+        // Delete category
+        await query(
+          "DELETE FROM user_categories WHERE id = $1 AND user_id = $2",
+          [categoryId, userId],
+        );
+
+        return createResponse(200, {
+          message: "Category deleted successfully",
+        });
+      } catch (err) {
+        console.error("Error deleting category:", err.message);
+        return createResponse(500, {
+          error: "Database table not found. Please run database setup first.",
         });
       }
-
-      // Delete category
-      await query(
-        "DELETE FROM user_categories WHERE id = $1 AND user_id = $2",
-        [categoryId, userId],
-      );
-
-      return createResponse(200, { message: "Category deleted successfully" });
     }
 
     return createResponse(405, { error: "Method not allowed" });

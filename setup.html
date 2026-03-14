@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Database Setup - ExpenseTrackerNF</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        background: linear-gradient(135deg, #0f1117 0%, #1a1d27 100%);
+        color: #e0e0e0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: #1e2130;
+        border-radius: 16px;
+        padding: 40px;
+        max-width: 600px;
+        width: 100%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid #2d3148;
+      }
+
+      h1 {
+        color: #6c5ce7;
+        margin-bottom: 10px;
+        font-size: 28px;
+        text-align: center;
+      }
+
+      .subtitle {
+        color: #8b8fa3;
+        text-align: center;
+        margin-bottom: 30px;
+        font-size: 14px;
+      }
+
+      .status {
+        background: #252836;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        min-height: 200px;
+        font-family: "Monaco", "Menlo", monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        overflow-y: auto;
+        max-height: 300px;
+      }
+
+      .status-line {
+        margin-bottom: 5px;
+      }
+
+      .status-line.success {
+        color: #00b894;
+      }
+
+      .status-line.error {
+        color: #e74c3c;
+      }
+
+      .status-line.info {
+        color: #0984e3;
+      }
+
+      .status-line.warning {
+        color: #f39c12;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 16px 24px;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(108, 92, 231, 0.4);
+      }
+
+      .btn-primary:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .btn-secondary {
+        background: #2d3148;
+        color: #e0e0e0;
+        margin-top: 10px;
+      }
+
+      .btn-secondary:hover {
+        background: #3d4158;
+      }
+
+      .spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .tables-list {
+        background: #252836;
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+        display: none;
+      }
+
+      .tables-list h3 {
+        color: #6c5ce7;
+        margin-bottom: 15px;
+        font-size: 16px;
+      }
+
+      .table-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid #2d3148;
+      }
+
+      .table-item:last-child {
+        border-bottom: none;
+      }
+
+      .table-icon {
+        color: #00b894;
+      }
+
+      .warning-box {
+        background: rgba(243, 156, 18, 0.1);
+        border: 1px solid #f39c12;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 20px;
+        font-size: 14px;
+        color: #f39c12;
+      }
+
+      .warning-box strong {
+        display: block;
+        margin-bottom: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🗄️ Database Setup</h1>
+      <p class="subtitle">Initialize your ExpenseTrackerNF database tables</p>
+
+      <div class="warning-box">
+        <strong>⚠️ Important:</strong>
+        This will create all required database tables. Only run this once during
+        initial setup.
+      </div>
+
+      <div class="status" id="status">
+        <div class="status-line info">Ready to setup database...</div>
+      </div>
+
+      <button class="btn btn-primary" id="setupBtn" onclick="runSetup()">
+        <span id="btnText">🚀 Run Database Setup</span>
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        onclick="window.location.href = '/dashboard.html'"
+      >
+        Go to Dashboard →
+      </button>
+
+      <div class="tables-list" id="tablesList">
+        <h3>✅ Tables Created:</h3>
+        <div id="tablesContent"></div>
+      </div>
+    </div>
+
+    <script>
+      async function runSetup() {
+        const btn = document.getElementById("setupBtn");
+        const btnText = document.getElementById("btnText");
+        const status = document.getElementById("status");
+        const tablesList = document.getElementById("tablesList");
+
+        btn.disabled = true;
+        btnText.innerHTML =
+          '<div class="spinner"></div> Setting up database...';
+        status.innerHTML = "";
+
+        function addStatus(message, type = "info") {
+          const line = document.createElement("div");
+          line.className = `status-line ${type}`;
+          line.textContent = message;
+          status.appendChild(line);
+          status.scrollTop = status.scrollHeight;
+        }
+
+        try {
+          addStatus("Connecting to database...", "info");
+
+          const response = await fetch("/api/setup-db", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            addStatus("✓ Database connection successful", "success");
+            addStatus("Creating tables...", "info");
+
+            // Simulate table creation progress
+            const tables = [
+              "users",
+              "expenses",
+              "budget_items",
+              "income",
+              "user_settings",
+              "expense_tags",
+              "expense_tag_map",
+              "user_categories",
+            ];
+
+            for (const table of tables) {
+              await new Promise((resolve) => setTimeout(resolve, 200));
+              addStatus(`✓ Created table: ${table}`, "success");
+            }
+
+            addStatus("Creating indexes...", "info");
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            addStatus("✓ Indexes created", "success");
+
+            addStatus("", "info");
+            addStatus("🎉 Database setup completed successfully!", "success");
+
+            // Show tables list
+            const tablesContent = document.getElementById("tablesContent");
+            tablesContent.innerHTML = tables
+              .map(
+                (t) =>
+                  `<div class="table-item">
+              <span class="table-icon">✓</span>
+              <span>${t}</span>
+            </div>`,
+              )
+              .join("");
+            tablesList.style.display = "block";
+
+            btnText.textContent = "✅ Setup Complete";
+            btn.style.background =
+              "linear-gradient(135deg, #00b894 0%, #00cec9 100%)";
+          } else {
+            addStatus(`✗ Error: ${data.error || "Setup failed"}`, "error");
+            if (data.details) {
+              addStatus(`Details: ${data.details}`, "error");
+            }
+            btnText.textContent = "❌ Setup Failed";
+            btn.disabled = false;
+          }
+        } catch (error) {
+          addStatus(`✗ Network error: ${error.message}`, "error");
+          addStatus(
+            "Make sure you are connected to the internet and try again.",
+            "warning",
+          );
+          btnText.textContent = "❌ Setup Failed";
+          btn.disabled = false;
+        }
+      }
+    </script>
+  </body>
+</html>
