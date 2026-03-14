@@ -88,7 +88,11 @@ exports.handler = async (event) => {
         paramIdx++;
       }
 
-      sql += ` GROUP BY e.id ORDER BY e.date DESC, e.created_at DESC`;
+      // Only add GROUP BY when using aggregation (tags)
+      if (tagsExist) {
+        sql += ` GROUP BY e.id`;
+      }
+      sql += ` ORDER BY e.date DESC, e.created_at DESC`;
 
       console.log("Executing SQL with values:", values);
       const result = await query(sql, values);
