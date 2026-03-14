@@ -10,16 +10,24 @@ let allExpenses = [];
 let budgetItems = [];
 let nextBudgetItems = [];
 let incomeEntries = [];
+let tags = []; // All user tags
 let currentFilter = "";
+let currentTagFilter = "";
 let searchQuery = "";
 let userSettings = { month_start_day: 1, month_end_day: 0, currency: "Rs" };
+let selectedExpenseTags = []; // Tags selected for new expense
+let editSelectedExpenseTags = []; // Tags selected for editing expense
 
 // ------ Global Interceptor ------
 const originalFetch = window.fetch;
 window.fetch = async function (...args) {
   const response = await originalFetch.apply(this, args);
-  if (response.status === 401 && !args[0].includes('/api/me') && !args[0].includes('/api/login')) {
-    window.location.href = '/index.html';
+  if (
+    response.status === 401 &&
+    !args[0].includes("/api/me") &&
+    !args[0].includes("/api/login")
+  ) {
+    window.location.href = "/index.html";
   }
   return response;
 };
@@ -39,10 +47,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function checkAuth() {
   try {
     const res = await fetch("/api/me", { credentials: "include" });
-    if (!res.ok) { window.location.href = "/index.html"; return; }
+    if (!res.ok) {
+      window.location.href = "/index.html";
+      return;
+    }
     const data = await res.json();
     document.getElementById("userName").textContent = data.user.name;
-  } catch { window.location.href = "/index.html"; }
+  } catch {
+    window.location.href = "/index.html";
+  }
 }
 
 // ------ Settings API ------
@@ -52,7 +65,8 @@ async function loadSettings() {
     if (res.ok) {
       const data = await res.json();
       if (data.settings) {
-        userSettings.month_start_day = parseInt(data.settings.month_start_day) || 1;
+        userSettings.month_start_day =
+          parseInt(data.settings.month_start_day) || 1;
         userSettings.month_end_day = parseInt(data.settings.month_end_day) || 0;
         userSettings.currency = data.settings.currency || "Rs";
       }
@@ -72,7 +86,10 @@ function getFinancialMonthKey(d) {
   if (startDay > 1) {
     if (d.getDate() >= startDay) {
       m += 1;
-      if (m > 12) { m = 1; y += 1; }
+      if (m > 12) {
+        m = 1;
+        y += 1;
+      }
     }
   }
   return `${y}-${String(m).padStart(2, "0")}`;
@@ -88,7 +105,7 @@ function getMonthKey(d = currentMonth) {
 // Accounts for custom financial month start/end days
 function getDateRangeForMonth(targetMonthKey, extraMonthsBefore = 0) {
   const startDay = userSettings.month_start_day;
-  const [year, month] = targetMonthKey.split('-').map(Number);
+  const [year, month] = targetMonthKey.split("-").map(Number);
 
   let fromDate, toDate;
 
@@ -96,22 +113,26 @@ function getDateRangeForMonth(targetMonthKey, extraMonthsBefore = 0) {
     // Standard calendar month
     const fromYear = month - extraMonthsBefore <= 0 ? year - 1 : year;
     const fromMonth = ((month - 1 - extraMonthsBefore + 12) % 12) + 1;
-    fromDate = `${fromYear}-${String(fromMonth).padStart(2, '0')}-01`;
+    fromDate = `${fromYear}-${String(fromMonth).padStart(2, "0")}-01`;
     // End is last day of target month
     const lastDay = new Date(year, month, 0).getDate();
-    toDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    toDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   } else {
     // Custom financial month: cycle starts on startDay of previous calendar month
     // For target YYYY-MM, the cycle runs from (month-1)/startDay to month/(startDay-1)
     const prevMonth = month - 1 <= 0 ? 12 : month - 1;
     const prevYear = month - 1 <= 0 ? year - 1 : year;
-    const endDay = userSettings.month_end_day > 0 ? userSettings.month_end_day : startDay - 1;
+    const endDay =
+      userSettings.month_end_day > 0
+        ? userSettings.month_end_day
+        : startDay - 1;
 
     // Start from extra months before
     const extraPrevMonth = ((prevMonth - 1 - extraMonthsBefore + 12) % 12) + 1;
-    const extraPrevYear = prevMonth - extraMonthsBefore <= 0 ? prevYear - 1 : prevYear;
-    fromDate = `${extraPrevYear}-${String(extraPrevMonth).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
-    toDate = `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+    const extraPrevYear =
+      prevMonth - extraMonthsBefore <= 0 ? prevYear - 1 : prevYear;
+    fromDate = `${extraPrevYear}-${String(extraPrevMonth).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
+    toDate = `${year}-${String(month).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
   }
 
   return { from: fromDate, to: toDate };
@@ -122,20 +143,43 @@ function renderMonthLabel() {
   const endDay = userSettings.month_end_day;
 
   if (startDay === 1 && endDay === 0) {
-    document.getElementById("currentMonthLabel").textContent = currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    document.getElementById("currentMonthLabel").textContent =
+      currentMonth.toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+      });
   } else {
-    const actualEndDay = endDay > 0 ? endDay : (startDay > 1 ? startDay - 1 : 0);
-    const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, startDay);
-    const endDate = actualEndDay > 0
-      ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), actualEndDay)
-      : new Date(currentMonth.getFullYear(), currentMonth.getMonth(), startDay - 1);
-    const fmt = (date) => date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    document.getElementById("currentMonthLabel").textContent = `${fmt(startDate)} - ${fmt(endDate)}, ${endDate.getFullYear()}`;
+    const actualEndDay = endDay > 0 ? endDay : startDay > 1 ? startDay - 1 : 0;
+    const startDate = new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth() - 1,
+      startDay,
+    );
+    const endDate =
+      actualEndDay > 0
+        ? new Date(
+            currentMonth.getFullYear(),
+            currentMonth.getMonth(),
+            actualEndDay,
+          )
+        : new Date(
+            currentMonth.getFullYear(),
+            currentMonth.getMonth(),
+            startDay - 1,
+          );
+    const fmt = (date) =>
+      date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    document.getElementById("currentMonthLabel").textContent =
+      `${fmt(startDate)} - ${fmt(endDate)}, ${endDate.getFullYear()}`;
   }
 }
 
 function changeMonth(offset) {
-  currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1);
+  currentMonth = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() + offset,
+    1,
+  );
   renderMonthLabel();
   renderNextMonthLabel();
   loadAll();
@@ -143,21 +187,36 @@ function changeMonth(offset) {
 
 // Returns the month key for the NEXT month relative to currently viewed month
 function getNextMonthKey() {
-  const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+  const next = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() + 1,
+    1,
+  );
   return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function renderNextMonthLabel() {
-  const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
-  const label = next.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const next = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() + 1,
+    1,
+  );
+  const label = next.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
   const el = document.getElementById("nextMonthLabel");
   if (el) el.textContent = `Planning for ${label}`;
 }
 
 // ------ Listeners ------
 function initListeners() {
-  document.getElementById("prevMonth").addEventListener("click", () => changeMonth(-1));
-  document.getElementById("nextMonth").addEventListener("click", () => changeMonth(1));
+  document
+    .getElementById("prevMonth")
+    .addEventListener("click", () => changeMonth(-1));
+  document
+    .getElementById("nextMonth")
+    .addEventListener("click", () => changeMonth(1));
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -168,22 +227,33 @@ function initListeners() {
   });
 
   document.getElementById("logoutBtn").addEventListener("click", handleLogout);
-  document.getElementById("addBudgetForm").addEventListener("submit", handleAddBudget);
+  document
+    .getElementById("addBudgetForm")
+    .addEventListener("submit", handleAddBudget);
   const cloneBtn = document.getElementById("cloneBudgetBtn");
   if (cloneBtn) cloneBtn.addEventListener("click", handleCloneBudget);
-  document.getElementById("addExpenseForm").addEventListener("submit", handleAddExpense);
-  document.getElementById("editExpenseForm").addEventListener("submit", handleEditExpense);
+  document
+    .getElementById("addExpenseForm")
+    .addEventListener("submit", handleAddExpense);
+  document
+    .getElementById("editExpenseForm")
+    .addEventListener("submit", handleEditExpense);
   const editBudgetForm = document.getElementById("editBudgetForm");
-  if (editBudgetForm) editBudgetForm.addEventListener("submit", handleEditBudget);
-  document.getElementById("addIncomeForm").addEventListener("submit", handleAddIncome);
+  if (editBudgetForm)
+    editBudgetForm.addEventListener("submit", handleEditBudget);
+  document
+    .getElementById("addIncomeForm")
+    .addEventListener("submit", handleAddIncome);
 
   // Next Month Budget listeners
   const addNextBudgetForm = document.getElementById("addNextBudgetForm");
-  if (addNextBudgetForm) addNextBudgetForm.addEventListener("submit", handleAddNextBudget);
+  if (addNextBudgetForm)
+    addNextBudgetForm.addEventListener("submit", handleAddNextBudget);
   const copyBtn = document.getElementById("copyCurrentBudgetBtn");
   if (copyBtn) copyBtn.addEventListener("click", handleCopyCurrentBudget);
   const editNextBudgetForm = document.getElementById("editNextBudgetForm");
-  if (editNextBudgetForm) editNextBudgetForm.addEventListener("submit", handleEditNextBudget);
+  if (editNextBudgetForm)
+    editNextBudgetForm.addEventListener("submit", handleEditNextBudget);
 
   document.getElementById("filterCategory").addEventListener("change", (e) => {
     currentFilter = e.target.value;
@@ -197,49 +267,115 @@ function initListeners() {
   });
 
   // Settings modal
-  document.getElementById("settingsBtn").addEventListener("click", openSettingsModal);
-  document.getElementById("cancelSettings").addEventListener("click", () => document.getElementById("settingsModal").classList.remove("show"));
-  document.getElementById("saveSettingsBtn").addEventListener("click", handleSaveSettings);
+  document
+    .getElementById("settingsBtn")
+    .addEventListener("click", openSettingsModal);
+  document
+    .getElementById("cancelSettings")
+    .addEventListener("click", () =>
+      document.getElementById("settingsModal").classList.remove("show"),
+    );
+  document
+    .getElementById("saveSettingsBtn")
+    .addEventListener("click", handleSaveSettings);
 
   // Export modal
-  document.getElementById("exportBtn").addEventListener("click", () => document.getElementById("exportModal").classList.add("show"));
-  document.getElementById("cancelExport").addEventListener("click", () => document.getElementById("exportModal").classList.remove("show"));
-  document.getElementById("exportModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.target.classList.remove("show"); });
+  document
+    .getElementById("exportBtn")
+    .addEventListener("click", () =>
+      document.getElementById("exportModal").classList.add("show"),
+    );
+  document
+    .getElementById("cancelExport")
+    .addEventListener("click", () =>
+      document.getElementById("exportModal").classList.remove("show"),
+    );
+  document.getElementById("exportModal").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) e.target.classList.remove("show");
+  });
 
-  document.getElementById("exportCSV").addEventListener("click", () => { exportExpensesCSV(); closeExportModal(); });
-  document.getElementById("exportJSON").addEventListener("click", () => { exportExpensesJSON(); closeExportModal(); });
-  document.getElementById("exportBudgetCSV").addEventListener("click", () => { exportBudgetCSV(); closeExportModal(); });
-  document.getElementById("exportIncomeCSV").addEventListener("click", () => { exportIncomeCSV(); closeExportModal(); });
-  document.getElementById("exportFullReport").addEventListener("click", () => { exportFullReport(); closeExportModal(); });
-  document.getElementById("exportTemplate").addEventListener("click", () => { exportTemplate(); closeExportModal(); });
+  document.getElementById("exportCSV").addEventListener("click", () => {
+    exportExpensesCSV();
+    closeExportModal();
+  });
+  document.getElementById("exportJSON").addEventListener("click", () => {
+    exportExpensesJSON();
+    closeExportModal();
+  });
+  document.getElementById("exportBudgetCSV").addEventListener("click", () => {
+    exportBudgetCSV();
+    closeExportModal();
+  });
+  document.getElementById("exportIncomeCSV").addEventListener("click", () => {
+    exportIncomeCSV();
+    closeExportModal();
+  });
+  document.getElementById("exportFullReport").addEventListener("click", () => {
+    exportFullReport();
+    closeExportModal();
+  });
+  document.getElementById("exportTemplate").addEventListener("click", () => {
+    exportTemplate();
+    closeExportModal();
+  });
 
   // Import
-  document.getElementById("importFile").addEventListener("change", handleImport);
+  document
+    .getElementById("importFile")
+    .addEventListener("change", handleImport);
 
   // Edit modal close — close all modals
-  document.querySelectorAll(".close-modal").forEach((btn) => btn.addEventListener("click", () => { closeEditModal(); closeEditBudgetModal(); closeEditNextBudgetModal(); }));
+  document.querySelectorAll(".close-modal").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      closeEditModal();
+      closeEditBudgetModal();
+      closeEditNextBudgetModal();
+    }),
+  );
 
   // Overlay clicks
-  document.getElementById("settingsModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) document.getElementById("settingsModal").classList.remove("show"); });
-  document.getElementById("editModal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditModal(); });
+  document.getElementById("settingsModal").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget)
+      document.getElementById("settingsModal").classList.remove("show");
+  });
+  document.getElementById("editModal").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) closeEditModal();
+  });
   const editBudgetModal = document.getElementById("editBudgetModal");
-  if (editBudgetModal) editBudgetModal.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditBudgetModal(); });
+  if (editBudgetModal)
+    editBudgetModal.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeEditBudgetModal();
+    });
   const editNextBudgetModal = document.getElementById("editNextBudgetModal");
-  if (editNextBudgetModal) editNextBudgetModal.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeEditNextBudgetModal(); });
+  if (editNextBudgetModal)
+    editNextBudgetModal.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeEditNextBudgetModal();
+    });
 
   // Reset All
-  document.getElementById("resetAllBtn").addEventListener("click", handleResetAll);
+  document
+    .getElementById("resetAllBtn")
+    .addEventListener("click", handleResetAll);
 
   // Keyboard: Escape
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closeEditModal(); closeExportModal(); closeEditBudgetModal(); closeEditNextBudgetModal(); document.getElementById("settingsModal").classList.remove("show"); }
+    if (e.key === "Escape") {
+      closeEditModal();
+      closeExportModal();
+      closeEditBudgetModal();
+      closeEditNextBudgetModal();
+      document.getElementById("settingsModal").classList.remove("show");
+    }
   });
 }
 
-function closeExportModal() { document.getElementById("exportModal").classList.remove("show"); }
+function closeExportModal() {
+  document.getElementById("exportModal").classList.remove("show");
+}
 
 function openSettingsModal() {
-  document.getElementById("settingStartDay").value = userSettings.month_start_day;
+  document.getElementById("settingStartDay").value =
+    userSettings.month_start_day;
   document.getElementById("settingEndDay").value = userSettings.month_end_day;
   document.getElementById("settingCurrency").value = userSettings.currency;
   document.getElementById("settingsModal").classList.add("show");
@@ -248,16 +384,31 @@ function openSettingsModal() {
 async function handleSaveSettings() {
   const day = parseInt(document.getElementById("settingStartDay").value);
   const endDay = parseInt(document.getElementById("settingEndDay").value) || 0;
-  const cur = document.getElementById("settingCurrency").value.trim() || 'Rs';
+  const cur = document.getElementById("settingCurrency").value.trim() || "Rs";
 
-  if (day < 1 || day > 28) { toast("Start day must be 1-28", "error"); return; }
-  if (endDay < 0 || endDay > 28) { toast("End day must be 0-28", "error"); return; }
-  if (endDay > 0 && endDay === day) { toast("End day cannot be the same as start day", "error"); return; }
+  if (day < 1 || day > 28) {
+    toast("Start day must be 1-28", "error");
+    return;
+  }
+  if (endDay < 0 || endDay > 28) {
+    toast("End day must be 0-28", "error");
+    return;
+  }
+  if (endDay > 0 && endDay === day) {
+    toast("End day cannot be the same as start day", "error");
+    return;
+  }
 
   try {
     const res = await fetch("/api/settings", {
-      method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include",
-      body: JSON.stringify({ month_start_day: day, month_end_day: endDay, currency: cur })
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        month_start_day: day,
+        month_end_day: endDay,
+        currency: cur,
+      }),
     });
     if (res.ok) {
       userSettings.month_start_day = day;
@@ -270,13 +421,19 @@ async function handleSaveSettings() {
     } else {
       toast("Failed to save", "error");
     }
-  } catch { toast("Network error", "error"); }
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 // ------ Tab Switching ------
 function switchTab(tabName) {
-  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+  document
+    .querySelectorAll(".tab")
+    .forEach((t) => t.classList.remove("active"));
+  document
+    .querySelectorAll(".tab-panel")
+    .forEach((p) => p.classList.remove("active"));
   document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add("active");
   document.getElementById(`panel-${tabName}`).classList.add("active");
 }
@@ -284,10 +441,15 @@ function switchTab(tabName) {
 // ------ Load All Data ------
 async function loadAll() {
   const month = getMonthKey();
-  showLoading('expensesList');
-  showLoading('budgetList');
-  showLoading('incomeList');
-  await Promise.all([loadExpenses(month), loadBudget(month), loadIncome(month), loadNextBudget(getNextMonthKey())]);
+  showLoading("expensesList");
+  showLoading("budgetList");
+  showLoading("incomeList");
+  await Promise.all([
+    loadExpenses(month),
+    loadBudget(month),
+    loadIncome(month),
+    loadNextBudget(getNextMonthKey()),
+  ]);
   // Re-render budget AFTER expenses are loaded (fixes race condition where
   // loadBudget finishes before loadExpenses, causing spent to show as 0)
   displayBudget();
@@ -295,7 +457,8 @@ async function loadAll() {
   displayNextBudget();
   updateNextBudgetSummary();
   updateBalanceBar();
-  if (document.getElementById("panel-trends").classList.contains("active")) renderCharts();
+  if (document.getElementById("panel-trends").classList.contains("active"))
+    renderCharts();
 }
 
 // =============================================
@@ -306,33 +469,56 @@ async function loadExpenses(month) {
     // H2 FIX: Use server-side date range filtering
     // Fetch current month + previous month for comparison charts
     const { from, to } = getDateRangeForMonth(month, 1); // 1 extra month for vs-last-month
-    const res = await fetch(`/api/expenses?from=${from}&to=${to}`, { credentials: "include" });
+    const res = await fetch(`/api/expenses?from=${from}&to=${to}`, {
+      credentials: "include",
+    });
     if (!res.ok) throw new Error();
     const data = await res.json();
     allExpenses = data.expenses || [];
-    expenses = allExpenses.filter((exp) => getFinancialMonthKey(new Date(exp.date)) === month);
+    expenses = allExpenses.filter(
+      (exp) => getFinancialMonthKey(new Date(exp.date)) === month,
+    );
     displayExpenses();
   } catch {
-    document.getElementById("expensesList").innerHTML = '<p class="empty-msg" style="color:var(--red)">Failed to load expenses.</p>';
+    document.getElementById("expensesList").innerHTML =
+      '<p class="empty-msg" style="color:var(--red)">Failed to load expenses.</p>';
   }
 }
 
 function displayExpenses() {
   const list = document.getElementById("expensesList");
-  let filtered = currentFilter ? expenses.filter((e) => e.category === currentFilter) : expenses;
+  let filtered = currentFilter
+    ? expenses.filter((e) => e.category === currentFilter)
+    : expenses;
+
+  // Apply tag filter
+  if (currentTagFilter) {
+    filtered = filtered.filter(
+      (e) => e.tags && e.tags.some((t) => t.name === currentTagFilter),
+    );
+  }
+
   // Apply search query
   if (searchQuery) {
-    filtered = filtered.filter((e) =>
-      (e.title && e.title.toLowerCase().includes(searchQuery)) ||
-      (e.notes && e.notes.toLowerCase().includes(searchQuery)) ||
-      (e.category && e.category.toLowerCase().includes(searchQuery)) ||
-      (e.amount && String(e.amount).includes(searchQuery))
+    filtered = filtered.filter(
+      (e) =>
+        (e.title && e.title.toLowerCase().includes(searchQuery)) ||
+        (e.notes && e.notes.toLowerCase().includes(searchQuery)) ||
+        (e.category && e.category.toLowerCase().includes(searchQuery)) ||
+        (e.amount && String(e.amount).includes(searchQuery)) ||
+        (e.tags &&
+          e.tags.some((t) => t.name.toLowerCase().includes(searchQuery))),
     );
   }
   updateDailySummary(filtered);
-  if (filtered.length === 0) { list.innerHTML = '<p class="empty-msg">No expenses logged this month.</p>'; return; }
+  if (filtered.length === 0) {
+    list.innerHTML = '<p class="empty-msg">No expenses logged this month.</p>';
+    return;
+  }
   filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-  list.innerHTML = filtered.map((exp) => `
+  list.innerHTML = filtered
+    .map(
+      (exp) => `
     <div class="expense-item">
       <div class="expense-row">
         <div class="expense-left">
@@ -342,6 +528,7 @@ function displayExpenses() {
             <span>${fmtDate(exp.date)}</span>
           </div>
           ${exp.notes ? `<div class="expense-notes-text">${esc(exp.notes)}</div>` : ""}
+          ${getExpenseTagsHTML(exp.tags)}
         </div>
         <div class="expense-amount-val">${fmtCurr(exp.amount)}</div>
       </div>
@@ -349,28 +536,69 @@ function displayExpenses() {
         <button class="btn-sm" data-action="editExpense" data-id="${exp.id}" aria-label="Edit expense ${esc(exp.title)}">Edit</button>
         <button class="btn-sm delete" data-action="deleteExpense" data-id="${exp.id}" aria-label="Delete expense ${esc(exp.title)}">Delete</button>
       </div>
-    </div>`).join("");
+    </div>`,
+    )
+    .join("");
 }
 
 function updateDailySummary(filteredData = expenses) {
   const total = filteredData.reduce((s, e) => s + parseFloat(e.amount), 0);
   const today = new Date().toISOString().split("T")[0];
-  const todayTotal = filteredData.filter((e) => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const todayTotal = filteredData
+    .filter((e) => (e.date || "").split("T")[0] === today)
+    .reduce((s, e) => s + parseFloat(e.amount), 0);
   document.getElementById("dailyTotalSpent").textContent = `${fmtCurr(total)}`;
-  document.getElementById("dailyTodaySpent").textContent = `${fmtCurr(todayTotal)}`;
-  document.getElementById("dailyTotalEntries").textContent = filteredData.length;
+  document.getElementById("dailyTodaySpent").textContent =
+    `${fmtCurr(todayTotal)}`;
+  document.getElementById("dailyTotalEntries").textContent =
+    filteredData.length;
 }
 
 async function handleAddExpense(e) {
   e.preventDefault();
   const form = e.target;
-  const data = { title: form.title.value.trim(), amount: form.amount.value, category: form.category.value, date: form.date.value, notes: form.notes.value.trim() };
+  const data = {
+    title: form.title.value.trim(),
+    amount: form.amount.value,
+    category: form.category.value,
+    date: form.date.value,
+    notes: form.notes.value.trim(),
+  };
   if (!data.title || !data.amount || !data.category || !data.date) return;
   try {
-    const res = await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { form.reset(); setDefaultDate(); toast("Expense logged", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
-    else { const r = await res.json(); toast(r.error || "Failed", "error"); }
-  } catch { toast("Network error", "error"); }
+    const res = await fetch("/api/expenses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      const result = await res.json();
+      const expenseId = result.expense?.id;
+
+      // Add tags to the new expense
+      if (expenseId && selectedExpenseTags.length > 0) {
+        await addTagsToExpense(expenseId, selectedExpenseTags);
+      }
+
+      form.reset();
+      setDefaultDate();
+      selectedExpenseTags = [];
+      renderSelectedTags(
+        selectedExpenseTags,
+        document.getElementById("selectedTags"),
+      );
+      toast("Expense logged", "success");
+      await loadExpenses(getMonthKey());
+      updateBalanceBar();
+      renderChartsIfActive();
+    } else {
+      const r = await res.json();
+      toast(r.error || "Failed", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 function openEditModal(id) {
@@ -380,30 +608,76 @@ function openEditModal(id) {
   document.getElementById("editExpenseTitle").value = exp.title;
   document.getElementById("editExpenseAmount").value = exp.amount;
   document.getElementById("editExpenseCategory").value = exp.category;
-  document.getElementById("editExpenseDate").value = exp.date ? exp.date.split("T")[0] : "";
+  document.getElementById("editExpenseDate").value = exp.date
+    ? exp.date.split("T")[0]
+    : "";
   document.getElementById("editExpenseNotes").value = exp.notes || "";
+
+  // Load existing tags for this expense
+  editSelectedExpenseTags = exp.tags ? exp.tags.map((t) => t.id) : [];
+  renderSelectedTags(
+    editSelectedExpenseTags,
+    document.getElementById("editSelectedTags"),
+  );
   document.getElementById("editModal").classList.add("show");
 }
-function closeEditModal() { document.getElementById("editModal").classList.remove("show"); }
+function closeEditModal() {
+  document.getElementById("editModal").classList.remove("show");
+  editSelectedExpenseTags = [];
+  const editSelectedTagsEl = document.getElementById("editSelectedTags");
+  if (editSelectedTagsEl) editSelectedTagsEl.innerHTML = "";
+}
 
 async function handleEditExpense(e) {
   e.preventDefault();
   const id = document.getElementById("editExpenseId").value;
   const form = e.target;
-  const data = { title: form.title.value.trim(), amount: form.amount.value, category: form.category.value, date: form.date.value, notes: form.notes.value.trim() };
+  const data = {
+    title: form.title.value.trim(),
+    amount: form.amount.value,
+    category: form.category.value,
+    date: form.date.value,
+    notes: form.notes.value.trim(),
+  };
   try {
-    const res = await fetch(`/api/expenses/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { closeEditModal(); toast("Updated", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
-    else toast("Failed to update", "error");
-  } catch { toast("Network error", "error"); }
+    const res = await fetch(`/api/expenses/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      // Update tags for the expense
+      await updateExpenseTags(parseInt(id), editSelectedExpenseTags);
+
+      closeEditModal();
+      toast("Updated", "success");
+      editSelectedExpenseTags = [];
+      await loadExpenses(getMonthKey());
+      updateBalanceBar();
+      renderChartsIfActive();
+    } else toast("Failed to update", "error");
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 async function handleDelete(id) {
   if (!confirm("Delete this expense?")) return;
   try {
-    const res = await fetch(`/api/expenses/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) { toast("Deleted", "success"); await loadExpenses(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
-  } catch { toast("Failed", "error"); }
+    const res = await fetch(`/api/expenses/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      toast("Deleted", "success");
+      await loadExpenses(getMonthKey());
+      updateBalanceBar();
+      renderChartsIfActive();
+    }
+  } catch {
+    toast("Failed", "error");
+  }
 }
 
 // =============================================
@@ -412,56 +686,72 @@ async function handleDelete(id) {
 // =============================================
 async function loadBudget(month) {
   try {
-    const res = await fetch(`/api/budget?month=${month}`, { credentials: "include" });
+    const res = await fetch(`/api/budget?month=${month}`, {
+      credentials: "include",
+    });
     if (!res.ok) throw new Error();
     const data = await res.json();
     budgetItems = data.items || [];
     displayBudget();
     updateBudgetSummary();
   } catch {
-    document.getElementById("budgetList").innerHTML = '<p class="empty-msg" style="color:var(--red)">Failed to load budget.</p>';
+    document.getElementById("budgetList").innerHTML =
+      '<p class="empty-msg" style="color:var(--red)">Failed to load budget.</p>';
   }
 }
 
 function displayBudget() {
   const list = document.getElementById("budgetList");
-  if (budgetItems.length === 0) { list.innerHTML = '<p class="empty-msg">No budget limits defined for this cycle.</p>'; return; }
+  if (budgetItems.length === 0) {
+    list.innerHTML =
+      '<p class="empty-msg">No budget limits defined for this cycle.</p>';
+    return;
+  }
 
   // Group items by category
   const grouped = {};
   budgetItems.forEach((item) => {
-    const cat = item.category || 'Other';
+    const cat = item.category || "Other";
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(item);
   });
 
-  let html = '';
+  let html = "";
   Object.entries(grouped).forEach(([cat, items]) => {
     const categoryLimit = items.reduce((s, i) => s + parseFloat(i.amount), 0);
-    const catExpenses = expenses.filter(e => e.category === cat);
-    const categorySpent = catExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+    const catExpenses = expenses.filter((e) => e.category === cat);
+    const categorySpent = catExpenses.reduce(
+      (s, e) => s + parseFloat(e.amount),
+      0,
+    );
     const categoryRemaining = categoryLimit - categorySpent;
     const isOver = categoryRemaining < 0;
-    const pct = categoryLimit > 0 ? Math.min((categorySpent / categoryLimit) * 100, 100) : 0;
-    const pctUsed = categoryLimit > 0 ? ((categorySpent / categoryLimit) * 100).toFixed(0) : 0;
+    const pct =
+      categoryLimit > 0
+        ? Math.min((categorySpent / categoryLimit) * 100, 100)
+        : 0;
+    const pctUsed =
+      categoryLimit > 0
+        ? ((categorySpent / categoryLimit) * 100).toFixed(0)
+        : 0;
 
     html += `<div class="budget-category-group">`;
     // Category header with totals
     html += `
-      <div class="budget-cat-header ${isOver ? 'over-budget' : ''}">
+      <div class="budget-cat-header ${isOver ? "over-budget" : ""}">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <div style="font-weight: 700; font-size: 1.05rem;">${getCatIcon(cat)} ${esc(cat)} <span class="budget-cat-count">${items.length} item${items.length > 1 ? 's' : ''}</span></div>
+          <div style="font-weight: 700; font-size: 1.05rem;">${getCatIcon(cat)} ${esc(cat)} <span class="budget-cat-count">${items.length} item${items.length > 1 ? "s" : ""}</span></div>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="budget-pct-badge ${isOver ? 'over' : pct > 80 ? 'warn' : 'ok'}">${isOver ? pctUsed + '% ⚠' : pctUsed + '% used'}</span>
+            <span class="budget-pct-badge ${isOver ? "over" : pct > 80 ? "warn" : "ok"}">${isOver ? pctUsed + "% ⚠" : pctUsed + "% used"}</span>
           </div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color:var(--text-secondary);">
           <span>Limit: <strong style="color:var(--text-primary)">${fmtCurr(categoryLimit)}</strong></span>
           <span>Spent: <span style="color:var(--orange); font-weight:600">${fmtCurr(categorySpent)}</span></span>
-          <span>${isOver ? 'Over:' : 'Left:'} <strong class="${isOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(categoryRemaining))}</strong></span>
+          <span>${isOver ? "Over:" : "Left:"} <strong class="${isOver ? "text-red" : "text-green"}">${fmtCurr(Math.abs(categoryRemaining))}</strong></span>
         </div>
         <div class="progress-bar" style="height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;">
-          <div class="progress-bar-fill" style="height: 100%; width:${pct}%; background:${isOver ? 'var(--red)' : pct > 80 ? 'var(--orange)' : 'var(--accent)'}; transition: width 0.3s ease;"></div>
+          <div class="progress-bar-fill" style="height: 100%; width:${pct}%; background:${isOver ? "var(--red)" : pct > 80 ? "var(--orange)" : "var(--accent)"}; transition: width 0.3s ease;"></div>
         </div>
       </div>`;
 
@@ -477,7 +767,8 @@ function displayBudget() {
       for (let i = 0; i < items.length; i++) {
         const bTitle = items[i].title.toLowerCase().trim();
         if (eTitle === bTitle) {
-          matchedIdx = i; break;
+          matchedIdx = i;
+          break;
         }
       }
 
@@ -486,8 +777,8 @@ function displayBudget() {
         for (let i = 0; i < items.length; i++) {
           const bTitle = items[i].title.toLowerCase().trim();
           // Escape regex characters just in case
-          const safeBTitle = bTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const safeETitle = eTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const safeBTitle = bTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const safeETitle = eTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
           try {
             // Check if the budget title is a standalone word in the expense title, OR vice versa
@@ -495,12 +786,14 @@ function displayBudget() {
             const eInB = new RegExp(`\\b${safeETitle}\\b`).test(bTitle);
 
             if (bInE || eInB) {
-              matchedIdx = i; break;
+              matchedIdx = i;
+              break;
             }
           } catch (err) {
             // Fallback to simple includes if regex fails maliciously
             if (eTitle.includes(bTitle) || bTitle.includes(eTitle)) {
-              matchedIdx = i; break;
+              matchedIdx = i;
+              break;
             }
           }
         }
@@ -516,7 +809,7 @@ function displayBudget() {
     // Individual sub-items
     items.forEach((item, idx) => {
       const limit = parseFloat(item.amount);
-      const shareOfCategory = categoryLimit > 0 ? (limit / categoryLimit) : 0;
+      const shareOfCategory = categoryLimit > 0 ? limit / categoryLimit : 0;
       const itemSpent = itemSpends[idx];
 
       const subRemaining = limit - itemSpent;
@@ -529,12 +822,12 @@ function displayBudget() {
       <div class="budget-sub-item">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="budget-sub-dot ${subIsOver ? 'over' : subPct > 80 ? 'warn' : ''}"></span>
+            <span class="budget-sub-dot ${subIsOver ? "over" : subPct > 80 ? "warn" : ""}"></span>
             <span style="font-weight: 600; font-size: 0.9rem;">${esc(item.title)}</span>
             <span class="budget-sub-pct">${sharePct}% of ${esc(cat)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
-            <span class="budget-pct-badge sm ${subIsOver ? 'over' : subPct > 80 ? 'warn' : 'ok'}">${subPctUsed}%</span>
+            <span class="budget-pct-badge sm ${subIsOver ? "over" : subPct > 80 ? "warn" : "ok"}">${subPctUsed}%</span>
             <div class="budget-actions">
               <button class="btn-sm" data-action="editBudget" data-id="${item.id}" aria-label="Edit budget item ${esc(item.title)}">Edit</button>
               <button class="btn-sm delete" data-action="deleteBudget" data-id="${item.id}" aria-label="Delete budget item ${esc(item.title)}">✕</button>
@@ -544,10 +837,10 @@ function displayBudget() {
         <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color:var(--text-muted); margin-bottom: 4px;">
           <span>Limit: ${fmtCurr(limit)}</span>
           <span>Spent: <span style="color:var(--orange)">${fmtCurr(itemSpent)}</span></span>
-          <span>${subIsOver ? 'Over:' : 'Left:'} <span class="${subIsOver ? 'text-red' : 'text-green'}">${fmtCurr(Math.abs(subRemaining))}</span></span>
+          <span>${subIsOver ? "Over:" : "Left:"} <span class="${subIsOver ? "text-red" : "text-green"}">${fmtCurr(Math.abs(subRemaining))}</span></span>
         </div>
         <div class="progress-bar" style="height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;">
-          <div class="progress-bar-fill" style="height: 100%; width:${subPct}%; background:${subIsOver ? 'var(--red)' : subPct > 80 ? 'var(--orange)' : 'var(--green)'}; transition: width 0.3s ease;"></div>
+          <div class="progress-bar-fill" style="height: 100%; width:${subPct}%; background:${subIsOver ? "var(--red)" : subPct > 80 ? "var(--orange)" : "var(--green)"}; transition: width 0.3s ease;"></div>
         </div>
       </div>`;
     });
@@ -580,25 +873,32 @@ function displayBudget() {
 
   // ===== UNPLANNED SPENDING SECTION =====
   // Find expenses in categories that have NO budget items at all
-  const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
-  const unplannedExpenses = expenses.filter(e => !budgetedCategories.has(e.category));
+  const budgetedCategories = new Set(
+    budgetItems.map((i) => i.category || "Other"),
+  );
+  const unplannedExpenses = expenses.filter(
+    (e) => !budgetedCategories.has(e.category),
+  );
 
   if (unplannedExpenses.length > 0) {
     // Group unplanned expenses by category
     const unplannedGrouped = {};
-    unplannedExpenses.forEach(e => {
-      const cat = e.category || 'Other';
+    unplannedExpenses.forEach((e) => {
+      const cat = e.category || "Other";
       if (!unplannedGrouped[cat]) unplannedGrouped[cat] = [];
       unplannedGrouped[cat].push(e);
     });
 
-    const totalUnplanned = unplannedExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+    const totalUnplanned = unplannedExpenses.reduce(
+      (s, e) => s + parseFloat(e.amount),
+      0,
+    );
 
     html += `
     <div class="budget-category-group unplanned-section">
       <div class="budget-cat-header over-budget" style="border-left: 3px solid var(--red); padding-left: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <div style="font-weight: 700; font-size: 1.1rem; color: var(--red);">⚠️ Unplanned Spending <span class="budget-cat-count">${unplannedExpenses.length} expense${unplannedExpenses.length > 1 ? 's' : ''} in ${Object.keys(unplannedGrouped).length} categor${Object.keys(unplannedGrouped).length > 1 ? 'ies' : 'y'}</span></div>
+          <div style="font-weight: 700; font-size: 1.1rem; color: var(--red);">⚠️ Unplanned Spending <span class="budget-cat-count">${unplannedExpenses.length} expense${unplannedExpenses.length > 1 ? "s" : ""} in ${Object.keys(unplannedGrouped).length} categor${Object.keys(unplannedGrouped).length > 1 ? "ies" : "y"}</span></div>
           <span class="budget-pct-badge over">No Budget Set</span>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; color:var(--text-secondary);">
@@ -624,7 +924,7 @@ function displayBudget() {
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="budget-sub-dot over"></span>
             <span style="font-weight: 700; font-size: 0.95rem;">${getCatIcon(cat)} ${esc(cat)}</span>
-            <span class="budget-sub-pct">${catExps.length} expense${catExps.length > 1 ? 's' : ''}</span>
+            <span class="budget-sub-pct">${catExps.length} expense${catExps.length > 1 ? "s" : ""}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="font-weight: 700; color: var(--red);">${fmtCurr(catTotal)}</span>
@@ -633,7 +933,7 @@ function displayBudget() {
         </div>`;
 
       // List each individual expense in this unplanned category
-      catExps.forEach(exp => {
+      catExps.forEach((exp) => {
         html += `
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0 4px 24px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid rgba(255,255,255,0.04);">
           <div style="display: flex; align-items: center; gap: 6px;">
@@ -656,21 +956,33 @@ function displayBudget() {
 
 function updateBudgetSummary() {
   const totalLimit = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const budgetedCategories = new Set(budgetItems.map(i => i.category || 'Other'));
-  const totalSpent = expenses.filter(e => budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const unplannedSpent = expenses.filter(e => !budgetedCategories.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  const budgetedCategories = new Set(
+    budgetItems.map((i) => i.category || "Other"),
+  );
+  const totalSpent = expenses
+    .filter((e) => budgetedCategories.has(e.category))
+    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  const unplannedSpent = expenses
+    .filter((e) => !budgetedCategories.has(e.category))
+    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
   const remaining = totalLimit - totalSpent;
-  document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(totalLimit)}`;
-  if (document.getElementById("budgetTotalSpent")) document.getElementById("budgetTotalSpent").textContent = `${fmtCurr(totalSpent)}`;
+  document.getElementById("budgetTotalPlanned").textContent =
+    `${fmtCurr(totalLimit)}`;
+  if (document.getElementById("budgetTotalSpent"))
+    document.getElementById("budgetTotalSpent").textContent =
+      `${fmtCurr(totalSpent)}`;
   if (document.getElementById("budgetTotalRemaining")) {
-    document.getElementById("budgetTotalRemaining").textContent = `${fmtCurr(remaining)}`;
-    document.getElementById("budgetTotalRemaining").className = remaining < 0 ? "summary-num text-red" : "summary-num text-green";
+    document.getElementById("budgetTotalRemaining").textContent =
+      `${fmtCurr(remaining)}`;
+    document.getElementById("budgetTotalRemaining").className =
+      remaining < 0 ? "summary-num text-red" : "summary-num text-green";
   }
   // Update unplanned spending display
   const unplannedEl = document.getElementById("budgetUnplannedSpent");
   if (unplannedEl) {
     unplannedEl.textContent = `${fmtCurr(unplannedSpent)}`;
-    unplannedEl.className = unplannedSpent > 0 ? "summary-num text-red" : "summary-num text-green";
+    unplannedEl.className =
+      unplannedSpent > 0 ? "summary-num text-red" : "summary-num text-green";
   }
 }
 
@@ -682,28 +994,70 @@ async function handleAddBudget(e) {
   if (!title || !category || !amount) return;
   // No duplicate restriction — multiple items per category allowed (e.g. Milk + Lunch under Food)
   try {
-    const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, category, amount: parseFloat(amount), month: getMonthKey() }) });
-    if (res.ok) { e.target.reset(); toast("Budget limit added", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
-    else { const d = await res.json(); toast(d.error || "Failed", "error"); }
-  } catch { toast("Network error", "error"); }
+    const res = await fetch("/api/budget", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        title,
+        category,
+        amount: parseFloat(amount),
+        month: getMonthKey(),
+      }),
+    });
+    if (res.ok) {
+      e.target.reset();
+      toast("Budget limit added", "success");
+      await loadBudget(getMonthKey());
+      updateBalanceBar();
+    } else {
+      const d = await res.json();
+      toast(d.error || "Failed", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 async function handleCloneBudget() {
-  const lastMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+  const lastMonth = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() - 1,
+    1,
+  );
   const lastMonthKey = getMonthKey(lastMonth);
   try {
-    const res = await fetch(`/api/budget?month=${lastMonthKey}`, { credentials: "include" });
+    const res = await fetch(`/api/budget?month=${lastMonthKey}`, {
+      credentials: "include",
+    });
     if (!res.ok) throw new Error();
     const data = await res.json();
     const oldItems = data.items || [];
-    if (oldItems.length === 0) { toast("No budget items in previous cycle.", "error"); return; }
+    if (oldItems.length === 0) {
+      toast("No budget items in previous cycle.", "error");
+      return;
+    }
 
     let cloned = 0;
     for (const item of oldItems) {
-      const cat = item.category || 'Other';
+      const cat = item.category || "Other";
       // Check by title+category to allow multiple items per category
-      if (!budgetItems.some(i => i.title === item.title && (i.category || 'Other') === cat)) {
-        await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title: item.title, category: cat, amount: parseFloat(item.amount), month: getMonthKey() }) });
+      if (
+        !budgetItems.some(
+          (i) => i.title === item.title && (i.category || "Other") === cat,
+        )
+      ) {
+        await fetch("/api/budget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            title: item.title,
+            category: cat,
+            amount: parseFloat(item.amount),
+            month: getMonthKey(),
+          }),
+        });
         cloned++;
       }
     }
@@ -714,7 +1068,9 @@ async function handleCloneBudget() {
     } else {
       toast("No new budget items to clone (already exist)", "error");
     }
-  } catch { toast("Failed to clone budget", "error"); }
+  } catch {
+    toast("Failed to clone budget", "error");
+  }
 }
 
 function openEditBudgetModal(id) {
@@ -722,7 +1078,8 @@ function openEditBudgetModal(id) {
   if (!item) return;
   document.getElementById("editBudgetId").value = item.id;
   document.getElementById("editBudgetTitle").value = item.title;
-  document.getElementById("editBudgetCategory").value = item.category || "Other";
+  document.getElementById("editBudgetCategory").value =
+    item.category || "Other";
   document.getElementById("editBudgetAmount").value = item.amount;
   document.getElementById("editBudgetModal").classList.add("show");
 }
@@ -736,20 +1093,44 @@ async function handleEditBudget(e) {
   e.preventDefault();
   const id = document.getElementById("editBudgetId").value;
   const form = e.target;
-  const data = { title: form.title.value.trim(), category: form.category.value, amount: form.amount.value };
+  const data = {
+    title: form.title.value.trim(),
+    category: form.category.value,
+    amount: form.amount.value,
+  };
   try {
-    const res = await fetch(`/api/budget/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { closeEditBudgetModal(); toast("Budget limit updated", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
-    else toast("Failed to update", "error");
-  } catch { toast("Network error", "error"); }
+    const res = await fetch(`/api/budget/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      closeEditBudgetModal();
+      toast("Budget limit updated", "success");
+      await loadBudget(getMonthKey());
+      updateBalanceBar();
+    } else toast("Failed to update", "error");
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 async function deleteBudget(id) {
   if (!confirm("Delete this budget limit?")) return;
   try {
-    const res = await fetch(`/api/budget/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) { toast("Deleted", "success"); await loadBudget(getMonthKey()); updateBalanceBar(); }
-  } catch { toast("Failed", "error"); }
+    const res = await fetch(`/api/budget/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      toast("Deleted", "success");
+      await loadBudget(getMonthKey());
+      updateBalanceBar();
+    }
+  } catch {
+    toast("Failed", "error");
+  }
 }
 
 // =============================================
@@ -757,7 +1138,9 @@ async function deleteBudget(id) {
 // =============================================
 async function loadNextBudget(month) {
   try {
-    const res = await fetch(`/api/budget?month=${month}`, { credentials: "include" });
+    const res = await fetch(`/api/budget?month=${month}`, {
+      credentials: "include",
+    });
     if (!res.ok) throw new Error();
     const data = await res.json();
     nextBudgetItems = data.items || [];
@@ -765,7 +1148,9 @@ async function loadNextBudget(month) {
     updateNextBudgetSummary();
   } catch {
     const el = document.getElementById("nextBudgetList");
-    if (el) el.innerHTML = '<p class="empty-msg" style="color:var(--red)">Failed to load next month budget.</p>';
+    if (el)
+      el.innerHTML =
+        '<p class="empty-msg" style="color:var(--red)">Failed to load next month budget.</p>';
   }
 }
 
@@ -773,26 +1158,43 @@ function displayNextBudget() {
   const list = document.getElementById("nextBudgetList");
   if (!list) return;
   if (nextBudgetItems.length === 0) {
-    list.innerHTML = '<p class="empty-msg">No budget items planned for next month yet. Add items above or copy from current month!</p>';
+    list.innerHTML =
+      '<p class="empty-msg">No budget items planned for next month yet. Add items above or copy from current month!</p>';
     return;
   }
 
   // Group by category
   const grouped = {};
   nextBudgetItems.forEach((item) => {
-    const cat = item.category || 'Other';
+    const cat = item.category || "Other";
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(item);
   });
 
-  let html = '';
+  let html = "";
   Object.entries(grouped).forEach(([cat, items]) => {
     const categoryLimit = items.reduce((s, i) => s + parseFloat(i.amount), 0);
     // Compare with current month's total for this category
-    const currentCatLimit = budgetItems.filter(b => (b.category || 'Other') === cat).reduce((s, i) => s + parseFloat(i.amount), 0);
+    const currentCatLimit = budgetItems
+      .filter((b) => (b.category || "Other") === cat)
+      .reduce((s, i) => s + parseFloat(i.amount), 0);
     const diff = categoryLimit - currentCatLimit;
-    const diffLabel = currentCatLimit > 0 ? (diff > 0 ? `▲ ${fmtCurr(diff)} more` : diff < 0 ? `▼ ${fmtCurr(Math.abs(diff))} less` : '= Same') : 'New Category';
-    const diffClass = currentCatLimit > 0 ? (diff > 0 ? 'text-orange' : diff < 0 ? 'text-green' : 'text-blue') : 'text-accent';
+    const diffLabel =
+      currentCatLimit > 0
+        ? diff > 0
+          ? `▲ ${fmtCurr(diff)} more`
+          : diff < 0
+            ? `▼ ${fmtCurr(Math.abs(diff))} less`
+            : "= Same"
+        : "New Category";
+    const diffClass =
+      currentCatLimit > 0
+        ? diff > 0
+          ? "text-orange"
+          : diff < 0
+            ? "text-green"
+            : "text-blue"
+        : "text-accent";
 
     html += `<div class="budget-category-group next-budget-item">`;
     // Category header
@@ -804,7 +1206,7 @@ function displayNextBudget() {
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.88rem; margin-bottom: 6px; color:var(--text-secondary);">
           <span>Next Month Limit: <strong style="color:var(--text-primary)">${fmtCurr(categoryLimit)}</strong></span>
-          <span>Current Month: <span style="color:var(--text-muted); font-weight:500">${currentCatLimit > 0 ? fmtCurr(currentCatLimit) : '—'}</span></span>
+          <span>Current Month: <span style="color:var(--text-muted); font-weight:500">${currentCatLimit > 0 ? fmtCurr(currentCatLimit) : "—"}</span></span>
         </div>
         <div class="progress-bar" style="height: 6px; background: var(--border); border-radius: 3px; overflow: hidden;">
           <div class="progress-bar-fill" style="height: 100%; width:100%; background:var(--accent)"></div>
@@ -814,7 +1216,8 @@ function displayNextBudget() {
     // Sub-items
     items.forEach((item) => {
       const limit = parseFloat(item.amount);
-      const itemPct = categoryLimit > 0 ? ((limit / categoryLimit) * 100).toFixed(0) : 0;
+      const itemPct =
+        categoryLimit > 0 ? ((limit / categoryLimit) * 100).toFixed(0) : 0;
       html += `
       <div class="budget-sub-item">
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -841,9 +1244,17 @@ function displayNextBudget() {
 }
 
 function updateNextBudgetSummary() {
-  const totalLimit = nextBudgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const categoriesCount = new Set(nextBudgetItems.map(i => i.category || 'Other')).size;
-  const currentTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
+  const totalLimit = nextBudgetItems.reduce(
+    (s, i) => s + parseFloat(i.amount),
+    0,
+  );
+  const categoriesCount = new Set(
+    nextBudgetItems.map((i) => i.category || "Other"),
+  ).size;
+  const currentTotal = budgetItems.reduce(
+    (s, i) => s + parseFloat(i.amount),
+    0,
+  );
 
   const el1 = document.getElementById("nextBudgetTotalPlanned");
   const el2 = document.getElementById("nextBudgetCategoriesCount");
@@ -853,23 +1264,23 @@ function updateNextBudgetSummary() {
   if (el2) el2.textContent = categoriesCount;
   if (el3) {
     if (currentTotal === 0 && totalLimit === 0) {
-      el3.textContent = '—';
-      el3.className = 'summary-num';
+      el3.textContent = "—";
+      el3.className = "summary-num";
     } else if (currentTotal === 0) {
-      el3.textContent = 'New Plan';
-      el3.className = 'summary-num text-accent';
+      el3.textContent = "New Plan";
+      el3.className = "summary-num text-accent";
     } else {
       const diff = totalLimit - currentTotal;
       const pct = ((diff / currentTotal) * 100).toFixed(0);
       if (Math.abs(diff) < 1) {
-        el3.textContent = '~Same';
-        el3.className = 'summary-num text-blue';
+        el3.textContent = "~Same";
+        el3.className = "summary-num text-blue";
       } else if (diff > 0) {
         el3.textContent = `▲ ${pct}% more`;
-        el3.className = 'summary-num text-orange';
+        el3.className = "summary-num text-orange";
       } else {
         el3.textContent = `▼ ${Math.abs(pct)}% less`;
-        el3.className = 'summary-num text-green';
+        el3.className = "summary-num text-green";
       }
     }
   }
@@ -883,10 +1294,28 @@ async function handleAddNextBudget(e) {
   if (!title || !category || !amount) return;
   // No duplicate restriction — multiple items per category allowed
   try {
-    const res = await fetch("/api/budget", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, category, amount: parseFloat(amount), month: getNextMonthKey() }) });
-    if (res.ok) { e.target.reset(); toast("Next month budget item added", "success"); await loadNextBudget(getNextMonthKey()); }
-    else { const d = await res.json(); toast(d.error || "Failed", "error"); }
-  } catch { toast("Network error", "error"); }
+    const res = await fetch("/api/budget", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        title,
+        category,
+        amount: parseFloat(amount),
+        month: getNextMonthKey(),
+      }),
+    });
+    if (res.ok) {
+      e.target.reset();
+      toast("Next month budget item added", "success");
+      await loadNextBudget(getNextMonthKey());
+    } else {
+      const d = await res.json();
+      toast(d.error || "Failed", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 async function handleCopyCurrentBudget() {
@@ -894,31 +1323,52 @@ async function handleCopyCurrentBudget() {
     toast("No budget items in current month to copy!", "error");
     return;
   }
-  const confirmCopy = confirm(`This will copy ${budgetItems.length} budget item(s) from current month to next month.\nExisting next month items with the same category will be skipped.\n\nContinue?`);
+  const confirmCopy = confirm(
+    `This will copy ${budgetItems.length} budget item(s) from current month to next month.\nExisting next month items with the same category will be skipped.\n\nContinue?`,
+  );
   if (!confirmCopy) return;
 
   let copied = 0;
   let skipped = 0;
   for (const item of budgetItems) {
-    const cat = item.category || 'Other';
-    if (nextBudgetItems.some(i => i.title === item.title && (i.category || 'Other') === cat)) {
+    const cat = item.category || "Other";
+    if (
+      nextBudgetItems.some(
+        (i) => i.title === item.title && (i.category || "Other") === cat,
+      )
+    ) {
       skipped++;
       continue;
     }
     try {
       await fetch("/api/budget", {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-        body: JSON.stringify({ title: item.title, category: cat, amount: parseFloat(item.amount), month: getNextMonthKey() })
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: item.title,
+          category: cat,
+          amount: parseFloat(item.amount),
+          month: getNextMonthKey(),
+        }),
       });
       copied++;
-    } catch { /* skip failed */ }
+    } catch {
+      /* skip failed */
+    }
   }
 
   if (copied > 0) {
-    toast(`${copied} budget item(s) copied to next month${skipped > 0 ? `, ${skipped} skipped (already exist)` : ''}`, "success");
+    toast(
+      `${copied} budget item(s) copied to next month${skipped > 0 ? `, ${skipped} skipped (already exist)` : ""}`,
+      "success",
+    );
     await loadNextBudget(getNextMonthKey());
   } else if (skipped > 0) {
-    toast(`All items already exist in next month's budget (${skipped} skipped)`, "error");
+    toast(
+      `All items already exist in next month's budget (${skipped} skipped)`,
+      "error",
+    );
   } else {
     toast("Failed to copy budget items", "error");
   }
@@ -929,7 +1379,8 @@ function openEditNextBudgetModal(id) {
   if (!item) return;
   document.getElementById("editNextBudgetId").value = item.id;
   document.getElementById("editNextBudgetTitle").value = item.title;
-  document.getElementById("editNextBudgetCategory").value = item.category || "Other";
+  document.getElementById("editNextBudgetCategory").value =
+    item.category || "Other";
   document.getElementById("editNextBudgetAmount").value = item.amount;
   document.getElementById("editNextBudgetModal").classList.add("show");
 }
@@ -943,20 +1394,42 @@ async function handleEditNextBudget(e) {
   e.preventDefault();
   const id = document.getElementById("editNextBudgetId").value;
   const form = e.target;
-  const data = { title: form.title.value.trim(), category: form.category.value, amount: form.amount.value };
+  const data = {
+    title: form.title.value.trim(),
+    category: form.category.value,
+    amount: form.amount.value,
+  };
   try {
-    const res = await fetch(`/api/budget/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { closeEditNextBudgetModal(); toast("Next month budget updated", "success"); await loadNextBudget(getNextMonthKey()); }
-    else toast("Failed to update", "error");
-  } catch { toast("Network error", "error"); }
+    const res = await fetch(`/api/budget/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      closeEditNextBudgetModal();
+      toast("Next month budget updated", "success");
+      await loadNextBudget(getNextMonthKey());
+    } else toast("Failed to update", "error");
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 async function deleteNextBudget(id) {
   if (!confirm("Delete this next month budget limit?")) return;
   try {
-    const res = await fetch(`/api/budget/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) { toast("Deleted", "success"); await loadNextBudget(getNextMonthKey()); }
-  } catch { toast("Failed", "error"); }
+    const res = await fetch(`/api/budget/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      toast("Deleted", "success");
+      await loadNextBudget(getNextMonthKey());
+    }
+  } catch {
+    toast("Failed", "error");
+  }
 }
 
 // =============================================
@@ -966,31 +1439,50 @@ async function loadIncome(month) {
   try {
     // H2 FIX: Use server-side date range filtering
     const { from, to } = getDateRangeForMonth(month, 0);
-    const res = await fetch(`/api/income?from=${from}&to=${to}`, { credentials: "include" });
+    const res = await fetch(`/api/income?from=${from}&to=${to}`, {
+      credentials: "include",
+    });
     if (!res.ok) throw new Error();
     const data = await res.json();
     const allIncome = data.entries || [];
-    incomeEntries = allIncome.filter((exp) => getFinancialMonthKey(new Date(exp.date)) === month);
+    incomeEntries = allIncome.filter(
+      (exp) => getFinancialMonthKey(new Date(exp.date)) === month,
+    );
     displayIncome();
     updateIncomeSummary();
   } catch {
     incomeEntries = [];
     const el = document.getElementById("incomeList");
-    if (el) el.innerHTML = '<p class="empty-msg" style="color:var(--red)">Failed to load income.</p>';
+    if (el)
+      el.innerHTML =
+        '<p class="empty-msg" style="color:var(--red)">Failed to load income.</p>';
   }
 }
 
 function getSourceIcon(source) {
-  const icons = { Salary: "💼", Freelance: "💻", Business: "🏢", Investment: "📈", Gift: "🎁", Refund: "↩️", Other: "📦" };
+  const icons = {
+    Salary: "💼",
+    Freelance: "💻",
+    Business: "🏢",
+    Investment: "📈",
+    Gift: "🎁",
+    Refund: "↩️",
+    Other: "📦",
+  };
   return icons[source] || "📦";
 }
 
 function displayIncome() {
   const list = document.getElementById("incomeList");
   if (!list) return;
-  if (incomeEntries.length === 0) { list.innerHTML = '<p class="empty-msg">No income recorded this month.</p>'; return; }
+  if (incomeEntries.length === 0) {
+    list.innerHTML = '<p class="empty-msg">No income recorded this month.</p>';
+    return;
+  }
 
-  list.innerHTML = incomeEntries.map((entry) => `
+  list.innerHTML = incomeEntries
+    .map(
+      (entry) => `
     <div class="income-item">
       <div class="income-row">
         <div class="income-left">
@@ -1007,7 +1499,9 @@ function displayIncome() {
         <button class="btn-sm" data-action="editIncome" data-id="${entry.id}" aria-label="Edit income ${esc(entry.title)}">Edit</button>
         <button class="btn-sm delete" data-action="deleteIncome" data-id="${entry.id}" aria-label="Delete income ${esc(entry.title)}">Delete</button>
       </div>
-    </div>`).join("");
+    </div>`,
+    )
+    .join("");
 }
 
 function updateIncomeSummary() {
@@ -1030,43 +1524,81 @@ async function handleAddIncome(e) {
   };
   if (!data.title || !data.amount || !data.date) return;
   try {
-    const res = await fetch("/api/income", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { form.reset(); setDefaultDate("incomeDate"); toast("Income added", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
-    else { const r = await res.json(); toast(r.error || "Failed", "error"); }
-  } catch { toast("Network error", "error"); }
+    const res = await fetch("/api/income", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      form.reset();
+      setDefaultDate("incomeDate");
+      toast("Income added", "success");
+      await loadIncome(getMonthKey());
+      updateBalanceBar();
+      renderChartsIfActive();
+    } else {
+      const r = await res.json();
+      toast(r.error || "Failed", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 async function deleteIncome(id) {
   if (!confirm("Delete this income entry?")) return;
   try {
-    const res = await fetch(`/api/income/${id}`, { method: "DELETE", credentials: "include" });
-    if (res.ok) { toast("Deleted", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
-  } catch { toast("Failed", "error"); }
+    const res = await fetch(`/api/income/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (res.ok) {
+      toast("Deleted", "success");
+      await loadIncome(getMonthKey());
+      updateBalanceBar();
+      renderChartsIfActive();
+    }
+  } catch {
+    toast("Failed", "error");
+  }
 }
 
 // =============================================
 // BALANCE
 // =============================================
 function updateBalanceBar() {
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Today's spending only
-  const today = new Date().toISOString().split('T')[0];
-  const todaySpent = expenses.filter(e => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const today = new Date().toISOString().split("T")[0];
+  const todaySpent = expenses
+    .filter((e) => (e.date || "").split("T")[0] === today)
+    .reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Remaining Balance = Income - Total Spent
   const remaining = incomeTotal - totalSpent;
 
-  document.getElementById("balanceIncome").textContent = `${fmtCurr(incomeTotal)}`;
-  document.getElementById("balanceBudgetTotal").textContent = `${fmtCurr(budgetTotal)}`;
+  document.getElementById("balanceIncome").textContent =
+    `${fmtCurr(incomeTotal)}`;
+  document.getElementById("balanceBudgetTotal").textContent =
+    `${fmtCurr(budgetTotal)}`;
 
   // Total Spent (all expenses — budgeted + unplanned)
   const elTotalSpent = document.getElementById("balanceBudgetSpent");
   if (elTotalSpent) {
     elTotalSpent.textContent = `${fmtCurr(totalSpent)}`;
-    elTotalSpent.className = totalSpent > budgetTotal ? "balance-value text-red" : totalSpent > budgetTotal * 0.9 ? "balance-value text-orange" : "balance-value text-green";
+    elTotalSpent.className =
+      totalSpent > budgetTotal
+        ? "balance-value text-red"
+        : totalSpent > budgetTotal * 0.9
+          ? "balance-value text-orange"
+          : "balance-value text-green";
   }
 
   // Today Spent
@@ -1078,36 +1610,66 @@ function updateBalanceBar() {
 
   const el = document.getElementById("balanceRemaining");
   el.textContent = `${fmtCurr(remaining)}`;
-  el.className = remaining < 0 ? "balance-value text-red" : remaining < incomeTotal * 0.2 ? "balance-value text-orange" : "balance-value text-accent";
+  el.className =
+    remaining < 0
+      ? "balance-value text-red"
+      : remaining < incomeTotal * 0.2
+        ? "balance-value text-orange"
+        : "balance-value text-accent";
 }
 
 // =============================================
 // RESET ALL
 // =============================================
 async function handleResetAll() {
-  const confirm1 = confirm("⚠️ This will DELETE ALL your data across ALL months:\n\n• All expenses\n• All budget items\n• All income records\n• All balance settings\n\nThis action CANNOT be undone. Continue?");
+  const confirm1 = confirm(
+    "⚠️ This will DELETE ALL your data across ALL months:\n\n• All expenses\n• All budget items\n• All income records\n• All balance settings\n\nThis action CANNOT be undone. Continue?",
+  );
   if (!confirm1) return;
-  const confirm2 = confirm("Are you ABSOLUTELY sure? Type 'yes' in the next prompt to confirm.");
+  const confirm2 = confirm(
+    "Are you ABSOLUTELY sure? Type 'yes' in the next prompt to confirm.",
+  );
   if (!confirm2) return;
   const typed = prompt("Type 'RESET' to confirm deletion of all data:");
-  if (typed !== "RESET") { toast("Reset cancelled", "error"); return; }
+  if (typed !== "RESET") {
+    toast("Reset cancelled", "error");
+    return;
+  }
 
   try {
-    const res = await fetch("/api/reset", { method: "DELETE", credentials: "include" });
+    const res = await fetch("/api/reset", {
+      method: "DELETE",
+      credentials: "include",
+    });
     if (res.ok) {
       toast("All data has been reset", "success");
-      expenses = []; allExpenses = []; budgetItems = []; nextBudgetItems = []; incomeEntries = [];
-      displayExpenses(); displayBudget(); displayIncome(); displayNextBudget();
-      updateDailySummary(); updateBudgetSummary(); updateIncomeSummary(); updateNextBudgetSummary(); updateBalanceBar();
+      expenses = [];
+      allExpenses = [];
+      budgetItems = [];
+      nextBudgetItems = [];
+      incomeEntries = [];
+      displayExpenses();
+      displayBudget();
+      displayIncome();
+      displayNextBudget();
+      updateDailySummary();
+      updateBudgetSummary();
+      updateIncomeSummary();
+      updateNextBudgetSummary();
+      updateBalanceBar();
     } else toast("Failed to reset", "error");
-  } catch { toast("Network error", "error"); }
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
 // =============================================
 // LOGOUT
 // =============================================
 async function handleLogout() {
-  try { await fetch("/api/logout", { method: "POST", credentials: "include" }); } catch { }
+  try {
+    await fetch("/api/logout", { method: "POST", credentials: "include" });
+  } catch {}
   window.location.href = "/index.html";
 }
 
@@ -1123,50 +1685,127 @@ async function handleImport(e) {
   if (file.name.endsWith(".json")) {
     try {
       const data = JSON.parse(text);
-      rows = Array.isArray(data) ? data : (data.expenses || []);
-    } catch { toast("Invalid JSON", "error"); e.target.value = ""; return; }
+      rows = Array.isArray(data) ? data : data.expenses || [];
+    } catch {
+      toast("Invalid JSON", "error");
+      e.target.value = "";
+      return;
+    }
   } else {
-    const lines = text.split("\n").map((l) => l.trim()).filter((l) => l);
-    if (lines.length < 2) { toast("CSV is empty", "error"); e.target.value = ""; return; }
+    const lines = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l);
+    if (lines.length < 2) {
+      toast("CSV is empty", "error");
+      e.target.value = "";
+      return;
+    }
     const headers = parseCSVRow(lines[0].toLowerCase());
     const dateIdx = headers.findIndex((h) => h.includes("date"));
-    const titleIdx = headers.findIndex((h) => h.includes("title") || h.includes("name") || h.includes("description"));
+    const titleIdx = headers.findIndex(
+      (h) =>
+        h.includes("title") || h.includes("name") || h.includes("description"),
+    );
     const catIdx = headers.findIndex((h) => h.includes("categ"));
-    const amountIdx = headers.findIndex((h) => h.includes("amount") || h.includes("price") || h.includes("cost"));
+    const amountIdx = headers.findIndex(
+      (h) => h.includes("amount") || h.includes("price") || h.includes("cost"),
+    );
     const notesIdx = headers.findIndex((h) => h.includes("note"));
-    if (titleIdx === -1 || amountIdx === -1) { toast("CSV must have Title and Amount columns", "error"); e.target.value = ""; return; }
+    if (titleIdx === -1 || amountIdx === -1) {
+      toast("CSV must have Title and Amount columns", "error");
+      e.target.value = "";
+      return;
+    }
     for (let i = 1; i < lines.length; i++) {
       const cols = parseCSVRow(lines[i]);
       if (cols.length <= amountIdx) continue;
-      rows.push({ title: cols[titleIdx] || "Imported", amount: parseFloat(cols[amountIdx]) || 0, category: cols[catIdx] || "Other", date: cols[dateIdx] || new Date().toISOString().split("T")[0], notes: notesIdx >= 0 ? cols[notesIdx] || "" : "" });
+      rows.push({
+        title: cols[titleIdx] || "Imported",
+        amount: parseFloat(cols[amountIdx]) || 0,
+        category: cols[catIdx] || "Other",
+        date: cols[dateIdx] || new Date().toISOString().split("T")[0],
+        notes: notesIdx >= 0 ? cols[notesIdx] || "" : "",
+      });
     }
   }
 
-  if (rows.length === 0) { toast("No rows found", "error"); e.target.value = ""; return; }
-  const validCats = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education", "Loan", "Rent", "Parents", "Investment", "Unexpected", "Maintenance", "Household", "Personal Care", "Savings", "Dining Out", "Other"];
-  let imported = 0, failed = 0;
+  if (rows.length === 0) {
+    toast("No rows found", "error");
+    e.target.value = "";
+    return;
+  }
+  const validCats = [
+    "Food",
+    "Transport",
+    "Entertainment",
+    "Shopping",
+    "Bills",
+    "Healthcare",
+    "Education",
+    "Loan",
+    "Rent",
+    "Parents",
+    "Investment",
+    "Unexpected",
+    "Maintenance",
+    "Household",
+    "Personal Care",
+    "Savings",
+    "Dining Out",
+    "Other",
+  ];
+  let imported = 0,
+    failed = 0;
   for (const row of rows) {
-    const cat = validCats.find((c) => c.toLowerCase() === (row.category || "").toLowerCase()) || "Other";
+    const cat =
+      validCats.find(
+        (c) => c.toLowerCase() === (row.category || "").toLowerCase(),
+      ) || "Other";
     const amount = parseFloat(row.amount);
-    if (!row.title || isNaN(amount) || amount <= 0) { failed++; continue; }
+    if (!row.title || isNaN(amount) || amount <= 0) {
+      failed++;
+      continue;
+    }
     try {
-      const res = await fetch("/api/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title: row.title, amount, category: cat, date: row.date || new Date().toISOString().split("T")[0], notes: row.notes || "" }) });
-      if (res.ok) imported++; else failed++;
-    } catch { failed++; }
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: row.title,
+          amount,
+          category: cat,
+          date: row.date || new Date().toISOString().split("T")[0],
+          notes: row.notes || "",
+        }),
+      });
+      if (res.ok) imported++;
+      else failed++;
+    } catch {
+      failed++;
+    }
   }
   e.target.value = "";
-  toast(`Imported ${imported} expenses${failed ? `, ${failed} failed` : ""}`, imported > 0 ? "success" : "error");
+  toast(
+    `Imported ${imported} expenses${failed ? `, ${failed} failed` : ""}`,
+    imported > 0 ? "success" : "error",
+  );
   await loadExpenses(getMonthKey());
   updateBalanceBar();
 }
 
 function parseCSVRow(line) {
-  const result = []; let current = ""; let inQuotes = false;
+  const result = [];
+  let current = "";
+  let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') inQuotes = !inQuotes;
-    else if (ch === "," && !inQuotes) { result.push(current.trim()); current = ""; }
-    else current += ch;
+    else if (ch === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else current += ch;
   }
   result.push(current.trim());
   return result;
@@ -1176,39 +1815,83 @@ function parseCSVRow(line) {
 // EXPORT
 // =============================================
 function exportExpensesCSV() {
-  if (expenses.length === 0) { toast("No expenses", "error"); return; }
-  const csv = ["Date,Title,Category,Amount,Notes", ...expenses.map((e) => `"${e.date}","${e.title}","${e.category}","${e.amount}","${e.notes || ""}"`).sort()].join("\n");
+  if (expenses.length === 0) {
+    toast("No expenses", "error");
+    return;
+  }
+  const csv = [
+    "Date,Title,Category,Amount,Notes",
+    ...expenses
+      .map(
+        (e) =>
+          `"${e.date}","${e.title}","${e.category}","${e.amount}","${e.notes || ""}"`,
+      )
+      .sort(),
+  ].join("\n");
   downloadFile(csv, `expenses-${getMonthKey()}.csv`, "text/csv");
   toast("Expenses CSV exported", "success");
 }
 
 function exportExpensesJSON() {
-  if (expenses.length === 0) { toast("No expenses", "error"); return; }
-  const json = JSON.stringify({ month: getMonthKey(), expenses: expenses.map((e) => ({ date: e.date, title: e.title, category: e.category, amount: parseFloat(e.amount), notes: e.notes || "" })) }, null, 2);
+  if (expenses.length === 0) {
+    toast("No expenses", "error");
+    return;
+  }
+  const json = JSON.stringify(
+    {
+      month: getMonthKey(),
+      expenses: expenses.map((e) => ({
+        date: e.date,
+        title: e.title,
+        category: e.category,
+        amount: parseFloat(e.amount),
+        notes: e.notes || "",
+      })),
+    },
+    null,
+    2,
+  );
   downloadFile(json, `expenses-${getMonthKey()}.json`, "application/json");
   toast("Expenses JSON exported", "success");
 }
 
 function exportBudgetCSV() {
-  if (budgetItems.length === 0) { toast("No budget items", "error"); return; }
-  const csv = ["Budget Name,Category Limit,Planned Amount,Amount Spent,Variance", ...budgetItems.map((i) => {
-    const cat = i.category || 'Other';
-    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
-    return `"${i.title}","${cat}","${i.amount}","${spent}","${parseFloat(i.amount) - spent}"`;
-  })].join("\n");
+  if (budgetItems.length === 0) {
+    toast("No budget items", "error");
+    return;
+  }
+  const csv = [
+    "Budget Name,Category Limit,Planned Amount,Amount Spent,Variance",
+    ...budgetItems.map((i) => {
+      const cat = i.category || "Other";
+      const spent = expenses
+        .filter((e) => e.category === cat)
+        .reduce((s, e) => s + parseFloat(e.amount), 0);
+      return `"${i.title}","${cat}","${i.amount}","${spent}","${parseFloat(i.amount) - spent}"`;
+    }),
+  ].join("\n");
   downloadFile(csv, `budget-${getMonthKey()}.csv`, "text/csv");
   toast("Budget CSV exported", "success");
 }
 
 function exportIncomeCSV() {
-  if (incomeEntries.length === 0) { toast("No income entries", "error"); return; }
-  const csv = ["Date,Title,Source,Amount,Notes", ...incomeEntries.map((e) => `"${e.date}","${e.title}","${e.source}","${e.amount}","${e.notes || ""}"`)].join("\n");
+  if (incomeEntries.length === 0) {
+    toast("No income entries", "error");
+    return;
+  }
+  const csv = [
+    "Date,Title,Source,Amount,Notes",
+    ...incomeEntries.map(
+      (e) =>
+        `"${e.date}","${e.title}","${e.source}","${e.amount}","${e.notes || ""}"`,
+    ),
+  ].join("\n");
   downloadFile(csv, `income-${getMonthKey()}.csv`, "text/csv");
   toast("Income CSV exported", "success");
 }
 
 function exportTemplate() {
-  const c = userSettings.currency || 'Rs';
+  const c = userSettings.currency || "Rs";
   const template = `Date,Title,Category,Amount,Notes
 2026-03-01,Groceries,Food,1500,Weekly groceries from store
 2026-03-02,Uber ride,Transport,350,Office commute
@@ -1224,15 +1907,22 @@ function exportTemplate() {
 }
 
 function exportFullReport() {
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const budgetedCats = new Set(budgetItems.map(i => i.category || 'Other'));
-  const budgetSpent = expenses.filter(e => budgetedCats.has(e.category)).reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  const budgetedCats = new Set(budgetItems.map((i) => i.category || "Other"));
+  const budgetSpent = expenses
+    .filter((e) => budgetedCats.has(e.category))
+    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
   const dailySpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const remaining = incomeTotal - dailySpent;
 
   const catTotals = {};
-  expenses.forEach((e) => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
+  expenses.forEach((e) => {
+    catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount);
+  });
 
   let r = `EXPENSE TRACKER — MONTHLY REPORT\n`;
   r += `Month: ${document.getElementById("currentMonthLabel").textContent}\n`;
@@ -1244,24 +1934,32 @@ function exportFullReport() {
   r += `Total Daily Spent:  ${fmtCurr(dailySpent)}\n`;
   r += `Remaining:          ${fmtCurr(remaining)}\n\n`;
   r += `INCOME RECORDS (${incomeEntries.length} entries)\n${"-".repeat(30)}\n`;
-  incomeEntries.forEach((e) => { r += `${e.date} | ${e.title} | ${e.source} | + ${fmtCurr(e.amount)}${e.notes ? " | " + e.notes : ""}\n`; });
+  incomeEntries.forEach((e) => {
+    r += `${e.date} | ${e.title} | ${e.source} | + ${fmtCurr(e.amount)}${e.notes ? " | " + e.notes : ""}\n`;
+  });
   r += "\n";
   r += `BUDGET PLAN (${budgetItems.length} items)\n${"-".repeat(30)}\n`;
   budgetItems.forEach((i) => {
-    const cat = i.category || 'Other';
-    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const cat = i.category || "Other";
+    const spent = expenses
+      .filter((e) => e.category === cat)
+      .reduce((s, e) => s + parseFloat(e.amount), 0);
     r += `${i.title} (${cat}) Limit: ${fmtCurr(i.amount)} | Spent: ${fmtCurr(spent)} | Variance: ${fmtCurr(parseFloat(i.amount) - spent)}\n`;
   });
   r += "\n";
   r += `CATEGORY BREAKDOWN\n${"-".repeat(30)}\n`;
-  Object.entries(catTotals).sort((a, b) => b[1] - a[1]).forEach(([cat, amt]) => {
-    r += `${cat}: ${fmtCurr(amt)} (${dailySpent > 0 ? ((amt / dailySpent) * 100).toFixed(1) : 0}%)\n`;
-  });
+  Object.entries(catTotals)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([cat, amt]) => {
+      r += `${cat}: ${fmtCurr(amt)} (${dailySpent > 0 ? ((amt / dailySpent) * 100).toFixed(1) : 0}%)\n`;
+    });
   r += "\n";
   r += `ALL EXPENSES (${expenses.length} entries)\n${"-".repeat(30)}\n`;
-  expenses.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach((e) => {
-    r += `${e.date} | ${e.title} | ${e.category} | ${fmtCurr(e.amount)}${e.notes ? " | " + e.notes : ""}\n`;
-  });
+  expenses
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .forEach((e) => {
+      r += `${e.date} | ${e.title} | ${e.category} | ${fmtCurr(e.amount)}${e.notes ? " | " + e.notes : ""}\n`;
+    });
   downloadFile(r, `full-report-${getMonthKey()}.txt`, "text/plain");
   toast("Full report exported", "success");
 }
@@ -1270,15 +1968,27 @@ function downloadFile(content, filename, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // =============================================
 // CHARTS / TRENDS
 // =============================================
-const CHART_COLORS = ["#6c5ce7", "#0984e3", "#00b894", "#f39c12", "#e74c3c", "#a29bfe", "#fd79a8", "#636e72"];
+const CHART_COLORS = [
+  "#6c5ce7",
+  "#0984e3",
+  "#00b894",
+  "#f39c12",
+  "#e74c3c",
+  "#a29bfe",
+  "#fd79a8",
+  "#636e72",
+];
 let apexInstances = {};
 
 // L8 FIX: Re-render charts automatically when Trends tab is active
@@ -1304,10 +2014,14 @@ function renderCharts() {
     renderDailyChart,
     renderBudgetProgress,
     renderTopExpenses,
-    renderMonthComparison
+    renderMonthComparison,
   ];
-  charts.forEach(fn => {
-    try { fn(); } catch (err) { console.error(`Chart error in ${fn.name}:`, err); }
+  charts.forEach((fn) => {
+    try {
+      fn();
+    } catch (err) {
+      console.error(`Chart error in ${fn.name}:`, err);
+    }
   });
 }
 
@@ -1316,20 +2030,39 @@ function renderCharts() {
 // =============================================
 function renderKPIs() {
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
 
   // Days calculation
   const startDay = userSettings.month_start_day;
   const now = new Date();
-  const cycleStartDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const cycleStartDate = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
+    startDay,
+  );
   const eYear = currentMonth.getFullYear();
   const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
   const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
+  const cycleEndDate = new Date(
+    eYear,
+    eMonth,
+    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
+  );
 
-  const daysElapsed = Math.max(1, Math.ceil((Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24)));
-  const totalDays = Math.max(1, Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)));
+  const daysElapsed = Math.max(
+    1,
+    Math.ceil(
+      (Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24),
+    ),
+  );
+  const totalDays = Math.max(
+    1,
+    Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)),
+  );
   const daysLeft = Math.max(0, totalDays - daysElapsed);
 
   // 1. Average Daily Spend
@@ -1340,7 +2073,9 @@ function renderKPIs() {
   if (sub1) {
     if (incomeTotal > 0) {
       const budgetedDaily = incomeTotal / totalDays;
-      const diff = ((avgDaily - budgetedDaily) / budgetedDaily * 100).toFixed(0);
+      const diff = (((avgDaily - budgetedDaily) / budgetedDaily) * 100).toFixed(
+        0,
+      );
       if (avgDaily <= budgetedDaily) {
         sub1.textContent = `✅ ${Math.abs(diff)}% under target`;
         sub1.className = "kpi-sub positive";
@@ -1372,13 +2107,16 @@ function renderKPIs() {
   if (sub3) {
     if (budgetTotal > 0) {
       const projPct = ((projectedSpend / budgetTotal) * 100).toFixed(0);
-      const overUnder = projectedSpend > budgetTotal ? "over budget" : "within budget";
+      const overUnder =
+        projectedSpend > budgetTotal ? "over budget" : "within budget";
       sub3.textContent = `${projPct}% of budget — ${overUnder}`;
-      sub3.className = projectedSpend > budgetTotal ? "kpi-sub negative" : "kpi-sub positive";
+      sub3.className =
+        projectedSpend > budgetTotal ? "kpi-sub negative" : "kpi-sub positive";
     } else if (incomeTotal > 0) {
       const projPct = ((projectedSpend / incomeTotal) * 100).toFixed(0);
       sub3.textContent = `${projPct}% of income`;
-      sub3.className = projectedSpend > incomeTotal ? "kpi-sub negative" : "kpi-sub positive";
+      sub3.className =
+        projectedSpend > incomeTotal ? "kpi-sub negative" : "kpi-sub positive";
     } else {
       sub3.textContent = `Based on ${daysElapsed} day avg`;
       sub3.className = "kpi-sub";
@@ -1386,7 +2124,8 @@ function renderKPIs() {
   }
 
   // 4. Savings Rate
-  const savingsRate = incomeTotal > 0 ? ((incomeTotal - totalSpent) / incomeTotal * 100) : 0;
+  const savingsRate =
+    incomeTotal > 0 ? ((incomeTotal - totalSpent) / incomeTotal) * 100 : 0;
   const el4 = document.getElementById("kpiSavingsRateVal");
   const sub4 = document.getElementById("kpiSavingsRateSub");
   if (el4) el4.textContent = `${savingsRate.toFixed(1)}%`;
@@ -1411,14 +2150,18 @@ function renderKPIs() {
 
   // 5. Largest Category
   const catTotals = {};
-  expenses.forEach(e => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
+  expenses.forEach((e) => {
+    catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount);
+  });
   const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
   const el5 = document.getElementById("kpiTopCategoryVal");
   const sub5 = document.getElementById("kpiTopCategorySub");
-  if (el5) el5.textContent = topCat ? `${getCatIcon(topCat[0])} ${topCat[0]}` : "—";
+  if (el5)
+    el5.textContent = topCat ? `${getCatIcon(topCat[0])} ${topCat[0]}` : "—";
   if (sub5) {
     if (topCat) {
-      const pct = totalSpent > 0 ? ((topCat[1] / totalSpent) * 100).toFixed(0) : 0;
+      const pct =
+        totalSpent > 0 ? ((topCat[1] / totalSpent) * 100).toFixed(0) : 0;
       sub5.textContent = `${fmtCurr(topCat[1])} (${pct}% of total)`;
       sub5.className = pct > 40 ? "kpi-sub warning" : "kpi-sub info";
     } else {
@@ -1428,7 +2171,7 @@ function renderKPIs() {
   }
 
   // 6. Budget Utilization
-  const budgetUtilPct = budgetTotal > 0 ? ((totalSpent / budgetTotal) * 100) : 0;
+  const budgetUtilPct = budgetTotal > 0 ? (totalSpent / budgetTotal) * 100 : 0;
   const el6 = document.getElementById("kpiBudgetUtilVal");
   const sub6 = document.getElementById("kpiBudgetUtilSub");
   if (el6) el6.textContent = `${budgetUtilPct.toFixed(0)}%`;
@@ -1454,99 +2197,142 @@ function renderKPIs() {
 // =============================================
 function getCycleDates() {
   const startDay = userSettings.month_start_day;
-  const cycleStartDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const cycleStartDate = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
+    startDay,
+  );
   const eYear = currentMonth.getFullYear();
   const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
   const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
+  const cycleEndDate = new Date(
+    eYear,
+    eMonth,
+    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
+  );
   const now = new Date();
-  const daysElapsed = Math.max(1, Math.ceil((Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24)));
-  const totalDays = Math.max(1, Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)));
+  const daysElapsed = Math.max(
+    1,
+    Math.ceil(
+      (Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24),
+    ),
+  );
+  const totalDays = Math.max(
+    1,
+    Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)),
+  );
   const daysLeft = Math.max(0, totalDays - daysElapsed);
   return { cycleStartDate, cycleEndDate, daysElapsed, totalDays, daysLeft };
 }
 
 function renderDailySpendingRoom() {
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const availableBalance = incomeTotal - totalSpent;
   const { daysLeft, totalDays, daysElapsed } = getCycleDates();
 
   const budgetPerDay = daysLeft > 0 ? availableBalance / daysLeft : 0;
-  const today = new Date().toISOString().split('T')[0];
-  const todaySpent = expenses.filter(e => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const today = new Date().toISOString().split("T")[0];
+  const todaySpent = expenses
+    .filter((e) => (e.date || "").split("T")[0] === today)
+    .reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Available Balance
-  const elBal = document.getElementById('drAvailableBalance');
-  const subBal = document.getElementById('drAvailableSub');
+  const elBal = document.getElementById("drAvailableBalance");
+  const subBal = document.getElementById("drAvailableSub");
   if (elBal) {
     elBal.textContent = fmtCurr(availableBalance);
-    elBal.className = `daily-room-kpi-value ${availableBalance < 0 ? 'text-red' : 'text-green'}`;
+    elBal.className = `daily-room-kpi-value ${availableBalance < 0 ? "text-red" : "text-green"}`;
   }
   if (subBal) {
     if (availableBalance < 0) {
       subBal.textContent = `⚠ Deficit of ${fmtCurr(Math.abs(availableBalance))}`;
-      subBal.className = 'daily-room-kpi-sub negative';
+      subBal.className = "daily-room-kpi-sub negative";
     } else {
-      const savPct = incomeTotal > 0 ? ((availableBalance / incomeTotal) * 100).toFixed(0) : 0;
+      const savPct =
+        incomeTotal > 0
+          ? ((availableBalance / incomeTotal) * 100).toFixed(0)
+          : 0;
       subBal.textContent = `${savPct}% of income remaining`;
-      subBal.className = 'daily-room-kpi-sub positive';
+      subBal.className = "daily-room-kpi-sub positive";
     }
   }
 
   // Days Remaining
-  const elDays = document.getElementById('drDaysRemaining');
-  const subDays = document.getElementById('drDaysRemainingSub');
+  const elDays = document.getElementById("drDaysRemaining");
+  const subDays = document.getElementById("drDaysRemainingSub");
   if (elDays) elDays.textContent = daysLeft;
   if (subDays) {
     const pctDone = ((daysElapsed / totalDays) * 100).toFixed(0);
     subDays.textContent = `${pctDone}% of ${totalDays}-day cycle done`;
-    subDays.className = 'daily-room-kpi-sub info';
+    subDays.className = "daily-room-kpi-sub info";
   }
 
   // Budget Per Day
-  const elBpd = document.getElementById('drBudgetPerDay');
-  const subBpd = document.getElementById('drBudgetPerDaySub');
+  const elBpd = document.getElementById("drBudgetPerDay");
+  const subBpd = document.getElementById("drBudgetPerDaySub");
   if (elBpd) {
-    elBpd.textContent = budgetPerDay > 0 ? fmtCurr(budgetPerDay) : (daysLeft === 0 ? 'Cycle ended' : fmtCurr(0));
-    elBpd.className = `daily-room-kpi-value ${budgetPerDay <= 0 ? 'text-red' : budgetPerDay < (incomeTotal / totalDays) * 0.5 ? 'text-orange' : 'text-accent'}`;
+    elBpd.textContent =
+      budgetPerDay > 0
+        ? fmtCurr(budgetPerDay)
+        : daysLeft === 0
+          ? "Cycle ended"
+          : fmtCurr(0);
+    elBpd.className = `daily-room-kpi-value ${budgetPerDay <= 0 ? "text-red" : budgetPerDay < (incomeTotal / totalDays) * 0.5 ? "text-orange" : "text-accent"}`;
   }
   if (subBpd) {
     if (daysLeft > 0 && incomeTotal > 0) {
       const idealDaily = incomeTotal / totalDays;
-      const diff = ((budgetPerDay - idealDaily) / idealDaily * 100).toFixed(0);
-      subBpd.textContent = budgetPerDay >= idealDaily ? `✅ ${Math.abs(diff)}% above target pace` : `⚠ ${Math.abs(diff)}% below target pace`;
-      subBpd.className = budgetPerDay >= idealDaily ? 'daily-room-kpi-sub positive' : 'daily-room-kpi-sub negative';
+      const diff = (((budgetPerDay - idealDaily) / idealDaily) * 100).toFixed(
+        0,
+      );
+      subBpd.textContent =
+        budgetPerDay >= idealDaily
+          ? `✅ ${Math.abs(diff)}% above target pace`
+          : `⚠ ${Math.abs(diff)}% below target pace`;
+      subBpd.className =
+        budgetPerDay >= idealDaily
+          ? "daily-room-kpi-sub positive"
+          : "daily-room-kpi-sub negative";
     } else {
       subBpd.textContent = `${fmtCurr(availableBalance)} ÷ ${daysLeft} days`;
-      subBpd.className = 'daily-room-kpi-sub';
+      subBpd.className = "daily-room-kpi-sub";
     }
   }
 
   // Today's Spent
-  const elToday = document.getElementById('drTodaySpent');
-  const subToday = document.getElementById('drTodaySub');
+  const elToday = document.getElementById("drTodaySpent");
+  const subToday = document.getElementById("drTodaySub");
   if (elToday) {
     elToday.textContent = fmtCurr(todaySpent);
-    elToday.className = `daily-room-kpi-value ${budgetPerDay > 0 && todaySpent > budgetPerDay ? 'text-red' : todaySpent > budgetPerDay * 0.8 ? 'text-orange' : 'text-green'}`;
+    elToday.className = `daily-room-kpi-value ${budgetPerDay > 0 && todaySpent > budgetPerDay ? "text-red" : todaySpent > budgetPerDay * 0.8 ? "text-orange" : "text-green"}`;
   }
   if (subToday) {
     if (budgetPerDay > 0) {
       const todayRoom = budgetPerDay - todaySpent;
-      subToday.textContent = todayRoom >= 0 ? `${fmtCurr(todayRoom)} room left today` : `Over by ${fmtCurr(Math.abs(todayRoom))}`;
-      subToday.className = todayRoom >= 0 ? 'daily-room-kpi-sub positive' : 'daily-room-kpi-sub negative';
+      subToday.textContent =
+        todayRoom >= 0
+          ? `${fmtCurr(todayRoom)} room left today`
+          : `Over by ${fmtCurr(Math.abs(todayRoom))}`;
+      subToday.className =
+        todayRoom >= 0
+          ? "daily-room-kpi-sub positive"
+          : "daily-room-kpi-sub negative";
     } else {
-      subToday.textContent = 'No daily budget';
-      subToday.className = 'daily-room-kpi-sub';
+      subToday.textContent = "No daily budget";
+      subToday.className = "daily-room-kpi-sub";
     }
   }
 
   // Update subtitle
-  const subtitle = document.getElementById('dailyRoomSubtitle');
+  const subtitle = document.getElementById("dailyRoomSubtitle");
   if (subtitle && daysLeft > 0 && budgetPerDay > 0) {
     subtitle.textContent = `You can spend up to ${fmtCurr(budgetPerDay)} per day for the next ${daysLeft} days`;
   } else if (subtitle && daysLeft === 0) {
-    subtitle.textContent = 'This cycle has ended';
+    subtitle.textContent = "This cycle has ended";
   }
 }
 
@@ -1554,60 +2340,92 @@ function renderDailySpendingRoom() {
 // DAILY ROOM GAUGE (Today's spending vs daily allowance)
 // =============================================
 function renderDailyRoomGauge() {
-  const el = document.getElementById('dailyRoomGaugeChart');
+  const el = document.getElementById("dailyRoomGaugeChart");
   if (!el) return;
 
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const availableBalance = incomeTotal - totalSpent;
   const { daysLeft } = getCycleDates();
   const budgetPerDay = daysLeft > 0 ? availableBalance / daysLeft : 0;
-  const today = new Date().toISOString().split('T')[0];
-  const todaySpent = expenses.filter(e => (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+  const today = new Date().toISOString().split("T")[0];
+  const todaySpent = expenses
+    .filter((e) => (e.date || "").split("T")[0] === today)
+    .reduce((s, e) => s + parseFloat(e.amount), 0);
 
   if (budgetPerDay <= 0 && todaySpent === 0) {
-    if (apexInstances.dailyRoomGauge) { apexInstances.dailyRoomGauge.destroy(); delete apexInstances.dailyRoomGauge; }
-    el.innerHTML = '<p class="chart-empty">📊 No daily budget data available.<br><small>Add income and budget items to see your daily spending room.</small></p>';
+    if (apexInstances.dailyRoomGauge) {
+      apexInstances.dailyRoomGauge.destroy();
+      delete apexInstances.dailyRoomGauge;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">📊 No daily budget data available.<br><small>Add income and budget items to see your daily spending room.</small></p>';
     return;
   }
 
-  const usedPct = budgetPerDay > 0 ? Math.min((todaySpent / budgetPerDay) * 100, 150) : (todaySpent > 0 ? 100 : 0);
-  const gaugeColor = usedPct <= 60 ? '#00b894' : usedPct <= 85 ? '#f39c12' : '#e74c3c';
+  const usedPct =
+    budgetPerDay > 0
+      ? Math.min((todaySpent / budgetPerDay) * 100, 150)
+      : todaySpent > 0
+        ? 100
+        : 0;
+  const gaugeColor =
+    usedPct <= 60 ? "#00b894" : usedPct <= 85 ? "#f39c12" : "#e74c3c";
   const roomLeft = Math.max(0, budgetPerDay - todaySpent);
 
-  if (apexInstances.dailyRoomGauge) { apexInstances.dailyRoomGauge.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.dailyRoomGauge) {
+    apexInstances.dailyRoomGauge.destroy();
+  }
+  el.innerHTML = "";
 
   const options = {
     series: [Math.min(usedPct, 100)],
-    chart: { type: 'radialBar', height: 280, background: 'transparent' },
+    chart: { type: "radialBar", height: 280, background: "transparent" },
     plotOptions: {
       radialBar: {
-        startAngle: -135, endAngle: 135,
-        hollow: { size: '60%', background: 'transparent' },
-        track: { background: 'rgba(255,255,255,0.06)', strokeWidth: '100%' },
+        startAngle: -135,
+        endAngle: 135,
+        hollow: { size: "60%", background: "transparent" },
+        track: { background: "rgba(255,255,255,0.06)", strokeWidth: "100%" },
         dataLabels: {
           name: {
-            fontSize: '13px', color: '#a0aec0', offsetY: 30,
-            formatter: function () { return roomLeft > 0 ? `${fmtCurr(roomLeft)} left` : 'Over budget!'; }
+            fontSize: "13px",
+            color: "#a0aec0",
+            offsetY: 30,
+            formatter: function () {
+              return roomLeft > 0
+                ? `${fmtCurr(roomLeft)} left`
+                : "Over budget!";
+            },
           },
           value: {
-            fontSize: '2rem', fontWeight: '800', color: '#e2e8f0', offsetY: -12,
-            formatter: function (val) { return val.toFixed(0) + '% used'; }
-          }
-        }
-      }
+            fontSize: "2rem",
+            fontWeight: "800",
+            color: "#e2e8f0",
+            offsetY: -12,
+            formatter: function (val) {
+              return val.toFixed(0) + "% used";
+            },
+          },
+        },
+      },
     },
     fill: {
-      type: 'gradient',
+      type: "gradient",
       gradient: {
-        shade: 'dark', type: 'horizontal', shadeIntensity: 0.5,
-        gradientToColors: [gaugeColor], stops: [0, 100]
-      }
+        shade: "dark",
+        type: "horizontal",
+        shadeIntensity: 0.5,
+        gradientToColors: [gaugeColor],
+        stops: [0, 100],
+      },
     },
     colors: [gaugeColor],
-    stroke: { lineCap: 'round' },
-    labels: ['Daily Budget']
+    stroke: { lineCap: "round" },
+    labels: ["Daily Budget"],
   };
 
   apexInstances.dailyRoomGauge = new ApexCharts(el, options);
@@ -1618,74 +2436,116 @@ function renderDailyRoomGauge() {
 // SPENDING PACE (Budget consumed % vs Time elapsed %)
 // =============================================
 function renderSpendingPace() {
-  const el = document.getElementById('spendingPaceChart');
+  const el = document.getElementById("spendingPaceChart");
   if (!el) return;
 
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const target = budgetTotal > 0 ? budgetTotal : (incomeTotal > 0 ? incomeTotal : 0);
+  const target =
+    budgetTotal > 0 ? budgetTotal : incomeTotal > 0 ? incomeTotal : 0;
   const { daysElapsed, totalDays } = getCycleDates();
 
   const timeElapsedPct = ((daysElapsed / totalDays) * 100).toFixed(1);
-  const budgetConsumedPct = target > 0 ? ((totalSpent / target) * 100).toFixed(1) : 0;
+  const budgetConsumedPct =
+    target > 0 ? ((totalSpent / target) * 100).toFixed(1) : 0;
 
   if (target === 0) {
-    if (apexInstances.spendPace) { apexInstances.spendPace.destroy(); delete apexInstances.spendPace; }
-    el.innerHTML = '<p class="chart-empty">📊 Set a budget or add income to see spending pace.<br><small>Go to Budget Plan or Income tab to get started.</small></p>';
+    if (apexInstances.spendPace) {
+      apexInstances.spendPace.destroy();
+      delete apexInstances.spendPace;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">📊 Set a budget or add income to see spending pace.<br><small>Go to Budget Plan or Income tab to get started.</small></p>';
     return;
   }
 
-  if (apexInstances.spendPace) { apexInstances.spendPace.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.spendPace) {
+    apexInstances.spendPace.destroy();
+  }
+  el.innerHTML = "";
 
-  const spendColor = parseFloat(budgetConsumedPct) > parseFloat(timeElapsedPct) ? '#e74c3c' : '#00b894';
+  const spendColor =
+    parseFloat(budgetConsumedPct) > parseFloat(timeElapsedPct)
+      ? "#e74c3c"
+      : "#00b894";
 
   const options = {
     series: [
-      { name: 'Time Elapsed', data: [parseFloat(timeElapsedPct)] },
-      { name: 'Budget Used', data: [Math.min(parseFloat(budgetConsumedPct), 100)] }
+      { name: "Time Elapsed", data: [parseFloat(timeElapsedPct)] },
+      {
+        name: "Budget Used",
+        data: [Math.min(parseFloat(budgetConsumedPct), 100)],
+      },
     ],
-    theme: { mode: 'dark' },
-    chart: { type: 'bar', height: 220, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
-    plotOptions: {
-      bar: { horizontal: true, columnWidth: '60%', borderRadius: 6, barHeight: '50%',
-        dataLabels: { position: 'center' }
-      }
+    theme: { mode: "dark" },
+    chart: {
+      type: "bar",
+      height: 220,
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: "#e2e8f0",
     },
-    colors: ['#636e72', spendColor],
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        columnWidth: "60%",
+        borderRadius: 6,
+        barHeight: "50%",
+        dataLabels: { position: "center" },
+      },
+    },
+    colors: ["#636e72", spendColor],
     dataLabels: {
       enabled: true,
-      style: { fontSize: '14px', fontWeight: '700', colors: ['#e2e8f0'] },
-      formatter: function (val) { return val.toFixed(1) + '%'; }
+      style: { fontSize: "14px", fontWeight: "700", colors: ["#e2e8f0"] },
+      formatter: function (val) {
+        return val.toFixed(1) + "%";
+      },
     },
-    stroke: { show: true, width: 2, colors: ['transparent'] },
-    xaxis: { categories: ['Progress'], max: 100, labels: { formatter: function (val) { return val + '%'; } } },
+    stroke: { show: true, width: 2, colors: ["transparent"] },
+    xaxis: {
+      categories: ["Progress"],
+      max: 100,
+      labels: {
+        formatter: function (val) {
+          return val + "%";
+        },
+      },
+    },
     yaxis: { labels: { show: false } },
     tooltip: {
-      theme: 'dark', shared: false,
-      y: { formatter: function (val) { return val.toFixed(1) + '%'; } }
+      theme: "dark",
+      shared: false,
+      y: {
+        formatter: function (val) {
+          return val.toFixed(1) + "%";
+        },
+      },
     },
-    legend: { position: 'bottom' },
-    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+    legend: { position: "bottom" },
+    grid: { borderColor: "rgba(255,255,255,0.05)" },
   };
 
   apexInstances.spendPace = new ApexCharts(el, options);
   apexInstances.spendPace.render();
 
   // Update subtitle
-  const subtitle = document.getElementById('spendingPaceSubtitle');
+  const subtitle = document.getElementById("spendingPaceSubtitle");
   if (subtitle) {
     const diff = parseFloat(budgetConsumedPct) - parseFloat(timeElapsedPct);
     if (diff > 5) {
       subtitle.textContent = `⚠ Spending ${Math.abs(diff).toFixed(0)}% ahead of pace — slow down!`;
-      subtitle.style.color = '#e74c3c';
+      subtitle.style.color = "#e74c3c";
     } else if (diff < -5) {
       subtitle.textContent = `✅ Spending ${Math.abs(diff).toFixed(0)}% behind pace — great job!`;
-      subtitle.style.color = '#00b894';
+      subtitle.style.color = "#00b894";
     } else {
       subtitle.textContent = `On track — budget usage matches cycle progress`;
-      subtitle.style.color = '#a29bfe';
+      subtitle.style.color = "#a29bfe";
     }
   }
 }
@@ -1694,12 +2554,16 @@ function renderSpendingPace() {
 // PER-CATEGORY DAILY ALLOWANCE
 // =============================================
 function renderCategoryDailyAllowance() {
-  const el = document.getElementById('categoryDailyAllowanceChart');
+  const el = document.getElementById("categoryDailyAllowanceChart");
   if (!el) return;
 
   if (budgetItems.length === 0) {
-    if (apexInstances.catDaily) { apexInstances.catDaily.destroy(); delete apexInstances.catDaily; }
-    el.innerHTML = '<p class="chart-empty">📋 No budget items set.<br><small>Add budget limits in the Budget Plan tab to see per-category daily allowances.</small></p>';
+    if (apexInstances.catDaily) {
+      apexInstances.catDaily.destroy();
+      delete apexInstances.catDaily;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">📋 No budget items set.<br><small>Add budget limits in the Budget Plan tab to see per-category daily allowances.</small></p>';
     return;
   }
 
@@ -1707,14 +2571,14 @@ function renderCategoryDailyAllowance() {
 
   // Group budget by category
   const catBudgets = {};
-  budgetItems.forEach(item => {
-    const cat = item.category || 'Other';
+  budgetItems.forEach((item) => {
+    const cat = item.category || "Other";
     catBudgets[cat] = (catBudgets[cat] || 0) + parseFloat(item.amount);
   });
 
   // Calculate spent per category
   const catSpent = {};
-  expenses.forEach(e => {
+  expenses.forEach((e) => {
     if (catBudgets[e.category] !== undefined) {
       catSpent[e.category] = (catSpent[e.category] || 0) + parseFloat(e.amount);
     }
@@ -1732,8 +2596,12 @@ function renderCategoryDailyAllowance() {
       const spent = catSpent[cat] || 0;
       const remaining = budget - spent;
       const perDay = daysLeft > 0 ? remaining / daysLeft : 0;
-      const today = new Date().toISOString().split('T')[0];
-      const todayCatSpent = expenses.filter(e => e.category === cat && (e.date || '').split('T')[0] === today).reduce((s, e) => s + parseFloat(e.amount), 0);
+      const today = new Date().toISOString().split("T")[0];
+      const todayCatSpent = expenses
+        .filter(
+          (e) => e.category === cat && (e.date || "").split("T")[0] === today,
+        )
+        .reduce((s, e) => s + parseFloat(e.amount), 0);
 
       categories.push(`${getCatIcon(cat)} ${cat}`);
       dailyAllowance.push(Math.max(0, perDay));
@@ -1741,48 +2609,70 @@ function renderCategoryDailyAllowance() {
     });
 
   if (categories.length === 0) {
-    el.innerHTML = '<p class="chart-empty">📋 No budget categories to display.</p>';
+    el.innerHTML =
+      '<p class="chart-empty">📋 No budget categories to display.</p>';
     return;
   }
 
-  if (apexInstances.catDaily) { apexInstances.catDaily.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.catDaily) {
+    apexInstances.catDaily.destroy();
+  }
+  el.innerHTML = "";
 
   const options = {
     series: [
-      { name: 'Daily Allowance', data: dailyAllowance },
-      { name: "Today's Spent", data: dailyUsed }
+      { name: "Daily Allowance", data: dailyAllowance },
+      { name: "Today's Spent", data: dailyUsed },
     ],
-    theme: { mode: 'dark' },
+    theme: { mode: "dark" },
     chart: {
-      type: 'bar', height: Math.max(220, categories.length * 55),
-      toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0'
+      type: "bar",
+      height: Math.max(220, categories.length * 55),
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: "#e2e8f0",
     },
     plotOptions: {
-      bar: { horizontal: true, borderRadius: 5, barHeight: '65%',
-        dataLabels: { position: 'top' }
-      }
+      bar: {
+        horizontal: true,
+        borderRadius: 5,
+        barHeight: "65%",
+        dataLabels: { position: "top" },
+      },
     },
-    colors: ['#6c5ce7', '#f39c12'],
+    colors: ["#6c5ce7", "#f39c12"],
     dataLabels: {
-      enabled: true, offsetX: 25,
-      style: { fontSize: '11px', fontWeight: '600', colors: ['#e2e8f0'] },
-      formatter: function (val) { return val > 0 ? fmtCurr(val) : ''; }
+      enabled: true,
+      offsetX: 25,
+      style: { fontSize: "11px", fontWeight: "600", colors: ["#e2e8f0"] },
+      formatter: function (val) {
+        return val > 0 ? fmtCurr(val) : "";
+      },
     },
-    stroke: { show: true, width: 2, colors: ['transparent'] },
+    stroke: { show: true, width: 2, colors: ["transparent"] },
     xaxis: {
       categories: categories,
-      labels: { formatter: function (val) { return fmtCurr(val); } }
+      labels: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
     },
     yaxis: {
-      labels: { style: { fontWeight: 'bold', fontSize: '12px' } }
+      labels: { style: { fontWeight: "bold", fontSize: "12px" } },
     },
     tooltip: {
-      theme: 'dark', shared: true, intersect: false,
-      y: { formatter: function (val) { return fmtCurr(val); } }
+      theme: "dark",
+      shared: true,
+      intersect: false,
+      y: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
     },
-    legend: { position: 'bottom' },
-    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+    legend: { position: "bottom" },
+    grid: { borderColor: "rgba(255,255,255,0.05)" },
   };
 
   apexInstances.catDaily = new ApexCharts(el, options);
@@ -1795,40 +2685,78 @@ function renderCategoryDailyAllowance() {
 function renderIncomeVsExpenseChart() {
   const el = document.getElementById("incomeVsExpenseChart");
   if (!el) return;
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const savings = incomeTotal - totalSpent;
 
   if (incomeTotal === 0 && totalSpent === 0) {
-    if (apexInstances.incVsExp) { apexInstances.incVsExp.destroy(); delete apexInstances.incVsExp; }
-    el.innerHTML = '<p class="chart-empty">💹 No income or expense data yet.<br><small>Add income and log expenses to see the flow chart.</small></p>';
+    if (apexInstances.incVsExp) {
+      apexInstances.incVsExp.destroy();
+      delete apexInstances.incVsExp;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">💹 No income or expense data yet.<br><small>Add income and log expenses to see the flow chart.</small></p>';
     return;
   }
 
-  if (apexInstances.incVsExp) { apexInstances.incVsExp.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.incVsExp) {
+    apexInstances.incVsExp.destroy();
+  }
+  el.innerHTML = "";
 
   const options = {
     series: [
-      { name: 'Income', data: [incomeTotal] },
-      { name: 'Expenses', data: [totalSpent] },
-      { name: savings >= 0 ? 'Savings' : 'Deficit', data: [Math.abs(savings)] }
+      { name: "Income", data: [incomeTotal] },
+      { name: "Expenses", data: [totalSpent] },
+      { name: savings >= 0 ? "Savings" : "Deficit", data: [Math.abs(savings)] },
     ],
-    theme: { mode: 'dark' },
-    chart: { type: 'bar', height: 200, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
-    plotOptions: { bar: { horizontal: false, columnWidth: '55%', borderRadius: 6, dataLabels: { position: 'top' } } },
-    colors: ['#00b894', '#e74c3c', savings >= 0 ? '#0984e3' : '#f39c12'],
-    dataLabels: {
-      enabled: true, offsetY: -20,
-      style: { fontSize: '13px', colors: ['#e2e8f0'], fontWeight: '700' },
-      formatter: function (val) { return fmtCurr(val); }
+    theme: { mode: "dark" },
+    chart: {
+      type: "bar",
+      height: 200,
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: "#e2e8f0",
     },
-    stroke: { show: true, width: 2, colors: ['transparent'] },
-    xaxis: { categories: ['This Month'], labels: { show: false } },
-    yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
-    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val); } } },
-    legend: { position: 'bottom' },
-    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+    plotOptions: {
+      bar: {
+        horizontal: false,
+        columnWidth: "55%",
+        borderRadius: 6,
+        dataLabels: { position: "top" },
+      },
+    },
+    colors: ["#00b894", "#e74c3c", savings >= 0 ? "#0984e3" : "#f39c12"],
+    dataLabels: {
+      enabled: true,
+      offsetY: -20,
+      style: { fontSize: "13px", colors: ["#e2e8f0"], fontWeight: "700" },
+      formatter: function (val) {
+        return fmtCurr(val);
+      },
+    },
+    stroke: { show: true, width: 2, colors: ["transparent"] },
+    xaxis: { categories: ["This Month"], labels: { show: false } },
+    yaxis: {
+      labels: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
+    tooltip: {
+      theme: "dark",
+      y: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
+    legend: { position: "bottom" },
+    grid: { borderColor: "rgba(255,255,255,0.05)" },
   };
 
   apexInstances.incVsExp = new ApexCharts(el, options);
@@ -1841,42 +2769,70 @@ function renderIncomeVsExpenseChart() {
 function renderSavingsGauge() {
   const el = document.getElementById("savingsGaugeChart");
   if (!el) return;
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const savingsRate = incomeTotal > 0 ? Math.max(0, ((incomeTotal - totalSpent) / incomeTotal * 100)) : 0;
+  const savingsRate =
+    incomeTotal > 0
+      ? Math.max(0, ((incomeTotal - totalSpent) / incomeTotal) * 100)
+      : 0;
 
   if (incomeTotal === 0) {
-    if (apexInstances.savGauge) { apexInstances.savGauge.destroy(); delete apexInstances.savGauge; }
-    el.innerHTML = '<p class="chart-empty">🎯 No income data for savings gauge.<br><small>Add income entries to track your savings rate.</small></p>';
+    if (apexInstances.savGauge) {
+      apexInstances.savGauge.destroy();
+      delete apexInstances.savGauge;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">🎯 No income data for savings gauge.<br><small>Add income entries to track your savings rate.</small></p>';
     return;
   }
 
-  if (apexInstances.savGauge) { apexInstances.savGauge.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.savGauge) {
+    apexInstances.savGauge.destroy();
+  }
+  el.innerHTML = "";
 
-  const gaugeColor = savingsRate >= 30 ? '#00b894' : savingsRate >= 15 ? '#f39c12' : '#e74c3c';
+  const gaugeColor =
+    savingsRate >= 30 ? "#00b894" : savingsRate >= 15 ? "#f39c12" : "#e74c3c";
 
   const options = {
     series: [Math.min(savingsRate, 100)],
-    chart: { type: 'radialBar', height: 280, background: 'transparent' },
+    chart: { type: "radialBar", height: 280, background: "transparent" },
     plotOptions: {
       radialBar: {
-        startAngle: -135, endAngle: 135,
-        hollow: { size: '65%', background: 'transparent' },
-        track: { background: 'rgba(255,255,255,0.06)', strokeWidth: '100%' },
+        startAngle: -135,
+        endAngle: 135,
+        hollow: { size: "65%", background: "transparent" },
+        track: { background: "rgba(255,255,255,0.06)", strokeWidth: "100%" },
         dataLabels: {
-          name: { fontSize: '14px', color: '#a0aec0', offsetY: 24 },
+          name: { fontSize: "14px", color: "#a0aec0", offsetY: 24 },
           value: {
-            fontSize: '2.2rem', fontWeight: '800', color: '#e2e8f0', offsetY: -16,
-            formatter: function (val) { return val.toFixed(1) + '%'; }
-          }
-        }
-      }
+            fontSize: "2.2rem",
+            fontWeight: "800",
+            color: "#e2e8f0",
+            offsetY: -16,
+            formatter: function (val) {
+              return val.toFixed(1) + "%";
+            },
+          },
+        },
+      },
     },
-    fill: { type: 'gradient', gradient: { shade: 'dark', type: 'horizontal', shadeIntensity: 0.5, gradientToColors: [gaugeColor], stops: [0, 100] } },
+    fill: {
+      type: "gradient",
+      gradient: {
+        shade: "dark",
+        type: "horizontal",
+        shadeIntensity: 0.5,
+        gradientToColors: [gaugeColor],
+        stops: [0, 100],
+      },
+    },
     colors: [gaugeColor],
-    stroke: { lineCap: 'round' },
-    labels: ['Savings Rate']
+    stroke: { lineCap: "round" },
+    labels: ["Savings Rate"],
   };
 
   apexInstances.savGauge = new ApexCharts(el, options);
@@ -1891,24 +2847,43 @@ function renderSpendingVelocity() {
   if (!el) return;
 
   if (expenses.length === 0) {
-    if (apexInstances.velocity) { apexInstances.velocity.destroy(); delete apexInstances.velocity; }
-    el.innerHTML = '<p class="chart-empty">⚡ No expense data yet.<br><small>Log expenses in the Daily Tracker to see spending velocity.</small></p>';
+    if (apexInstances.velocity) {
+      apexInstances.velocity.destroy();
+      delete apexInstances.velocity;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">⚡ No expense data yet.<br><small>Log expenses in the Daily Tracker to see spending velocity.</small></p>';
     return;
   }
 
   const startDay = userSettings.month_start_day;
-  const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const startDate = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
+    startDay,
+  );
   const eYear = currentMonth.getFullYear();
   const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
   const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
-  const today = new Date(); today.setHours(23, 59, 59, 999);
+  const cycleEndDate = new Date(
+    eYear,
+    eMonth,
+    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
+  );
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
   const endDate = cycleEndDate > today ? today : cycleEndDate;
 
-  const totalDays = Math.ceil((cycleEndDate - startDate) / (1000 * 60 * 60 * 24));
-  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalDays = Math.ceil(
+    (cycleEndDate - startDate) / (1000 * 60 * 60 * 24),
+  );
+  const incomeTotal = incomeEntries.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const targetTotal = budgetTotal > 0 ? budgetTotal : (incomeTotal > 0 ? incomeTotal : 0);
+  const targetTotal =
+    budgetTotal > 0 ? budgetTotal : incomeTotal > 0 ? incomeTotal : 0;
 
   const categories = [];
   const cumulativeData = [];
@@ -1917,43 +2892,78 @@ function renderSpendingVelocity() {
   let curr = new Date(startDate);
 
   while (curr <= endDate) {
-    const dateStr = curr.toISOString().split('T')[0];
-    const dayLabel = `${curr.getDate()} ${curr.toLocaleString('en-US', { month: 'short' })}`;
+    const dateStr = curr.toISOString().split("T")[0];
+    const dayLabel = `${curr.getDate()} ${curr.toLocaleString("en-US", { month: "short" })}`;
     categories.push(dayLabel);
 
-    const daySpend = expenses.filter(e => (e.date || '').split('T')[0] === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const daySpend = expenses
+      .filter((e) => (e.date || "").split("T")[0] === dateStr)
+      .reduce((s, e) => s + parseFloat(e.amount), 0);
     cumulative += daySpend;
     cumulativeData.push(cumulative);
 
     const dayIndex = Math.ceil((curr - startDate) / (1000 * 60 * 60 * 24)) + 1;
-    idealData.push(targetTotal > 0 ? Math.round((targetTotal / totalDays) * dayIndex) : 0);
+    idealData.push(
+      targetTotal > 0 ? Math.round((targetTotal / totalDays) * dayIndex) : 0,
+    );
 
     curr.setDate(curr.getDate() + 1);
   }
 
-  if (apexInstances.velocity) { apexInstances.velocity.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.velocity) {
+    apexInstances.velocity.destroy();
+  }
+  el.innerHTML = "";
 
-  const series = [{ name: 'Actual Cumulative', data: cumulativeData }];
-  if (targetTotal > 0) series.push({ name: 'Ideal Pace', data: idealData });
+  const series = [{ name: "Actual Cumulative", data: cumulativeData }];
+  if (targetTotal > 0) series.push({ name: "Ideal Pace", data: idealData });
 
   const options = {
     series: series,
-    theme: { mode: 'dark' },
-    chart: { type: 'area', height: 280, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
-    colors: ['#6c5ce7', '#636e72'],
-    fill: {
-      type: ['gradient', 'solid'],
-      gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.05, stops: [0, 90, 100] },
-      opacity: [0.8, 0]
+    theme: { mode: "dark" },
+    chart: {
+      type: "area",
+      height: 280,
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: "#e2e8f0",
     },
-    stroke: { curve: 'smooth', width: [3, 2], dashArray: [0, 5] },
+    colors: ["#6c5ce7", "#636e72"],
+    fill: {
+      type: ["gradient", "solid"],
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: 0.5,
+        opacityTo: 0.05,
+        stops: [0, 90, 100],
+      },
+      opacity: [0.8, 0],
+    },
+    stroke: { curve: "smooth", width: [3, 2], dashArray: [0, 5] },
     dataLabels: { enabled: false },
-    xaxis: { categories: categories, tickAmount: Math.min(categories.length, 8) },
-    yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
-    tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: function (val) { return fmtCurr(val); } } },
-    legend: { position: 'bottom' },
-    grid: { borderColor: 'rgba(255,255,255,0.05)' }
+    xaxis: {
+      categories: categories,
+      tickAmount: Math.min(categories.length, 8),
+    },
+    yaxis: {
+      labels: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
+    tooltip: {
+      theme: "dark",
+      shared: true,
+      intersect: false,
+      y: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
+    legend: { position: "bottom" },
+    grid: { borderColor: "rgba(255,255,255,0.05)" },
   };
 
   apexInstances.velocity = new ApexCharts(el, options);
@@ -1968,19 +2978,32 @@ function renderWeeklyHeatmap() {
   if (!el) return;
 
   if (expenses.length === 0) {
-    if (apexInstances.heatmap) { apexInstances.heatmap.destroy(); delete apexInstances.heatmap; }
-    el.innerHTML = '<p class="chart-empty">🗓️ No expense data for heatmap.<br><small>Log expenses to see your weekly spending patterns.</small></p>';
+    if (apexInstances.heatmap) {
+      apexInstances.heatmap.destroy();
+      delete apexInstances.heatmap;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">🗓️ No expense data for heatmap.<br><small>Log expenses to see your weekly spending patterns.</small></p>';
     return;
   }
 
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const startDay = userSettings.month_start_day;
-  const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const startDate = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
+    startDay,
+  );
   const eYear = currentMonth.getFullYear();
   const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
   const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(eYear, eMonth, eDate || new Date(eYear, eMonth + 1, 0).getDate());
-  const today = new Date(); today.setHours(23, 59, 59, 999);
+  const cycleEndDate = new Date(
+    eYear,
+    eMonth,
+    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
+  );
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
   const endDate = cycleEndDate > today ? today : cycleEndDate;
 
   // Build week data
@@ -1993,25 +3016,33 @@ function renderWeeklyHeatmap() {
     const wk = `Week ${weekNum}`;
     if (!weeks[wk]) weeks[wk] = {};
     const dayName = dayNames[curr.getDay()];
-    const dateStr = curr.toISOString().split('T')[0];
-    const daySpend = expenses.filter(e => (e.date || '').split('T')[0] === dateStr).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const dateStr = curr.toISOString().split("T")[0];
+    const daySpend = expenses
+      .filter((e) => (e.date || "").split("T")[0] === dateStr)
+      .reduce((s, e) => s + parseFloat(e.amount), 0);
     weeks[wk][dayName] = (weeks[wk][dayName] || 0) + daySpend;
     curr.setDate(curr.getDate() + 1);
   }
 
   // Build series for heatmap
-  const series = dayNames.map(day => ({
-    name: day,
-    data: Object.keys(weeks).map(wk => ({ x: wk, y: weeks[wk][day] || 0 }))
-  })).reverse();
+  const series = dayNames
+    .map((day) => ({
+      name: day,
+      data: Object.keys(weeks).map((wk) => ({ x: wk, y: weeks[wk][day] || 0 })),
+    }))
+    .reverse();
 
-  if (apexInstances.heatmap) { apexInstances.heatmap.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.heatmap) {
+    apexInstances.heatmap.destroy();
+  }
+  el.innerHTML = "";
 
   // Compute dynamic ranges based on actual spending data
   const allDaySpends = [];
-  Object.values(weeks).forEach(wk => {
-    Object.values(wk).forEach(val => { if (val > 0) allDaySpends.push(val); });
+  Object.values(weeks).forEach((wk) => {
+    Object.values(wk).forEach((val) => {
+      if (val > 0) allDaySpends.push(val);
+    });
   });
   const maxSpend = allDaySpends.length > 0 ? Math.max(...allDaySpends) : 5000;
   const q1 = Math.round(maxSpend * 0.2) || 100;
@@ -2020,28 +3051,47 @@ function renderWeeklyHeatmap() {
 
   const options = {
     series: series,
-    theme: { mode: 'dark' },
-    chart: { type: 'heatmap', height: 260, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
+    theme: { mode: "dark" },
+    chart: {
+      type: "heatmap",
+      height: 260,
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: "#e2e8f0",
+    },
     dataLabels: { enabled: false },
-    colors: ['#6c5ce7'],
+    colors: ["#6c5ce7"],
     plotOptions: {
       heatmap: {
         radius: 4,
         enableShades: false,
         colorScale: {
           ranges: [
-            { from: -1, to: 0, color: '#1e2130', name: 'No Spend', foreColor: '#5a5f72' },
-            { from: 1, to: q1, color: '#a29bfe', name: 'Low' },
-            { from: q1 + 1, to: q2, color: '#6c5ce7', name: 'Medium' },
-            { from: q2 + 1, to: q3, color: '#0984e3', name: 'High' },
-            { from: q3 + 1, to: 9999999, color: '#e74c3c', name: 'Very High' }
-          ]
-        }
-      }
+            {
+              from: -1,
+              to: 0,
+              color: "#1e2130",
+              name: "No Spend",
+              foreColor: "#5a5f72",
+            },
+            { from: 1, to: q1, color: "#a29bfe", name: "Low" },
+            { from: q1 + 1, to: q2, color: "#6c5ce7", name: "Medium" },
+            { from: q2 + 1, to: q3, color: "#0984e3", name: "High" },
+            { from: q3 + 1, to: 9999999, color: "#e74c3c", name: "Very High" },
+          ],
+        },
+      },
     },
-    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val); } } },
-    xaxis: { type: 'category' },
-    stroke: { width: 2, colors: ['#0f1117'] }
+    tooltip: {
+      theme: "dark",
+      y: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
+    xaxis: { type: "category" },
+    stroke: { width: 2, colors: ["#0f1117"] },
   };
 
   apexInstances.heatmap = new ApexCharts(el, options);
@@ -2055,30 +3105,56 @@ function renderWeeklyHeatmap() {
 function renderCategoryChart() {
   const el = document.getElementById("categoryChart");
   if (expenses.length === 0) {
-    if (apexInstances.cat) { apexInstances.cat.destroy(); delete apexInstances.cat; }
-    el.innerHTML = '<p class="chart-empty">📊 No expense data yet.<br><small>Log expenses to see spending by category.</small></p>';
+    if (apexInstances.cat) {
+      apexInstances.cat.destroy();
+      delete apexInstances.cat;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">📊 No expense data yet.<br><small>Log expenses to see spending by category.</small></p>';
     return;
   }
-  const catTotals = {}; expenses.forEach((e) => { catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount); });
+  const catTotals = {};
+  expenses.forEach((e) => {
+    catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount);
+  });
   const sorted = Object.entries(catTotals).sort((a, b) => b[1] - a[1]);
 
-  const labels = sorted.map(i => i[0]);
-  const data = sorted.map(i => i[1]);
+  const labels = sorted.map((i) => i[0]);
+  const data = sorted.map((i) => i[1]);
 
-  if (apexInstances.cat) { apexInstances.cat.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.cat) {
+    apexInstances.cat.destroy();
+  }
+  el.innerHTML = "";
 
   const options = {
     series: data,
-    theme: { mode: 'dark' },
-    chart: { type: 'pie', height: 320, background: 'transparent', foreColor: '#e2e8f0' },
-    labels: labels.map(c => getCatIcon(c) + ' ' + c),
+    theme: { mode: "dark" },
+    chart: {
+      type: "pie",
+      height: 320,
+      background: "transparent",
+      foreColor: "#e2e8f0",
+    },
+    labels: labels.map((c) => getCatIcon(c) + " " + c),
     colors: CHART_COLORS,
     plotOptions: { pie: { expandOnClick: true } },
-    dataLabels: { enabled: true, formatter: function (val) { return val.toFixed(1) + "%" } },
-    legend: { position: 'bottom' },
+    dataLabels: {
+      enabled: true,
+      formatter: function (val) {
+        return val.toFixed(1) + "%";
+      },
+    },
+    legend: { position: "bottom" },
     stroke: { show: false },
-    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val) } } }
+    tooltip: {
+      theme: "dark",
+      y: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
   };
   apexInstances.cat = new ApexCharts(el, options);
   apexInstances.cat.render();
@@ -2087,13 +3163,21 @@ function renderCategoryChart() {
 function renderDailyChart() {
   const el = document.getElementById("dailyChart");
   if (expenses.length === 0) {
-    if (apexInstances.daily) { apexInstances.daily.destroy(); delete apexInstances.daily; }
-    el.innerHTML = '<p class="chart-empty">📅 No expense data yet.<br><small>Log expenses to see daily spending trends.</small></p>';
+    if (apexInstances.daily) {
+      apexInstances.daily.destroy();
+      delete apexInstances.daily;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">📅 No expense data yet.<br><small>Log expenses to see daily spending trends.</small></p>';
     return;
   }
 
   const startDay = userSettings.month_start_day;
-  const startDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - (startDay > 1 ? 1 : 0), startDay);
+  const startDate = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
+    startDay,
+  );
   const eYear = currentMonth.getFullYear();
   const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
   const eDate = startDay > 1 ? startDay - 1 : 0;
@@ -2106,33 +3190,67 @@ function renderDailyChart() {
   const dayTotals = {};
   let curr = new Date(startDate);
   while (curr <= endDate) {
-    dayTotals[`${curr.getDate()} ${curr.toLocaleString('en-US', { month: 'short' })}`] = 0;
+    dayTotals[
+      `${curr.getDate()} ${curr.toLocaleString("en-US", { month: "short" })}`
+    ] = 0;
     curr.setDate(curr.getDate() + 1);
   }
 
   expenses.forEach((e) => {
     const d = new Date(e.date);
-    const k = `${d.getDate()} ${d.toLocaleString('en-US', { month: 'short' })}`;
+    const k = `${d.getDate()} ${d.toLocaleString("en-US", { month: "short" })}`;
     if (dayTotals[k] !== undefined) dayTotals[k] += parseFloat(e.amount);
   });
 
   const categories = Object.keys(dayTotals);
   const data = Object.values(dayTotals);
 
-  if (apexInstances.daily) { apexInstances.daily.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.daily) {
+    apexInstances.daily.destroy();
+  }
+  el.innerHTML = "";
 
   const options = {
-    series: [{ name: 'Spent', data: data }],
-    theme: { mode: 'dark' },
-    chart: { type: 'area', height: 300, toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
-    colors: ['#0984e3'],
-    fill: { type: "gradient", gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.1, stops: [0, 90, 100] } },
+    series: [{ name: "Spent", data: data }],
+    theme: { mode: "dark" },
+    chart: {
+      type: "area",
+      height: 300,
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: "#e2e8f0",
+    },
+    colors: ["#0984e3"],
+    fill: {
+      type: "gradient",
+      gradient: {
+        shadeIntensity: 1,
+        opacityFrom: 0.7,
+        opacityTo: 0.1,
+        stops: [0, 90, 100],
+      },
+    },
     dataLabels: { enabled: false },
-    stroke: { curve: 'smooth', width: 3 },
-    xaxis: { categories: categories, tickAmount: Math.min(categories.length, 10) },
-    yaxis: { labels: { formatter: function (val) { return fmtCurr(val); } } },
-    tooltip: { theme: 'dark', y: { formatter: function (val) { return fmtCurr(val) } } }
+    stroke: { curve: "smooth", width: 3 },
+    xaxis: {
+      categories: categories,
+      tickAmount: Math.min(categories.length, 10),
+    },
+    yaxis: {
+      labels: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
+    tooltip: {
+      theme: "dark",
+      y: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
   };
 
   apexInstances.daily = new ApexCharts(el, options);
@@ -2142,8 +3260,12 @@ function renderDailyChart() {
 function renderBudgetProgress() {
   const el = document.getElementById("budgetProgress");
   if (budgetItems.length === 0) {
-    if (apexInstances.budget) { apexInstances.budget.destroy(); delete apexInstances.budget; }
-    el.innerHTML = '<p class="chart-empty">✅ No budget items set.<br><small>Add budget limits to track spending progress.</small></p>';
+    if (apexInstances.budget) {
+      apexInstances.budget.destroy();
+      delete apexInstances.budget;
+    }
+    el.innerHTML =
+      '<p class="chart-empty">✅ No budget items set.<br><small>Add budget limits to track spending progress.</small></p>';
     return;
   }
 
@@ -2156,13 +3278,15 @@ function renderBudgetProgress() {
   // Group items by category to resolve DB duplicates
   const groupedBudgets = {};
   budgetItems.forEach((item) => {
-    const cat = item.category || 'Other';
+    const cat = item.category || "Other";
     groupedBudgets[cat] = (groupedBudgets[cat] || 0) + parseFloat(item.amount);
   });
 
   let sortableBudgets = [];
   Object.entries(groupedBudgets).forEach(([cat, limit]) => {
-    const spent = expenses.filter(e => e.category === cat).reduce((s, e) => s + parseFloat(e.amount), 0);
+    const spent = expenses
+      .filter((e) => e.category === cat)
+      .reduce((s, e) => s + parseFloat(e.amount), 0);
     overallLimit += limit;
     sortableBudgets.push({ cat, limit, spent });
   });
@@ -2170,37 +3294,71 @@ function renderBudgetProgress() {
   // Sort high to low by limit
   sortableBudgets.sort((a, b) => b.limit - a.limit);
 
-  sortableBudgets.forEach(b => {
+  sortableBudgets.forEach((b) => {
     categories.push(`${getCatIcon(b.cat)} ${b.cat}`);
     planned.push(b.limit);
     spentData.push(b.spent);
   });
 
-  categories.unshift('Overall Budget');
+  categories.unshift("Overall Budget");
   planned.unshift(overallLimit);
   spentData.unshift(overallSpent);
 
-  if (apexInstances.budget) { apexInstances.budget.destroy(); }
-  el.innerHTML = '';
+  if (apexInstances.budget) {
+    apexInstances.budget.destroy();
+  }
+  el.innerHTML = "";
 
   const options = {
     series: [
-      { name: 'Planned Limit', data: planned },
-      { name: 'Actual Spent', data: spentData }
+      { name: "Planned Limit", data: planned },
+      { name: "Actual Spent", data: spentData },
     ],
-    theme: { mode: 'dark' },
-    chart: { type: 'bar', height: Math.max(250, categories.length * 60), toolbar: { show: false }, background: 'transparent', foreColor: '#e2e8f0' },
-    plotOptions: { bar: { horizontal: true, dataLabels: { position: 'top' }, borderRadius: 4, barHeight: '70%' } },
-    colors: ['#00b894', '#e74c3c'],
-    dataLabels: {
-      enabled: true, offsetX: 25,
-      style: { fontSize: '12px', colors: ['#e2e8f0'] },
-      formatter: function (val) { return val > 0 ? fmtCurr(val) : ''; }
+    theme: { mode: "dark" },
+    chart: {
+      type: "bar",
+      height: Math.max(250, categories.length * 60),
+      toolbar: { show: false },
+      background: "transparent",
+      foreColor: "#e2e8f0",
     },
-    stroke: { show: true, width: 2, colors: ['transparent'] },
-    xaxis: { categories: categories, labels: { formatter: function (val) { return fmtCurr(val); } } },
-    yaxis: { labels: { style: { fontWeight: 'bold' } } },
-    tooltip: { theme: 'dark', shared: true, intersect: false, y: { formatter: function (val) { return fmtCurr(val); } } }
+    plotOptions: {
+      bar: {
+        horizontal: true,
+        dataLabels: { position: "top" },
+        borderRadius: 4,
+        barHeight: "70%",
+      },
+    },
+    colors: ["#00b894", "#e74c3c"],
+    dataLabels: {
+      enabled: true,
+      offsetX: 25,
+      style: { fontSize: "12px", colors: ["#e2e8f0"] },
+      formatter: function (val) {
+        return val > 0 ? fmtCurr(val) : "";
+      },
+    },
+    stroke: { show: true, width: 2, colors: ["transparent"] },
+    xaxis: {
+      categories: categories,
+      labels: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
+    yaxis: { labels: { style: { fontWeight: "bold" } } },
+    tooltip: {
+      theme: "dark",
+      shared: true,
+      intersect: false,
+      y: {
+        formatter: function (val) {
+          return fmtCurr(val);
+        },
+      },
+    },
   };
 
   apexInstances.budget = new ApexCharts(el, options);
@@ -2209,15 +3367,29 @@ function renderBudgetProgress() {
 
 function renderTopExpenses() {
   const el = document.getElementById("topExpenses");
-  if (expenses.length === 0) { el.innerHTML = '<p class="chart-empty">🔥 No expenses yet.<br><small>Log expenses to see your top spending items.</small></p>'; return; }
-  el.innerHTML = [...expenses].sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount)).slice(0, 5).map((e, i) => `
-    <div class="top-item"><div class="top-rank">#${i + 1}</div><div class="top-info"><div class="top-title">${esc(e.title)}</div><div class="top-cat">${getCatIcon(e.category)} ${esc(e.category)} · ${fmtDate(e.date)}</div></div><div class="top-amount">${fmtCurr(e.amount)}</div></div>`).join("");
+  if (expenses.length === 0) {
+    el.innerHTML =
+      '<p class="chart-empty">🔥 No expenses yet.<br><small>Log expenses to see your top spending items.</small></p>';
+    return;
+  }
+  el.innerHTML = [...expenses]
+    .sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount))
+    .slice(0, 5)
+    .map(
+      (e, i) => `
+    <div class="top-item"><div class="top-rank">#${i + 1}</div><div class="top-info"><div class="top-title">${esc(e.title)}</div><div class="top-cat">${getCatIcon(e.category)} ${esc(e.category)} · ${fmtDate(e.date)}</div></div><div class="top-amount">${fmtCurr(e.amount)}</div></div>`,
+    )
+    .join("");
 }
 
 function renderMonthComparison() {
   const el = document.getElementById("monthComparison");
   // M6 FIX: Use getFinancialMonthKey for correct previous financial month
-  const lastMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+  const lastMonth = new Date(
+    currentMonth.getFullYear(),
+    currentMonth.getMonth() - 1,
+    1,
+  );
   const thisMonthKey = getMonthKey(currentMonth);
   const lastMonthKey = getFinancialMonthKey(lastMonth);
   const startDay = userSettings.month_start_day;
@@ -2231,114 +3403,385 @@ function renderMonthComparison() {
     thisLabel = "This cycle";
   }
 
-  const lastExpenses = allExpenses.filter((e) => getFinancialMonthKey(new Date(e.date)) === lastMonthKey);
+  const lastExpenses = allExpenses.filter(
+    (e) => getFinancialMonthKey(new Date(e.date)) === lastMonthKey,
+  );
   const thisTotal = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const lastTotal = lastExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const thisCats = {}, lastCats = {};
-  expenses.forEach((e) => { thisCats[e.category] = (thisCats[e.category] || 0) + parseFloat(e.amount); });
-  lastExpenses.forEach((e) => { lastCats[e.category] = (lastCats[e.category] || 0) + parseFloat(e.amount); });
-  const allCats = [...new Set([...Object.keys(thisCats), ...Object.keys(lastCats)])];
+  const thisCats = {},
+    lastCats = {};
+  expenses.forEach((e) => {
+    thisCats[e.category] = (thisCats[e.category] || 0) + parseFloat(e.amount);
+  });
+  lastExpenses.forEach((e) => {
+    lastCats[e.category] = (lastCats[e.category] || 0) + parseFloat(e.amount);
+  });
+  const allCats = [
+    ...new Set([...Object.keys(thisCats), ...Object.keys(lastCats)]),
+  ];
   function tag(c, p) {
     if (p === 0 && c === 0) return '<span class="compare-change same">—</span>';
     if (p === 0) return '<span class="compare-change up">New</span>';
     const d = ((c - p) / p) * 100;
     if (Math.abs(d) < 1) return '<span class="compare-change same">~0%</span>';
-    return d > 0 ? `<span class="compare-change up">▲ ${d.toFixed(0)}%</span>` : `<span class="compare-change down">▼ ${Math.abs(d).toFixed(0)}%</span>`;
+    return d > 0
+      ? `<span class="compare-change up">▲ ${d.toFixed(0)}%</span>`
+      : `<span class="compare-change down">▼ ${Math.abs(d).toFixed(0)}%</span>`;
   }
   let html = `<div class="compare-row" style="font-weight:700;border-bottom:2px solid var(--border)"><div class="compare-label">Category</div><div class="compare-values"><span class="compare-old">${lastLabel}</span><span class="compare-new">${thisLabel}</span><span style="min-width:60px;text-align:center">Change</span></div></div>`;
   html += `<div class="compare-row" style="background:var(--bg-hover);margin:0 -20px;padding:12px 20px;border-radius:var(--radius-sm)"><div class="compare-label" style="font-weight:700">Total</div><div class="compare-values"><span class="compare-old">${fmtCurr(lastTotal)}</span><span class="compare-new">${fmtCurr(thisTotal)}</span>${tag(thisTotal, lastTotal)}</div></div>`;
-  allCats.forEach((cat) => { const c = thisCats[cat] || 0, p = lastCats[cat] || 0; html += `<div class="compare-row"><div class="compare-label">${getCatIcon(cat)} ${cat}</div><div class="compare-values"><span class="compare-old">${fmtCurr(p)}</span><span class="compare-new">${fmtCurr(c)}</span>${tag(c, p)}</div></div>`; });
-  if (allCats.length === 0 && thisTotal === 0 && lastTotal === 0) html = '<p class="chart-empty">📉 No data to compare.<br><small>Spend in at least two months to see comparison.</small></p>';
+  allCats.forEach((cat) => {
+    const c = thisCats[cat] || 0,
+      p = lastCats[cat] || 0;
+    html += `<div class="compare-row"><div class="compare-label">${getCatIcon(cat)} ${cat}</div><div class="compare-values"><span class="compare-old">${fmtCurr(p)}</span><span class="compare-new">${fmtCurr(c)}</span>${tag(c, p)}</div></div>`;
+  });
+  if (allCats.length === 0 && thisTotal === 0 && lastTotal === 0)
+    html =
+      '<p class="chart-empty">📉 No data to compare.<br><small>Spend in at least two months to see comparison.</small></p>';
   el.innerHTML = html;
 }
 
 // =============================================
-// UTILITIES
+// TAGS MANAGEMENT
 // =============================================
-function setDefaultDate(fieldId) {
-  const today = new Date().toISOString().split("T")[0];
-  const el1 = document.getElementById("expenseDate");
-  const el2 = document.getElementById("incomeDate");
-  if (fieldId) { const el = document.getElementById(fieldId); if (el) el.value = today; }
-  else { if (el1) el1.value = today; if (el2) el2.value = today; }
-}
 
-function esc(t) { const d = document.createElement("div"); d.textContent = t; return d.innerHTML; }
-function fmtDate(s) { return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
-
-// Dynamic Currency Formatter
-function fmtCurr(n) {
-  const numText = parseFloat(n).toLocaleString("en-PK", { minimumFractionDigits: 0 });
-  return `${userSettings.currency} ${numText}`;
-}
-
-function getCatIcon(c) { return ({ Food: "🍔", Transport: "🚗", Entertainment: "🎬", Shopping: "🛍️", Bills: "📄", Healthcare: "⚕️", Education: "📚", Loan: "🏦", Rent: "🏠", Parents: "👨‍👩‍👧", Investment: "📈", Unexpected: "⚠️", Maintenance: "🛠️", Household: "🪑", "Personal Care": "🧴", Savings: "💰", "Dining Out": "🍽️", Other: "📦" })[c] || "📦"; }
-function toast(msg, type = "") { const el = document.getElementById("toast"); el.textContent = msg; el.className = "toast show " + type; clearTimeout(el._tid); el._tid = setTimeout(() => el.className = "toast", 2500); }
-
-// Loading state helpers
-function showLoading(containerId) {
-  const el = document.getElementById(containerId);
-  if (el) el.innerHTML = '<div class="loading-spinner" aria-label="Loading"><div class="spinner"></div><span>Loading...</span></div>';
-}
-function hideLoading(containerId) {
-  const el = document.getElementById(containerId);
-  if (el && el.querySelector('.loading-spinner')) el.innerHTML = '';
-}
-
-// =============================================
-// INCOME EDIT MODAL
-// =============================================
-function openEditIncomeModal(id) {
-  const entry = incomeEntries.find((e) => e.id === id);
-  if (!entry) return;
-  document.getElementById("editIncomeId").value = entry.id;
-  document.getElementById("editIncomeTitle").value = entry.title;
-  document.getElementById("editIncomeAmount").value = entry.amount;
-  document.getElementById("editIncomeSource").value = entry.source || 'Other';
-  document.getElementById("editIncomeDate").value = entry.date ? entry.date.split("T")[0] : "";
-  document.getElementById("editIncomeNotes").value = entry.notes || "";
-  document.getElementById("editIncomeModal").classList.add("show");
-}
-function closeEditIncomeModal() { document.getElementById("editIncomeModal").classList.remove("show"); }
-
-async function handleEditIncome(e) {
-  e.preventDefault();
-  const id = document.getElementById("editIncomeId").value;
-  const form = e.target;
-  const data = { title: form.title.value.trim(), amount: form.amount.value, source: form.source.value, date: form.date.value, notes: form.notes.value.trim() };
+// Load all tags
+async function loadTags() {
   try {
-    const res = await fetch(`/api/income/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify(data) });
-    if (res.ok) { closeEditIncomeModal(); toast("Income updated", "success"); await loadIncome(getMonthKey()); updateBalanceBar(); renderChartsIfActive(); }
-    else toast("Failed to update", "error");
-  } catch { toast("Network error", "error"); }
+    const res = await fetch("/api/tags", { credentials: "include" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    tags = data.tags || [];
+    displayTags();
+    updateTagFilter();
+  } catch {
+    console.error("Failed to load tags");
+  }
 }
 
-// =============================================
-// EVENT DELEGATION (replaces inline onclick handlers) — C1 FIX
-// =============================================
-function initEventDelegation() {
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    const action = btn.dataset.action;
-    const id = btn.dataset.id;
-    switch (action) {
-      case 'editExpense': openEditModal(id); break;
-      case 'deleteExpense': handleDelete(id); break;
-      case 'editBudget': openEditBudgetModal(id); break;
-      case 'deleteBudget': deleteBudget(id); break;
-      case 'editIncome': openEditIncomeModal(id); break;
-      case 'deleteIncome': deleteIncome(id); break;
-      case 'editNextBudget': openEditNextBudgetModal(id); break;
-      case 'deleteNextBudget': deleteNextBudget(id); break;
+// Display tags in Tags tab
+function displayTags() {
+  const list = document.getElementById("tagsList");
+  if (!list) return;
+
+  if (tags.length === 0) {
+    list.innerHTML =
+      '<p class="empty-msg">No tags created yet. Create your first tag above!</p>';
+    return;
+  }
+
+  list.innerHTML = tags
+    .map(
+      (tag) => `
+    <div class="tag-card" style="border-left-color: ${esc(tag.color)}">
+      <div class="tag-card-info">
+        <div class="tag-card-color" style="background: ${esc(tag.color)}"></div>
+        <div>
+          <div class="tag-card-name">${esc(tag.name)}</div>
+          <div class="tag-card-count">${tag.usage_count || 0} expenses</div>
+        </div>
+      </div>
+      <div class="tag-card-actions">
+        <button onclick="openEditTagModal(${tag.id})" title="Edit">✏️</button>
+        <button class="delete" onclick="deleteTag(${tag.id})" title="Delete">🗑️</button>
+      </div>
+    </div>
+  `,
+    )
+    .join("");
+}
+
+// Update tag filter dropdown
+function updateTagFilter() {
+  const filterTag = document.getElementById("filterTag");
+  if (!filterTag) return;
+
+  const currentValue = filterTag.value;
+  filterTag.innerHTML =
+    '<option value="">All Tags</option>' +
+    tags
+      .map(
+        (tag) => `<option value="${esc(tag.name)}">${esc(tag.name)}</option>`,
+      )
+      .join("");
+  filterTag.value = currentValue;
+}
+
+// Create new tag
+async function handleAddTag(e) {
+  e.preventDefault();
+  const name = document.getElementById("tagName").value.trim();
+  const color = document.getElementById("tagColor").value;
+
+  if (!name) return toast("Tag name is required", "error");
+
+  try {
+    const res = await fetch("/api/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name, color }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      toast("Tag created", "success");
+      document.getElementById("addTagForm").reset();
+      document.getElementById("tagColor").value = "#6c5ce7";
+      await loadTags();
+    } else {
+      toast(data.error || "Failed to create tag", "error");
     }
-  });
-
-  // Income edit form
-  const editIncomeForm = document.getElementById("editIncomeForm");
-  if (editIncomeForm) editIncomeForm.addEventListener("submit", handleEditIncome);
-  const closeEditIncomeBtn = document.getElementById("closeEditIncomeModal");
-  if (closeEditIncomeBtn) closeEditIncomeBtn.addEventListener("click", closeEditIncomeModal);
+  } catch {
+    toast("Network error", "error");
+  }
 }
 
-initEventDelegation();
+// Delete tag
+async function deleteTag(id) {
+  if (!confirm("Delete this tag? It will be removed from all expenses."))
+    return;
+
+  try {
+    const res = await fetch(`/api/tags/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    if (res.ok) {
+      toast("Tag deleted", "success");
+      await loadTags();
+      await loadExpenses(getMonthKey());
+    } else {
+      toast("Failed to delete tag", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
+}
+
+// Open edit tag modal
+function openEditTagModal(id) {
+  const tag = tags.find((t) => t.id === id);
+  if (!tag) return;
+
+  const newName = prompt("Edit tag name:", tag.name);
+  if (newName === null) return;
+
+  const newColor = prompt("Edit tag color (hex):", tag.color);
+  if (newColor === null) return;
+
+  updateTag(id, newName.trim(), newColor.trim());
+}
+
+// Update tag
+async function updateTag(id, name, color) {
+  try {
+    const res = await fetch(`/api/tags/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name, color }),
+    });
+
+    if (res.ok) {
+      toast("Tag updated", "success");
+      await loadTags();
+    } else {
+      const data = await res.json();
+      toast(data.error || "Failed to update tag", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
+}
+
+// =============================================
+// CATEGORIES MANAGEMENT
+// =============================================
+
+let allCategories = [];
+
+// Load all categories
+async function loadCategories() {
+  try {
+    const res = await fetch("/api/categories", { credentials: "include" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    allCategories = data.categories || [];
+    displayCategories();
+    updateCategoryDropdowns();
+  } catch {
+    console.error("Failed to load categories");
+  }
+}
+
+// Display categories in settings modal
+function displayCategories() {
+  const list = document.getElementById("categoriesList");
+  if (!list) return;
+
+  if (allCategories.length === 0) {
+    list.innerHTML = '<p class="empty-msg">No categories available.</p>';
+    return;
+  }
+
+  list.innerHTML = allCategories
+    .map(
+      (cat) => `
+    <div class="category-item ${cat.is_default ? "default" : ""}">
+      <div class="category-item-info">
+        <span class="category-item-icon">${esc(cat.icon)}</span>
+        <span class="category-item-name">${esc(cat.name)}</span>
+        <span class="category-item-count">(${cat.usage_count || 0})</span>
+        ${cat.is_default ? '<span class="category-item-badge">Default</span>' : ""}
+      </div>
+      <div class="category-item-actions">
+        ${
+          !cat.is_default
+            ? `
+          <button onclick="openEditCategoryModal('${cat.id}', '${esc(cat.name)}', '${esc(cat.icon)}')" title="Edit">✏️</button>
+          <button class="delete" onclick="deleteCategory('${cat.id}', '${esc(cat.name)}')" title="Delete">🗑️</button>
+        `
+            : ""
+        }
+      </div>
+    </div>
+  `,
+    )
+    .join("");
+}
+
+// Update category dropdowns in forms
+function updateCategoryDropdowns() {
+  const dropdowns = [
+    "expenseCategory",
+    "budgetCategory",
+    "nextBudgetCategory",
+    "editExpenseCategory",
+    "editBudgetCategory",
+    "editNextBudgetCategory",
+    "filterCategory",
+  ];
+
+  dropdowns.forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+
+    const currentValue = select.value;
+    const isFilter = id === "filterCategory";
+
+    select.innerHTML = isFilter
+      ? '<option value="">All Categories</option>'
+      : '<option value="">Select</option>';
+
+    allCategories.forEach((cat) => {
+      const option = document.createElement("option");
+      option.value = cat.name;
+      option.textContent = `${cat.icon} ${cat.name}`;
+      select.appendChild(option);
+    });
+
+    select.value = currentValue;
+  });
+}
+
+// Add new category
+async function handleAddCategory() {
+  const nameInput = document.getElementById("newCategoryName");
+  const iconSelect = document.getElementById("newCategoryIcon");
+  const name = nameInput.value.trim();
+  const icon = iconSelect.value;
+
+  if (!name) {
+    toast("Category name is required", "error");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name, icon }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      toast("Category created", "success");
+      nameInput.value = "";
+      iconSelect.value = "📦";
+      await loadCategories();
+    } else {
+      toast(data.error || "Failed to create category", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
+}
+
+// Open edit category modal
+function openEditCategoryModal(id, currentName, currentIcon) {
+  const newName = prompt("Edit category name:", currentName);
+  if (newName === null) return;
+
+  const newIcon = prompt("Edit category icon (emoji):", currentIcon);
+  if (newIcon === null) return;
+
+  updateCategory(id, newName.trim(), newIcon.trim());
+}
+
+// Update category
+async function updateCategory(id, name, icon) {
+  try {
+    const res = await fetch(`/api/categories/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name, icon }),
+    });
+
+    if (res.ok) {
+      toast("Category updated", "success");
+      await loadCategories();
+      await loadExpenses(getMonthKey());
+      await loadBudget(getMonthKey());
+    } else {
+      const data = await res.json();
+      toast(data.error || "Failed to update category", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
+}
+
+// Delete category
+async function deleteCategory(id, name) {
+  if (!confirm(`Delete category "${name}"? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch(`/api/categories/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      toast("Category deleted", "success");
+      await loadCategories();
+    } else {
+      toast(data.error || "Failed to delete category", "error");
+    }
+  } catch {
+    toast("Network error", "error");
+  }
+}
+
+// Initialize categories
+document.addEventListener("DOMContentLoaded", () => {
+  loadCategories();
+
+  const addCategoryBtn = document.getElementById("addCategoryBtn");
+  if (addCategoryBtn)
+    addCategoryBtn.addEventListener("click", handleAddCategory);
+});

@@ -9,7 +9,11 @@ exports.handler = async (event) => {
   }
 
   // Rate limit: 60 requests per minute per IP
-  const limited = rateLimitCheck(event, { maxRequests: 60, windowMs: 60000, prefix: "expenses" });
+  const limited = rateLimitCheck(event, {
+    maxRequests: 60,
+    windowMs: 60000,
+    prefix: "expenses",
+  });
   if (limited) return limited;
 
   try {
@@ -24,25 +28,44 @@ exports.handler = async (event) => {
 
     // Handle GET request - fetch expenses for user (with optional date range filter)
     if (event.httpMethod === "GET") {
-      let sql = `SELECT id, title, amount, category, date, notes, created_at, updated_at 
-         FROM expenses 
-         WHERE user_id = $1`;
+      let sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.created_at, e.updated_at,
+                COALESCE(
+                  json_agg(
+                    json_build_object('id', t.id, 'name', t.name, 'color', t.color)
+                  ) FILTER (WHERE t.id IS NOT NULL),
+                  '[]'
+                ) as tags
+         FROM expenses e
+         LEFT JOIN expense_tag_map etm ON e.id = etm.expense_id
+         LEFT JOIN expense_tags t ON etm.tag_id = t.id
+         WHERE e.user_id = $1`;
       const values = [userId];
       let paramIdx = 2;
 
       // Optional date range filtering for server-side pagination
       if (params.from) {
-        sql += ` AND date >= $${paramIdx}`;
+        sql += ` AND e.date >= $${paramIdx}`;
         values.push(params.from);
         paramIdx++;
       }
       if (params.to) {
-        sql += ` AND date <= $${paramIdx}`;
+        sql += ` AND e.date <= $${paramIdx}`;
         values.push(params.to);
         paramIdx++;
       }
 
-      sql += ` ORDER BY date DESC, created_at DESC`;
+      // Optional tag filter
+      if (params.tag) {
+        sql += ` AND EXISTS (
+          SELECT 1 FROM expense_tag_map etm2 
+          JOIN expense_tags t2 ON etm2.tag_id = t2.id 
+          WHERE etm2.expense_id = e.id AND LOWER(t2.name) = LOWER($${paramIdx})
+        )`;
+        values.push(params.tag);
+        paramIdx++;
+      }
+
+      sql += ` GROUP BY e.id ORDER BY e.date DESC, e.created_at DESC`;
 
       const result = await query(sql, values);
 
@@ -68,9 +91,14 @@ exports.handler = async (event) => {
         });
       }
 
-      if (title.length > 255 || category.length > 100 || (notes && notes.length > 1000)) {
+      if (
+        title.length > 255 ||
+        category.length > 100 ||
+        (notes && notes.length > 1000)
+      ) {
         return createResponse(400, {
-          error: "Payload size limits exceeded (Title max 255, Category max 100, Notes max 1000)",
+          error:
+            "Payload size limits exceeded (Title max 255, Category max 100, Notes max 1000)",
         });
       }
 
@@ -78,7 +106,7 @@ exports.handler = async (event) => {
         `INSERT INTO expenses (user_id, title, amount, category, date, notes) 
          VALUES ($1, $2, $3, $4, $5, $6) 
          RETURNING id, title, amount, category, date, notes, created_at, updated_at`,
-        [userId, title, parseFloat(amount), category, date, notes || null]
+        [userId, title, parseFloat(amount), category, date, notes || null],
       );
 
       return createResponse(201, {
@@ -111,16 +139,21 @@ exports.handler = async (event) => {
         });
       }
 
-      if (title.length > 255 || category.length > 100 || (notes && notes.length > 1000)) {
+      if (
+        title.length > 255 ||
+        category.length > 100 ||
+        (notes && notes.length > 1000)
+      ) {
         return createResponse(400, {
-          error: "Payload size limits exceeded (Title max 255, Category max 100, Notes max 1000)",
+          error:
+            "Payload size limits exceeded (Title max 255, Category max 100, Notes max 1000)",
         });
       }
 
       // Check if expense belongs to user
       const checkResult = await query(
         "SELECT id FROM expenses WHERE id = $1 AND user_id = $2",
-        [expenseId, userId]
+        [expenseId, userId],
       );
 
       if (checkResult.rows.length === 0) {
@@ -140,7 +173,7 @@ exports.handler = async (event) => {
           notes || null,
           expenseId,
           userId,
-        ]
+        ],
       );
 
       return createResponse(200, {
@@ -161,7 +194,7 @@ exports.handler = async (event) => {
       // Check if expense belongs to user
       const checkResult = await query(
         "SELECT id FROM expenses WHERE id = $1 AND user_id = $2",
-        [expenseId, userId]
+        [expenseId, userId],
       );
 
       if (checkResult.rows.length === 0) {
