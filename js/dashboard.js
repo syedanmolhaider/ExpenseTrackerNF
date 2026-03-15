@@ -117,6 +117,17 @@ function showLoading(containerId) {
     '<div class="loading-spinner"><div class="spinner"></div><p>Loading...</p></div>';
 }
 
+// Format date for display
+function fmtDate(dateStr) {
+  if (!dateStr) return "";
+  const d = parseLocalDate(dateStr);
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 // ------ Global Interceptor ------
 const originalFetch = window.fetch;
 window.fetch = async function (...args) {
