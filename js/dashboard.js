@@ -38,6 +38,85 @@ function setDefaultDate() {
   });
 }
 
+// Toast notification
+function toast(message, type = "info") {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = message;
+  el.className = `toast show ${type}`;
+  setTimeout(() => {
+    el.className = "toast";
+  }, 3000);
+}
+
+// Format currency
+function fmtCurr(amount) {
+  const num = parseFloat(amount) || 0;
+  return `${userSettings.currency} ${num.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+// Get category icon
+function getCatIcon(category) {
+  const cat = allCategories.find(
+    (c) => c.name.toLowerCase() === (category || "").toLowerCase(),
+  );
+  return cat ? cat.icon : "📦";
+}
+
+// Render selected tags
+function renderSelectedTags(tags, container) {
+  if (!container) return;
+  container.innerHTML = tags
+    .map(
+      (tag) => `
+    <span class="tag-badge">
+      ${esc(tag.name)}
+      <button type="button" class="tag-remove" data-tag-id="${tag.id}">&times;</button>
+    </span>
+  `,
+    )
+    .join("");
+}
+
+// Load recurring expenses
+async function loadRecurring() {
+  try {
+    const res = await fetch("/api/recurring", { credentials: "include" });
+    if (!res.ok) throw new Error();
+    const data = await res.json();
+    return data.recurring || [];
+  } catch (err) {
+    console.error("Failed to load recurring expenses:", err);
+    return [];
+  }
+}
+
+// Add tags to an expense
+async function addTagsToExpense(expenseId, tags) {
+  if (!expenseId || !tags || tags.length === 0) return;
+  try {
+    await fetch(`/api/expense-tags/${expenseId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ tag_ids: tags.map((t) => t.id) }),
+    });
+  } catch (err) {
+    console.error("Failed to add tags to expense:", err);
+  }
+}
+
+// Show loading state in a container
+function showLoading(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML =
+    '<div class="loading-spinner"><div class="spinner"></div><p>Loading...</p></div>';
+}
+
 // ------ Global Interceptor ------
 const originalFetch = window.fetch;
 window.fetch = async function (...args) {
