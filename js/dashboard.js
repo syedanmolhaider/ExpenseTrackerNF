@@ -18,6 +18,26 @@ let userSettings = { month_start_day: 1, month_end_day: 0, currency: "Rs" };
 let selectedExpenseTags = []; // Tags selected for new expense
 let editSelectedExpenseTags = []; // Tags selected for editing expense
 
+// ------ Utility Functions ------
+// Escape HTML to prevent XSS
+function esc(str) {
+  if (!str) return "";
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// Set default date to today in date input fields
+function setDefaultDate() {
+  const today = new Date().toISOString().split("T")[0];
+  const dateInputs = document.querySelectorAll('input[type="date"]');
+  dateInputs.forEach((input) => {
+    if (!input.value) {
+      input.value = today;
+    }
+  });
+}
+
 // ------ Global Interceptor ------
 const originalFetch = window.fetch;
 window.fetch = async function (...args) {
