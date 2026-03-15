@@ -128,6 +128,17 @@ function fmtDate(dateStr) {
   });
 }
 
+// Generate HTML for expense tags
+function getExpenseTagsHTML(expenseTags) {
+  if (!expenseTags || expenseTags.length === 0) return "";
+  return `<div class="expense-tags">${expenseTags
+    .map(
+      (tag) =>
+        `<span class="tag-badge" style="background: ${esc(tag.color || "#6c5ce7")}20; color: ${esc(tag.color || "#6c5ce7")}; border: 1px solid ${esc(tag.color || "#6c5ce7")}40;">${esc(tag.name)}</span>`,
+    )
+    .join("")}</div>`;
+}
+
 // ------ Global Interceptor ------
 const originalFetch = window.fetch;
 window.fetch = async function (...args) {
