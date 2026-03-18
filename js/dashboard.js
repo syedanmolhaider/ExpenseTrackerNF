@@ -523,8 +523,14 @@ function initListeners() {
   document.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-action]");
     if (!btn) return;
+    
     const action = btn.dataset.action;
-    const id = parseInt(btn.dataset.id);
+    const idString = btn.dataset.id;
+    // Map ID to its best type
+    const id = (idString && !isNaN(idString)) ? parseInt(idString) : idString;
+    
+    console.log(`[Action] Triggered ${action} with id:`, id);
+    
     switch (action) {
       case "editExpense":
         openEditModal(id);
@@ -854,7 +860,7 @@ async function handleAddExpense(e) {
 }
 
 function openEditModal(id) {
-  const exp = expenses.find((e) => e.id === id);
+  const exp = expenses.find((e) => e.id == id);
   if (!exp) return;
   document.getElementById("editExpenseId").value = exp.id;
   document.getElementById("editExpenseTitle").value = exp.title;
@@ -1326,7 +1332,7 @@ async function handleCloneBudget() {
 }
 
 function openEditBudgetModal(id) {
-  const item = budgetItems.find((e) => e.id === id);
+  const item = budgetItems.find((e) => e.id == id);
   if (!item) return;
   document.getElementById("editBudgetId").value = item.id;
   document.getElementById("editBudgetTitle").value = item.title;
@@ -1627,7 +1633,7 @@ async function handleCopyCurrentBudget() {
 }
 
 function openEditNextBudgetModal(id) {
-  const item = nextBudgetItems.find((e) => e.id === id);
+  const item = nextBudgetItems.find((e) => e.id == id);
   if (!item) return;
   document.getElementById("editNextBudgetId").value = item.id;
   document.getElementById("editNextBudgetTitle").value = item.title;
@@ -1817,7 +1823,7 @@ async function deleteIncome(id) {
 }
 
 function openEditIncomeModal(id) {
-  const entry = incomeEntries.find((e) => e.id === id);
+  const entry = incomeEntries.find((e) => e.id == id);
   if (!entry) return;
   document.getElementById("editIncomeId").value = entry.id;
   document.getElementById("editIncomeTitle").value = entry.title;
@@ -3863,7 +3869,7 @@ async function deleteTag(id) {
 
 // Open edit tag modal
 function openEditTagModal(id) {
-  const tag = tags.find((t) => t.id === id);
+  const tag = tags.find((t) => t.id == id);
   if (!tag) return;
 
   const newName = prompt("Edit tag name:", tag.name);
