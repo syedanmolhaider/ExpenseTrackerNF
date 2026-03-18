@@ -529,8 +529,6 @@ function initListeners() {
     // Map ID to its best type
     const id = (idString && !isNaN(idString)) ? parseInt(idString) : idString;
     
-    console.log(`[Action] Triggered ${action} with id:`, id);
-    
     switch (action) {
       case "editExpense":
         openEditModal(id);
