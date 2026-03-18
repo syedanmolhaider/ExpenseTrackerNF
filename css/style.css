@@ -640,7 +640,8 @@ body {
   align-items: flex-end;
 }
 
-.inline-form input {
+.inline-form input,
+.inline-form select {
   flex: 1;
   padding: 10px 14px;
   background: var(--bg-input);
@@ -651,13 +652,18 @@ body {
   font-family: inherit;
 }
 
-.inline-form input:focus {
+.inline-form input:focus,
+.inline-form select:focus {
   outline: none;
   border-color: var(--accent);
 }
 
 .inline-form input::placeholder {
   color: var(--text-muted);
+}
+
+.inline-form select {
+  cursor: pointer;
 }
 
 .inline-form .btn {
@@ -1246,6 +1252,10 @@ body {
   display: flex;
   gap: 10px;
   justify-content: flex-end;
+}
+
+.modal-actions.full-width {
+  grid-column: 1 / -1;
 }
 
 .modal-actions .btn {
@@ -1891,6 +1901,12 @@ body {
   color: var(--text-primary);
   font-size: 1.1rem;
   cursor: pointer;
+  font-family: inherit;
+}
+
+.add-category-form select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .categories-list {
@@ -2558,6 +2574,11 @@ body {
 
   .inline-form {
     flex-direction: column;
+  }
+
+  .inline-form input,
+  .inline-form select {
+    width: 100%;
   }
 
   .inline-form .btn {

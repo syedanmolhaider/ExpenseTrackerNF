@@ -162,7 +162,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderNextMonthLabel();
     initListeners();
     setDefaultDate();
-    await loadAll();
+    await Promise.all([loadAll(), loadTags(), loadCategories()]);
   } catch (err) {
     console.error("Dashboard initialization error:", err);
     showError("Failed to initialize dashboard. Please refresh the page.");
@@ -519,6 +519,61 @@ function initListeners() {
     .getElementById("resetAllBtn")
     .addEventListener("click", handleResetAll);
 
+  // Delegated click handler for edit/delete buttons
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const id = parseInt(btn.dataset.id);
+    switch (action) {
+      case "editExpense":
+        openEditModal(id);
+        break;
+      case "deleteExpense":
+        handleDelete(id);
+        break;
+      case "editBudget":
+        openEditBudgetModal(id);
+        break;
+      case "deleteBudget":
+        deleteBudget(id);
+        break;
+      case "editNextBudget":
+        openEditNextBudgetModal(id);
+        break;
+      case "deleteNextBudget":
+        deleteNextBudget(id);
+        break;
+      case "editIncome":
+        openEditIncomeModal(id);
+        break;
+      case "deleteIncome":
+        deleteIncome(id);
+        break;
+    }
+  });
+
+  // Edit Income form listener
+  const editIncomeForm = document.getElementById("editIncomeForm");
+  if (editIncomeForm)
+    editIncomeForm.addEventListener("submit", handleEditIncome);
+
+  // Edit Income modal close
+  const closeEditIncomeBtn = document.getElementById("closeEditIncomeModal");
+  if (closeEditIncomeBtn)
+    closeEditIncomeBtn.addEventListener("click", closeEditIncomeModal);
+
+  const editIncomeModal = document.getElementById("editIncomeModal");
+  if (editIncomeModal)
+    editIncomeModal.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeEditIncomeModal();
+    });
+
+  // Add Category button
+  const addCategoryBtn = document.getElementById("addCategoryBtn");
+  if (addCategoryBtn)
+    addCategoryBtn.addEventListener("click", handleAddCategory);
+
   // Keyboard: Escape
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -526,6 +581,7 @@ function initListeners() {
       closeExportModal();
       closeEditBudgetModal();
       closeEditNextBudgetModal();
+      closeEditIncomeModal();
       document.getElementById("settingsModal").classList.remove("show");
     }
   });
@@ -1757,6 +1813,55 @@ async function deleteIncome(id) {
     }
   } catch {
     toast("Failed", "error");
+  }
+}
+
+function openEditIncomeModal(id) {
+  const entry = incomeEntries.find((e) => e.id === id);
+  if (!entry) return;
+  document.getElementById("editIncomeId").value = entry.id;
+  document.getElementById("editIncomeTitle").value = entry.title;
+  document.getElementById("editIncomeAmount").value = entry.amount;
+  document.getElementById("editIncomeSource").value = entry.source || "Other";
+  document.getElementById("editIncomeDate").value = entry.date
+    ? entry.date.split("T")[0]
+    : "";
+  document.getElementById("editIncomeNotes").value = entry.notes || "";
+  document.getElementById("editIncomeModal").classList.add("show");
+}
+
+function closeEditIncomeModal() {
+  const modal = document.getElementById("editIncomeModal");
+  if (modal) modal.classList.remove("show");
+}
+
+async function handleEditIncome(e) {
+  e.preventDefault();
+  const id = document.getElementById("editIncomeId").value;
+  const form = e.target;
+  const data = {
+    title: form.title.value.trim(),
+    amount: form.amount.value,
+    source: form.source.value,
+    date: form.date.value,
+    notes: form.notes.value.trim(),
+  };
+  try {
+    const res = await fetch(`/api/income/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    if (res.ok) {
+      closeEditIncomeModal();
+      toast("Income updated", "success");
+      await loadIncome(getMonthKey());
+      updateBalanceBar();
+      renderChartsIfActive();
+    } else toast("Failed to update", "error");
+  } catch {
+    toast("Network error", "error");
   }
 }
 
@@ -4106,12 +4211,3 @@ async function deleteCategory(id, name) {
     toast("Network error", "error");
   }
 }
-
-// Initialize categories
-document.addEventListener("DOMContentLoaded", () => {
-  loadCategories();
-
-  const addCategoryBtn = document.getElementById("addCategoryBtn");
-  if (addCategoryBtn)
-    addCategoryBtn.addEventListener("click", handleAddCategory);
-});
