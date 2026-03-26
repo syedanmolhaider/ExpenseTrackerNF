@@ -34,7 +34,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const userId = parseInt(event.queryStringParameters?.user_id);
+    const userId = event.queryStringParameters?.user_id;
     const { from, to, group_by = "category" } = event.queryStringParameters;
 
     if (!userId) {
