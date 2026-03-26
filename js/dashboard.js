@@ -1221,7 +1221,23 @@ function updateBudgetSummary() {
   const unplannedSpent = expenses
     .filter((e) => !budgetedCategories.has(e.category))
     .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const remaining = totalLimit - totalSpent;
+    
+  let remaining = 0;
+  const groupedBudget = {};
+  budgetItems.forEach((item) => {
+    const cat = item.category || "Other";
+    if (!groupedBudget[cat]) groupedBudget[cat] = 0;
+    groupedBudget[cat] += parseFloat(item.amount);
+  });
+  
+  Object.entries(groupedBudget).forEach(([cat, limit]) => {
+    const catTotalSpent = expenses
+      .filter((e) => (e.category || "Other") === cat)
+      .reduce((s, e) => s + parseFloat(e.amount), 0);
+    if (limit > catTotalSpent) {
+      remaining += (limit - catTotalSpent);
+    }
+  });
   document.getElementById("budgetTotalPlanned").textContent =
     `${fmtCurr(totalLimit)}`;
   if (document.getElementById("budgetTotalSpent"))
