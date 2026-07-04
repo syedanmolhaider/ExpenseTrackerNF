@@ -1210,6 +1210,8 @@ body {
   max-width: 480px;
   width: 100%;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-box h3 {

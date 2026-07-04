@@ -42,9 +42,16 @@ async function ensureTableExists() {
         UNIQUE(user_id, name)
       )
     `);
+    
+    // Patch missing columns for older databases
+    try { await query(`ALTER TABLE user_categories ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT FALSE`); } catch (e) {}
+    try { await query(`ALTER TABLE user_categories ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`); } catch (e) {}
+    try { await query(`ALTER TABLE user_categories ADD UNIQUE(user_id, name)`); } catch (e) {}
+    
     tableVerified = true;
   } catch (err) {
     console.error("Failed to ensure user_categories table exists. Error:", err.message);
+    throw err; // Re-throw so we can return the exact error in the API response
   }
 }
 
