@@ -2322,19 +2322,33 @@ select {
    =============================================== */
 .kpi-value,
 .daily-room-kpi-value,
-.balance-item h3,
-.budget-val,
-.expense-amount,
-.amount {
+.balance-value,
+.summary-num,
+.expense-amount-val,
+.income-amount-val,
+.top-val,
+.compare-val,
+.budget-amt {
   transition: filter 0.3s ease, opacity 0.3s ease;
 }
 
 body.mask-values .kpi-value,
 body.mask-values .daily-room-kpi-value,
-body.mask-values .balance-item h3,
-body.mask-values .budget-val,
-body.mask-values .expense-amount,
-body.mask-values .amount {
+body.mask-values .balance-value,
+body.mask-values .summary-num,
+body.mask-values .expense-amount-val,
+body.mask-values .income-amount-val,
+body.mask-values .top-val,
+body.mask-values .compare-val,
+body.mask-values .budget-amt,
+body.mask-values .budget-cat-header strong,
+body.mask-values .budget-cat-header span[style*="var(--orange)"],
+body.mask-values .budget-cat-header span.text-red,
+body.mask-values .budget-cat-header span.text-green,
+body.mask-values .budget-sub-item span[style*="var(--orange)"],
+body.mask-values .budget-sub-item span.text-red,
+body.mask-values .budget-sub-item span.text-green,
+body.mask-values .text-muted[style*="margin-left: 8px"] {
   filter: blur(6px);
   opacity: 0.7;
   user-select: none;
