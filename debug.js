@@ -99,7 +99,7 @@ function testJWTSecret() {
 
 // Main function
 async function main() {
-  console.log("🚀 ExpenseTrackerNF Debug Script");
+  console.log("🚀 King's Tracker Debug Script");
   console.log("=".repeat(50));
 
   // Test JWT secret first

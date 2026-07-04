@@ -1,7 +1,7 @@
 {
-  "name": "expense-tracker-netlify",
+  "name": "kings-tracker",
   "version": "1.0.0",
-  "description": "Expense Tracker with Netlify Functions and Neon Database",
+  "description": "King's Tracker with Netlify Functions and Neon Database",
   "main": "index.js",
   "scripts": {
     "dev": "netlify dev",

@@ -1,5 +1,5 @@
 // =============================================
-// EXPENSE TRACKER — Dashboard Controller
+// KING'S TRACKER — Dashboard Controller
 // Budget + Daily Tracker + Income + Charts + Import/Export + Reset + Settings
 // =============================================
 
@@ -2245,7 +2245,7 @@ function exportFullReport() {
     catTotals[e.category] = (catTotals[e.category] || 0) + parseFloat(e.amount);
   });
 
-  let r = `EXPENSE TRACKER — MONTHLY REPORT\n`;
+  let r = `KING'S TRACKER — MONTHLY REPORT\n`;
   r += `Month: ${document.getElementById("currentMonthLabel").textContent}\n`;
   r += `Generated: ${new Date().toLocaleString()}\n${"=".repeat(50)}\n\n`;
   r += `BALANCE OVERVIEW\n${"-".repeat(30)}\n`;
