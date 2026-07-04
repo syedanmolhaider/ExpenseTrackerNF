@@ -2398,3 +2398,11 @@ body.mask-values .text-muted[style*="margin-left: 8px"] {
   user-select: none;
   pointer-events: none;
 }
+
+/* Segmented Control */
+.segmented-control { display: flex; background: rgba(0, 0, 0, 0.05); border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; padding: 4px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); backdrop-filter: blur(10px); }
+.segmented-control input[type="radio"] { display: none; }
+.segmented-control label { flex: 1; text-align: center; padding: 8px 12px; font-size: 0.85rem; font-weight: 500; color: var(--text-secondary); cursor: pointer; position: relative; z-index: 2; transition: all 0.3s ease; white-space: nowrap; margin: 0; }
+.segmented-control input[type="radio"]:checked + label { color: var(--text-primary); text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+.segmented-control-bg { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.5); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); z-index: 1; border: 1px solid rgba(255,255,255,0.2); }
+.segmented-control input[type="radio"]:nth-of-type(2):checked ~ .segmented-control-bg { transform: translateX(100%); }

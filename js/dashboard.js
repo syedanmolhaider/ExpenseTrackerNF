@@ -1484,7 +1484,8 @@ async function handleAddBudget(e) {
   const title = document.getElementById("budgetTitle").value.trim();
   const category = document.getElementById("budgetCategory").value;
   const amount = document.getElementById("budgetAmount").value;
-  const is_repeating = document.getElementById("budgetIsRepeating") ? document.getElementById("budgetIsRepeating").value === "true" : true;
+  const radioNode = document.querySelector('input[name="budgetIsRepeating"]:checked');
+  const is_repeating = radioNode ? radioNode.value === "true" : true;
   if (!title || !category || !amount) return;
   // No duplicate restriction — multiple items per category allowed (e.g. Milk + Lunch under Food)
   try {
@@ -1575,9 +1576,15 @@ function openEditBudgetModal(id) {
   document.getElementById("editBudgetTitle").value = item.title;
   document.getElementById("editBudgetCategory").value =
     item.category || "Other";
-  if (document.getElementById("editBudgetIsRepeating")) {
-    document.getElementById("editBudgetIsRepeating").value = String(item.is_repeating) === "false" ? "false" : "true";
+  
+  const repeatVal = String(item.is_repeating) === "false" ? "false" : "true";
+  const editRepeatTrue = document.getElementById("editRepeatTrue");
+  const editRepeatFalse = document.getElementById("editRepeatFalse");
+  if (editRepeatTrue && editRepeatFalse) {
+    if (repeatVal === "true") editRepeatTrue.checked = true;
+    else editRepeatFalse.checked = true;
   }
+  
   document.getElementById("editBudgetAmount").value = item.amount;
   document.getElementById("editBudgetModal").classList.add("show");
 }
@@ -1591,11 +1598,12 @@ async function handleEditBudget(e) {
   e.preventDefault();
   const id = document.getElementById("editBudgetId").value;
   const form = e.target;
+  const radioNode = document.querySelector('input[name="editBudgetIsRepeating"]:checked');
   const data = {
     title: form.title.value.trim(),
     category: form.category.value,
     amount: form.amount.value,
-    is_repeating: form.is_repeating ? form.is_repeating.value === "true" : true,
+    is_repeating: radioNode ? radioNode.value === "true" : true,
   };
   try {
     const res = await fetch(`/api/budget/${id}`, {

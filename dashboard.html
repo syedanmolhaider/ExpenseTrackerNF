@@ -93,6 +93,14 @@
           <label>📊 Difference</label>
           <span class="balance-value" id="balanceDiff">Rs 0</span>
         </div>
+        <div class="balance-item">
+          <label>🔁 Repeating Spent</label>
+          <span class="balance-value text-blue" id="budgetRepeatingExpenses">Rs 0</span>
+        </div>
+        <div class="balance-item">
+          <label>1️⃣ One-Time Spent</label>
+          <span class="balance-value text-orange" id="budgetOneTimeExpenses">Rs 0</span>
+        </div>
       </div>
 
       <!-- Settings Modal -->
@@ -263,10 +271,13 @@
                 <option value="Dining Out">🍽️ Dining Out</option>
                 <option value="Other">📦 Other</option>
               </select>
-              <select id="budgetIsRepeating" required style="max-width: 130px;">
-                <option value="true">🔁 Repeating</option>
-                <option value="false">1️⃣ One-Time</option>
-              </select>
+              <div class="segmented-control" style="margin: 0 8px;">
+                <input type="radio" name="budgetIsRepeating" id="repeatTrue" value="true" checked>
+                <label for="repeatTrue">🔁 Repeating</label>
+                <input type="radio" name="budgetIsRepeating" id="repeatFalse" value="false">
+                <label for="repeatFalse">1️⃣ One-Time</label>
+                <div class="segmented-control-bg"></div>
+              </div>
               <input
                 type="number"
                 id="budgetAmount"
@@ -297,16 +308,6 @@
             <div class="summary-cell">
               <span class="summary-label">Extra Available</span>
               <span class="summary-num text-green" id="budgetUnplannedSpent">Rs 0</span>
-            </div>
-          </div>
-          <div class="card summary-strip mt-10" style="padding: 15px;">
-            <div class="summary-cell">
-              <span class="summary-label">🔁 Repeating Expenses</span>
-              <span class="summary-num text-blue" id="budgetRepeatingExpenses">Rs 0</span>
-            </div>
-            <div class="summary-cell">
-              <span class="summary-label">1️⃣ One-Time Expenses</span>
-              <span class="summary-num text-orange" id="budgetOneTimeExpenses">Rs 0</span>
             </div>
           </div>
 
@@ -991,11 +992,14 @@
             </select>
           </div>
           <div class="form-field" style="grid-column: span 2">
-            <label for="editBudgetIsRepeating">Budget Type</label>
-            <select id="editBudgetIsRepeating" name="is_repeating" required>
-              <option value="true">🔁 Repeating</option>
-              <option value="false">1️⃣ One-Time</option>
-            </select>
+            <label>Budget Type</label>
+            <div class="segmented-control" style="width: 100%;">
+              <input type="radio" name="editBudgetIsRepeating" id="editRepeatTrue" value="true" checked>
+              <label for="editRepeatTrue">🔁 Repeating</label>
+              <input type="radio" name="editBudgetIsRepeating" id="editRepeatFalse" value="false">
+              <label for="editRepeatFalse">1️⃣ One-Time</label>
+              <div class="segmented-control-bg"></div>
+            </div>
           </div>
           <div class="form-field" style="grid-column: span 2">
             <label for="editBudgetAmount">Limit Amount (Rs)</label>
