@@ -1263,16 +1263,7 @@ function displayBudget() {
 
 function updateBudgetSummary() {
   const totalLimit = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
-  const budgetedCategories = new Set(
-    budgetItems.map((i) => i.category || "Other"),
-  );
-  const totalSpent = expenses
-    .filter((e) => budgetedCategories.has(e.category))
-    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const unplannedSpent = expenses
-    .filter((e) => !budgetedCategories.has(e.category))
-    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    
+
   let remaining = 0;
   const groupedBudget = {};
   budgetItems.forEach((item) => {
@@ -1289,23 +1280,29 @@ function updateBudgetSummary() {
       remaining += (limit - catTotalSpent);
     }
   });
-  document.getElementById("budgetTotalPlanned").textContent =
-    `${fmtCurr(totalLimit)}`;
-  if (document.getElementById("budgetTotalSpent"))
-    document.getElementById("budgetTotalSpent").textContent =
-      `${fmtCurr(totalSpent)}`;
-  if (document.getElementById("budgetTotalRemaining")) {
-    document.getElementById("budgetTotalRemaining").textContent =
-      `${fmtCurr(remaining)}`;
-    document.getElementById("budgetTotalRemaining").className =
-      remaining < 0 ? "summary-num text-red" : "summary-num text-green";
+
+  const incomeTotal = incomeEntries.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const available = incomeTotal - totalSpent;
+  const extraAvailable = available - remaining;
+
+  if (document.getElementById("budgetTotalPlanned")) {
+    document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(totalLimit)}`;
   }
-  // Update unplanned spending display
-  const unplannedEl = document.getElementById("budgetUnplannedSpent");
-  if (unplannedEl) {
-    unplannedEl.textContent = `${fmtCurr(unplannedSpent)}`;
-    unplannedEl.className =
-      unplannedSpent > 0 ? "summary-num text-red" : "summary-num text-green";
+  if (document.getElementById("budgetTotalRemaining")) {
+    document.getElementById("budgetTotalRemaining").textContent = `${fmtCurr(remaining)}`;
+    document.getElementById("budgetTotalRemaining").className =
+      remaining < 0 ? "summary-num text-red" : "summary-num text-orange";
+  }
+  if (document.getElementById("budgetTotalSpent")) {
+    document.getElementById("budgetTotalSpent").textContent = `${fmtCurr(available)}`;
+    document.getElementById("budgetTotalSpent").className =
+      available < 0 ? "summary-num text-red" : "summary-num text-accent";
+  }
+  if (document.getElementById("budgetUnplannedSpent")) {
+    document.getElementById("budgetUnplannedSpent").textContent = `${fmtCurr(extraAvailable)}`;
+    document.getElementById("budgetUnplannedSpent").className =
+      extraAvailable < 0 ? "summary-num text-red" : "summary-num text-green";
   }
 }
 
@@ -1949,47 +1946,48 @@ function updateBalanceBar() {
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
-  // Today's spending only
-  const today = new Date().toISOString().split("T")[0];
-  const todaySpent = expenses
-    .filter((e) => (e.date || "").split("T")[0] === today)
-    .reduce((s, e) => s + parseFloat(e.amount), 0);
+  // Calculate remaining budget limits per category (Required Amount)
+  let budgetRequired = 0;
+  const groupedBudget = {};
+  budgetItems.forEach((item) => {
+    const cat = item.category || "Other";
+    if (!groupedBudget[cat]) groupedBudget[cat] = 0;
+    groupedBudget[cat] += parseFloat(item.amount);
+  });
+  
+  Object.entries(groupedBudget).forEach(([cat, limit]) => {
+    const catTotalSpent = expenses
+      .filter((e) => (e.category || "Other") === cat)
+      .reduce((s, e) => s + parseFloat(e.amount), 0);
+    if (limit > catTotalSpent) {
+      budgetRequired += (limit - catTotalSpent);
+    }
+  });
 
-  // Remaining Balance = Income - Total Spent
-  const remaining = incomeTotal - totalSpent;
+  const remaining = incomeTotal - totalSpent; // Available cash
+  const extraAvailable = remaining - budgetRequired; // Unreserved cash
 
-  document.getElementById("balanceIncome").textContent =
-    `${fmtCurr(incomeTotal)}`;
-  document.getElementById("balanceBudgetTotal").textContent =
-    `${fmtCurr(budgetTotal)}`;
-
-  // Total Spent (all expenses — budgeted + unplanned)
-  const elTotalSpent = document.getElementById("balanceBudgetSpent");
-  if (elTotalSpent) {
-    elTotalSpent.textContent = `${fmtCurr(totalSpent)}`;
-    elTotalSpent.className =
-      totalSpent > budgetTotal
-        ? "balance-value text-red"
-        : totalSpent > budgetTotal * 0.9
-          ? "balance-value text-orange"
-          : "balance-value text-green";
+  if (document.getElementById("balanceIncome")) {
+    document.getElementById("balanceIncome").textContent = `${fmtCurr(incomeTotal)}`;
   }
-
-  // Today Spent
-  const elToday = document.getElementById("balanceDailySpent");
-  if (elToday) {
-    elToday.textContent = `${fmtCurr(todaySpent)}`;
-    elToday.className = "balance-value text-orange";
+  if (document.getElementById("balanceBudgetTotal")) {
+    document.getElementById("balanceBudgetTotal").textContent = `${fmtCurr(budgetTotal)}`;
   }
-
-  const el = document.getElementById("balanceRemaining");
-  el.textContent = `${fmtCurr(remaining)}`;
-  el.className =
-    remaining < 0
-      ? "balance-value text-red"
-      : remaining < incomeTotal * 0.2
-        ? "balance-value text-orange"
-        : "balance-value text-accent";
+  if (document.getElementById("balanceBudgetRequired")) {
+    document.getElementById("balanceBudgetRequired").textContent = `${fmtCurr(budgetRequired)}`;
+    document.getElementById("balanceBudgetRequired").className =
+      budgetRequired < 0 ? "balance-value text-red" : "balance-value text-orange";
+  }
+  if (document.getElementById("balanceRemaining")) {
+    document.getElementById("balanceRemaining").textContent = `${fmtCurr(remaining)}`;
+    document.getElementById("balanceRemaining").className =
+      remaining < 0 ? "balance-value text-red" : "balance-value text-accent";
+  }
+  if (document.getElementById("balanceExtraAvailable")) {
+    document.getElementById("balanceExtraAvailable").textContent = `${fmtCurr(extraAvailable)}`;
+    document.getElementById("balanceExtraAvailable").className =
+      extraAvailable < 0 ? "balance-value text-red" : "balance-value text-green";
+  }
 }
 
 // =============================================

@@ -471,29 +471,23 @@ body {
   background: linear-gradient(
     135deg,
     var(--bg-card) 0%,
-    rgba(0, 184, 148, 0.05) 100%
+    rgba(243, 156, 18, 0.06) 100%
   );
-  border-color: rgba(0, 184, 148, 0.15);
+  border-color: rgba(243, 156, 18, 0.2);
 }
 .balance-item:nth-child(3)::after {
-  background: linear-gradient(
-    90deg,
-    transparent,
-    #00b894,
-    #55efc4,
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, #f39c12, transparent);
 }
 .balance-item:nth-child(4) {
   background: linear-gradient(
     135deg,
     var(--bg-card) 0%,
-    rgba(243, 156, 18, 0.06) 100%
+    rgba(108, 92, 231, 0.06) 100%
   );
-  border-color: rgba(243, 156, 18, 0.2);
+  border-color: rgba(108, 92, 231, 0.2);
 }
 .balance-item:nth-child(4)::after {
-  background: linear-gradient(90deg, transparent, #f39c12, transparent);
+  background: linear-gradient(90deg, transparent, #6c5ce7, transparent);
 }
 
 .balance-item label {
@@ -515,19 +509,19 @@ body {
   background: linear-gradient(
     135deg,
     var(--bg-card) 0%,
-    rgba(108, 92, 231, 0.1) 100%
+    rgba(0, 184, 148, 0.08) 100%
   );
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(108, 92, 231, 0.3);
-  box-shadow: 0 0 20px rgba(108, 92, 231, 0.08);
+  border: 1px solid rgba(0, 184, 148, 0.25);
+  box-shadow: 0 0 20px rgba(0, 184, 148, 0.08);
 }
 
 .balance-item.highlight::after {
   background: linear-gradient(
     90deg,
     transparent,
-    #6c5ce7,
-    #a29bfe,
+    #00b894,
+    #55efc4,
     transparent
   );
   height: 3px;
