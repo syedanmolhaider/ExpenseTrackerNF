@@ -95,17 +95,27 @@ async function loadRecurring() {
 }
 
 // Add tags to an expense
-async function addTagsToExpense(expenseId, tags) {
-  if (!expenseId || !tags) return;
+async function addTagsToExpense(expenseId, tagList) {
+  if (!expenseId) return;
+  const ids = (tagList || []).map((t) => t.id);
+  console.log(`addTagsToExpense: expenseId=${expenseId}, tag_ids=`, ids);
   try {
-    await fetch(`/api/expense-tags/${expenseId}`, {
+    const res = await fetch(`/api/expense-tags/${expenseId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ tag_ids: tags.map((t) => t.id) }),
+      body: JSON.stringify({ tag_ids: ids }),
     });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error(`addTagsToExpense FAILED (${res.status}):`, body);
+      toast("Failed to save tag: " + (body.error || res.status), "error");
+    } else {
+      console.log("addTagsToExpense OK:", body);
+    }
   } catch (err) {
-    console.error("Failed to add tags to expense:", err);
+    console.error("addTagsToExpense network error:", err);
+    toast("Network error saving tag", "error");
   }
 }
 
@@ -141,8 +151,13 @@ function getExpenseTagsHTML(expenseTags) {
 
 async function ensureTagExists(tagName) {
   const normalized = tagName.toLowerCase().trim();
+  // First check local cache
   let tag = tags.find(t => t.name.toLowerCase().trim() === normalized);
-  if (tag) return tag;
+  if (tag) {
+    console.log("ensureTagExists: found in local cache:", tag);
+    return tag;
+  }
+  // Try to create the tag
   try {
     const res = await fetch("/api/tags", {
       method: "POST",
@@ -153,10 +168,26 @@ async function ensureTagExists(tagName) {
     if (res.ok) {
       const data = await res.json();
       tags.push(data.tag);
+      console.log("ensureTagExists: created new tag:", data.tag);
       return data.tag;
     }
+    // If 400 (already exists), refresh the tags list and find it
+    if (res.status === 400) {
+      console.log("ensureTagExists: tag already exists in DB, refreshing tags list...");
+      const tagsRes = await fetch("/api/tags", { credentials: "include" });
+      if (tagsRes.ok) {
+        const tagsData = await tagsRes.json();
+        tags = tagsData.tags || [];
+        tag = tags.find(t => t.name.toLowerCase().trim() === normalized);
+        if (tag) {
+          console.log("ensureTagExists: found after refresh:", tag);
+          return tag;
+        }
+      }
+    }
+    console.error("ensureTagExists: could not find or create tag:", tagName);
   } catch (err) {
-    console.error("Failed to create tag on the fly", err);
+    console.error("ensureTagExists: network error:", err);
   }
   return null;
 }
