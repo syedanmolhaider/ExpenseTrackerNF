@@ -37,8 +37,15 @@ exports.handler = async (event) => {
                 return createResponse(400, { error: "Month parameter is required (YYYY-MM)" });
             }
 
+            // Ensure is_repeating column exists
+            try {
+                await query("ALTER TABLE budget_items ADD COLUMN IF NOT EXISTS is_repeating BOOLEAN DEFAULT true;");
+            } catch (err) {
+                console.error("Migration error for budget_items:", err);
+            }
+
             const result = await query(
-                `SELECT id, title, category, amount, is_done, created_at, updated_at 
+                `SELECT id, title, category, amount, is_done, is_repeating, created_at, updated_at 
          FROM budget_items 
          WHERE user_id = $1 AND month = $2 
          ORDER BY is_done ASC, created_at ASC`,
@@ -50,7 +57,7 @@ exports.handler = async (event) => {
 
         // Handle POST - create new budget item
         if (event.httpMethod === "POST") {
-            const { title, category, amount, month } = JSON.parse(event.body);
+            const { title, category, amount, month, is_repeating } = JSON.parse(event.body);
 
             if (!title || !category || !amount || !month) {
                 return createResponse(400, { error: "Title, category, amount, and month are required" });
@@ -64,11 +71,13 @@ exports.handler = async (event) => {
                 return createResponse(400, { error: "Payload limits exceeded (Title max 255, Category max 100)" });
             }
 
+            const repeating = is_repeating !== undefined ? is_repeating : true;
+
             const result = await query(
-                `INSERT INTO budget_items (user_id, title, category, amount, month) 
-         VALUES ($1, $2, $3, $4, $5) 
-         RETURNING id, title, category, amount, is_done, created_at, updated_at`,
-                [userId, title, category, parseFloat(amount), month]
+                `INSERT INTO budget_items (user_id, title, category, amount, month, is_repeating) 
+         VALUES ($1, $2, $3, $4, $5, $6) 
+         RETURNING id, title, category, amount, is_done, is_repeating, created_at, updated_at`,
+                [userId, title, category, parseFloat(amount), month, repeating]
             );
 
             return createResponse(201, {
@@ -111,7 +120,7 @@ exports.handler = async (event) => {
             }
 
             // Regular update
-            const { title, category, amount } = JSON.parse(event.body);
+            const { title, category, amount, is_repeating } = JSON.parse(event.body);
 
             if (!title || !category || !amount) {
                 return createResponse(400, { error: "Title, category, and amount are required" });
@@ -121,12 +130,14 @@ exports.handler = async (event) => {
                 return createResponse(400, { error: "Payload limits exceeded (Title max 255, Category max 100)" });
             }
 
+            const repeating = is_repeating !== undefined ? is_repeating : true;
+
             const result = await query(
                 `UPDATE budget_items 
-         SET title = $1, category = $2, amount = $3, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $4 AND user_id = $5 
-         RETURNING id, title, category, amount, is_done, created_at, updated_at`,
-                [title, category, parseFloat(amount), itemId, userId]
+         SET title = $1, category = $2, amount = $3, is_repeating = $4, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $5 AND user_id = $6 
+         RETURNING id, title, category, amount, is_done, is_repeating, created_at, updated_at`,
+                [title, category, parseFloat(amount), repeating, itemId, userId]
             );
 
             return createResponse(200, {

@@ -1283,6 +1283,9 @@ function displayBudget() {
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="budget-sub-dot ${subIsOver ? "over" : subPct > 80 ? "warn" : ""}"></span>
             <span style="font-weight: 600; font-size: 0.9rem;">${esc(item.title)}</span>
+            ${String(item.is_repeating) === 'false' 
+              ? '<span class="badge" style="background:var(--orange);color:#fff;font-size:0.65rem;padding:2px 4px;border-radius:4px;">1️⃣</span>' 
+              : '<span class="badge" style="background:var(--blue);color:#fff;font-size:0.65rem;padding:2px 4px;border-radius:4px;">🔁</span>'}
             <span class="budget-sub-pct">${sharePct}% of ${esc(cat)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 6px;">
@@ -1438,6 +1441,18 @@ function updateBudgetSummary() {
   const available = incomeTotal - totalSpent;
   const extraAvailable = available - remaining;
 
+  // Calculate One-Time vs Repeating expenses
+  const repeatingExpenses = expenses.filter(e => {
+    const b = budgetItems.find(b => b.title === e.budget_tag);
+    // If budget isn't found, default to repeating for now, or consider it repeating if is_repeating !== false
+    return !b || String(b.is_repeating) !== 'false';
+  }).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+  const oneTimeExpenses = expenses.filter(e => {
+    const b = budgetItems.find(b => b.title === e.budget_tag);
+    return b && String(b.is_repeating) === 'false';
+  }).reduce((s, e) => s + parseFloat(e.amount), 0);
+
   if (document.getElementById("budgetTotalPlanned")) {
     document.getElementById("budgetTotalPlanned").textContent = `${fmtCurr(totalLimit)}`;
   }
@@ -1456,6 +1471,12 @@ function updateBudgetSummary() {
     document.getElementById("budgetUnplannedSpent").className =
       extraAvailable < 0 ? "summary-num text-red" : "summary-num text-green";
   }
+  if (document.getElementById("budgetRepeatingExpenses")) {
+    document.getElementById("budgetRepeatingExpenses").textContent = `${fmtCurr(repeatingExpenses)}`;
+  }
+  if (document.getElementById("budgetOneTimeExpenses")) {
+    document.getElementById("budgetOneTimeExpenses").textContent = `${fmtCurr(oneTimeExpenses)}`;
+  }
 }
 
 async function handleAddBudget(e) {
@@ -1463,6 +1484,7 @@ async function handleAddBudget(e) {
   const title = document.getElementById("budgetTitle").value.trim();
   const category = document.getElementById("budgetCategory").value;
   const amount = document.getElementById("budgetAmount").value;
+  const is_repeating = document.getElementById("budgetIsRepeating") ? document.getElementById("budgetIsRepeating").value === "true" : true;
   if (!title || !category || !amount) return;
   // No duplicate restriction — multiple items per category allowed (e.g. Milk + Lunch under Food)
   try {
@@ -1475,6 +1497,7 @@ async function handleAddBudget(e) {
         category,
         amount: parseFloat(amount),
         month: getMonthKey(),
+        is_repeating,
       }),
     });
     if (res.ok) {
@@ -1552,6 +1575,9 @@ function openEditBudgetModal(id) {
   document.getElementById("editBudgetTitle").value = item.title;
   document.getElementById("editBudgetCategory").value =
     item.category || "Other";
+  if (document.getElementById("editBudgetIsRepeating")) {
+    document.getElementById("editBudgetIsRepeating").value = String(item.is_repeating) === "false" ? "false" : "true";
+  }
   document.getElementById("editBudgetAmount").value = item.amount;
   document.getElementById("editBudgetModal").classList.add("show");
 }
@@ -1569,6 +1595,7 @@ async function handleEditBudget(e) {
     title: form.title.value.trim(),
     category: form.category.value,
     amount: form.amount.value,
+    is_repeating: form.is_repeating ? form.is_repeating.value === "true" : true,
   };
   try {
     const res = await fetch(`/api/budget/${id}`, {
