@@ -26,11 +26,14 @@ exports.handler = async (event) => {
     const userId = decoded.userId;
     const pathParts = event.path.replace(/\/$/, "").split("/");
 
-    // Path: /api/expenses/:expenseId/tags or /api/expenses/:expenseId/tags/:tagId
-    const expenseIdIdx = pathParts.indexOf("expenses") + 1;
-    const expenseId = pathParts[expenseIdIdx];
+    // Handle both /api/expense-tags/:expenseId and /api/expenses/:expenseId/tags
+    const baseIdx = pathParts.indexOf("expense-tags") !== -1 
+      ? pathParts.indexOf("expense-tags") 
+      : pathParts.indexOf("expenses");
+      
+    const expenseId = pathParts[baseIdx + 1];
     const tagId =
-      pathParts[pathParts.length - 1] !== "tags"
+      pathParts[pathParts.length - 1] !== "tags" && pathParts[pathParts.length - 1] !== expenseId
         ? pathParts[pathParts.length - 1]
         : null;
 
@@ -60,6 +63,38 @@ exports.handler = async (event) => {
       );
 
       return createResponse(200, { tags: result.rows });
+    }
+
+    // PUT — replace all tags for an expense
+    if (event.httpMethod === "PUT") {
+      const { tag_ids } = JSON.parse(event.body);
+
+      if (!Array.isArray(tag_ids)) {
+        return createResponse(400, { error: "tag_ids must be an array" });
+      }
+
+      // First delete existing tags mapping
+      await query("DELETE FROM expense_tag_map WHERE expense_id = $1", [expenseId]);
+
+      // Insert new tag mappings
+      if (tag_ids.length > 0) {
+        // Build values string for batch insert to prevent multiple queries
+        for (const tag_id of tag_ids) {
+          // Verify tag belongs to user
+          const tagCheck = await query(
+            "SELECT id FROM expense_tags WHERE id = $1 AND user_id = $2",
+            [tag_id, userId]
+          );
+          if (tagCheck.rows.length > 0) {
+            await query(
+              "INSERT INTO expense_tag_map (expense_id, tag_id) VALUES ($1, $2)",
+              [expenseId, tag_id]
+            );
+          }
+        }
+      }
+
+      return createResponse(200, { message: "Tags updated successfully" });
     }
 
     // POST — add tag to expense

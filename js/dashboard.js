@@ -1221,10 +1221,10 @@ function displayBudget() {
       const eTags = e.tags ? e.tags.map(t => t.name.toLowerCase().trim()) : [];
       let matchedIdx = -1;
 
-      // Strictly match via Tags (Expense tags must include the Budget item title)
+      // Match via Tags (strict), with exact Title match as fallback for older expenses
       for (let i = 0; i < items.length; i++) {
         const bTitle = items[i].title.toLowerCase().trim();
-        if (eTags.includes(bTitle)) {
+        if (eTags.includes(bTitle) || eTitle === bTitle) {
           matchedIdx = i;
           break;
         }
