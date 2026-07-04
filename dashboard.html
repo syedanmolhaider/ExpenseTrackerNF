@@ -77,6 +77,22 @@
           <label>Extra Available</label>
           <span class="balance-value text-green" id="balanceExtraAvailable">Rs 0</span>
         </div>
+        <div class="balance-item inhand-item" style="position:relative;">
+          <label style="display:flex;align-items:center;gap:4px;">💰 In-Hand <button id="editInHandBtn" class="btn-icon" style="font-size:0.7rem;padding:1px 4px;opacity:0.7;" title="Edit in-hand amount">✏️</button></label>
+          <span class="balance-value text-accent" id="balanceInHand">Rs 0</span>
+          <div id="inHandEditor" style="display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:10px;backdrop-filter:blur(20px);min-width:200px;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+            <label style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:4px;display:block;">Actual cash in hand</label>
+            <input type="number" id="inHandInput" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);font-size:0.9rem;" placeholder="Enter amount">
+            <div style="display:flex;gap:6px;margin-top:6px;">
+              <button id="saveInHandBtn" class="btn btn-sm" style="flex:1;font-size:0.75rem;">Save</button>
+              <button id="cancelInHandBtn" class="btn btn-sm btn-ghost" style="flex:1;font-size:0.75rem;">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div class="balance-item" id="diffItem">
+          <label>📊 Difference</label>
+          <span class="balance-value" id="balanceDiff">Rs 0</span>
+        </div>
       </div>
 
       <!-- Settings Modal -->
@@ -526,7 +542,7 @@
               <option value="Other">📦 Other</option>
             </select>
             <select id="filterTag" class="filter-select">
-              <option value="">All Tags</option>
+              <option value="">All Budget Tags</option>
             </select>
             <div class="btn-group">
               <label class="btn btn-ghost import-btn" for="importFile"

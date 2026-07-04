@@ -17,6 +17,7 @@ let searchQuery = "";
 let userSettings = { month_start_day: 1, month_end_day: 0, currency: "Rs" };
 let selectedExpenseTags = []; // Tags selected for new expense
 let editSelectedExpenseTags = []; // Tags selected for editing expense
+let inHandAmount = 0; // Actual in-hand cash amount
 
 // ------ Utility Functions ------
 // Escape HTML to prevent XSS
@@ -292,6 +293,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     initListeners();
     setDefaultDate();
     await Promise.all([loadAll(), loadTags(), loadCategories()]);
+    initInHandEditor();
+    updateTagFilter();
   } catch (err) {
     console.error("Dashboard initialization error:", err);
     showError("Failed to initialize dashboard. Please refresh the page.");
@@ -630,6 +633,15 @@ function initListeners() {
     displayExpenses();
   });
 
+  // Tag/budget filter
+  const filterTagEl = document.getElementById("filterTag");
+  if (filterTagEl) {
+    filterTagEl.addEventListener("change", (e) => {
+      currentTagFilter = e.target.value;
+      displayExpenses();
+    });
+  }
+
   // Search
   document.getElementById("searchExpense").addEventListener("input", (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
@@ -887,6 +899,7 @@ async function loadAll() {
   displayNextBudget();
   updateNextBudgetSummary();
   updateBalanceBar();
+  updateTagFilter();
   if (document.getElementById("panel-trends").classList.contains("active"))
     renderCharts();
 }
@@ -957,10 +970,10 @@ function displayExpenses() {
     ? expenses.filter((e) => e.category === currentFilter)
     : expenses;
 
-  // Apply tag filter
+  // Apply tag filter (uses budget_tag field)
   if (currentTagFilter) {
     filtered = filtered.filter(
-      (e) => e.tags && e.tags.some((t) => t.name === currentTagFilter),
+      (e) => e.budget_tag && e.budget_tag.toLowerCase() === currentTagFilter.toLowerCase(),
     );
   }
 
@@ -2126,6 +2139,89 @@ function updateBalanceBar() {
     document.getElementById("balanceExtraAvailable").className =
       extraAvailable < 0 ? "balance-value text-red" : "balance-value text-green";
   }
+
+  // In-Hand Amount & Difference
+  loadInHandAmount();
+  const inHandEl = document.getElementById("balanceInHand");
+  const diffEl = document.getElementById("balanceDiff");
+  if (inHandEl) {
+    inHandEl.textContent = inHandAmount > 0 ? fmtCurr(inHandAmount) : "Not set";
+    inHandEl.className = inHandAmount > 0 ? "balance-value text-accent" : "balance-value text-muted";
+  }
+  if (diffEl) {
+    if (inHandAmount > 0) {
+      // Expected = Income - Spent, Difference = InHand - Expected
+      const expected = incomeTotal - totalSpent;
+      const diff = inHandAmount - expected;
+      diffEl.textContent = `${fmtCurr(diff)}`;
+      if (Math.abs(diff) < 1) {
+        diffEl.className = "balance-value text-green";
+        diffEl.textContent = "✓ Matched";
+      } else if (diff > 0) {
+        diffEl.className = "balance-value text-green";
+        diffEl.textContent = `+${fmtCurr(diff)}`;
+      } else {
+        diffEl.className = "balance-value text-red";
+      }
+    } else {
+      diffEl.textContent = "—";
+      diffEl.className = "balance-value text-muted";
+    }
+  }
+}
+
+// =============================================
+// IN-HAND AMOUNT — stored per month in localStorage
+// =============================================
+function getInHandKey() {
+  return `inhand_${getMonthKey()}`;
+}
+
+function loadInHandAmount() {
+  const saved = localStorage.getItem(getInHandKey());
+  inHandAmount = saved ? parseFloat(saved) : 0;
+}
+
+function saveInHandAmount(amount) {
+  inHandAmount = amount;
+  localStorage.setItem(getInHandKey(), String(amount));
+}
+
+function initInHandEditor() {
+  const editBtn = document.getElementById("editInHandBtn");
+  const editor = document.getElementById("inHandEditor");
+  const input = document.getElementById("inHandInput");
+  const saveBtn = document.getElementById("saveInHandBtn");
+  const cancelBtn = document.getElementById("cancelInHandBtn");
+
+  if (!editBtn || !editor) return;
+
+  editBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    loadInHandAmount();
+    input.value = inHandAmount > 0 ? inHandAmount : "";
+    editor.style.display = editor.style.display === "none" ? "block" : "none";
+    if (editor.style.display === "block") input.focus();
+  });
+
+  saveBtn.addEventListener("click", () => {
+    const val = parseFloat(input.value) || 0;
+    saveInHandAmount(val);
+    editor.style.display = "none";
+    updateBalanceBar();
+    toast("In-hand amount saved", "success");
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    editor.style.display = "none";
+  });
+
+  // Close editor when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!editor.contains(e.target) && e.target !== editBtn) {
+      editor.style.display = "none";
+    }
+  });
 }
 
 // =============================================
@@ -3931,17 +4027,19 @@ function displayTags() {
     .join("");
 }
 
-// Update tag filter dropdown
+// Update tag filter dropdown — populate from budget items (not tags table)
 function updateTagFilter() {
   const filterTag = document.getElementById("filterTag");
   if (!filterTag) return;
 
   const currentValue = filterTag.value;
+  // Get unique budget item titles
+  const budgetTitles = [...new Set(budgetItems.map(item => item.title))];
   filterTag.innerHTML =
-    '<option value="">All Tags</option>' +
-    tags
+    '<option value="">All Budget Tags</option>' +
+    budgetTitles
       .map(
-        (tag) => `<option value="${esc(tag.name)}">${esc(tag.name)}</option>`,
+        (title) => `<option value="${esc(title)}">${esc(title)}</option>`,
       )
       .join("");
   filterTag.value = currentValue;
