@@ -96,7 +96,7 @@ async function loadRecurring() {
 
 // Add tags to an expense
 async function addTagsToExpense(expenseId, tags) {
-  if (!expenseId || !tags || tags.length === 0) return;
+  if (!expenseId || !tags) return;
   try {
     await fetch(`/api/expense-tags/${expenseId}`, {
       method: "PUT",
@@ -140,7 +140,8 @@ function getExpenseTagsHTML(expenseTags) {
 }
 
 async function ensureTagExists(tagName) {
-  let tag = tags.find(t => t.name === tagName);
+  const normalized = tagName.toLowerCase().trim();
+  let tag = tags.find(t => t.name.toLowerCase().trim() === normalized);
   if (tag) return tag;
   try {
     const res = await fetch("/api/tags", {
@@ -1026,7 +1027,7 @@ async function handleAddExpense(e) {
       }
 
       // Add tags to the new expense
-      if (expenseId && tagsToLink.length > 0) {
+      if (expenseId) {
         await addTagsToExpense(expenseId, tagsToLink);
       }
 
@@ -1103,9 +1104,7 @@ async function handleEditExpense(e) {
         const t = await ensureTagExists(selectedBudgetTitle);
         if (t) tagsToLink.push(t);
       }
-      if (tagsToLink.length > 0) {
-        await addTagsToExpense(parseInt(id), tagsToLink);
-      }
+      await addTagsToExpense(parseInt(id), tagsToLink);
 
       closeEditModal();
       toast("Expense updated", "success");
