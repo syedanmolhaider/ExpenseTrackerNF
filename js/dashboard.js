@@ -201,9 +201,37 @@ window.fetch = async function (...args) {
   return response;
 };
 
+// ------ Theme Toggle ------
+const getChartTheme = () => document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+const getChartColor = () => document.documentElement.getAttribute("data-theme") === "light" ? "#1a1d2e" : "#e2e8f0";
+
+function initTheme() {
+  const saved = localStorage.getItem("kt-theme") || "dark";
+  document.documentElement.setAttribute("data-theme", saved);
+  updateThemeIcon(saved);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme") || "dark";
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("kt-theme", next);
+  updateThemeIcon(next);
+  // Update ApexCharts theme if charts are rendered
+  if (typeof renderCharts === "function" && document.getElementById("panel-trends").classList.contains("active")) {
+    renderCharts();
+  }
+}
+
+function updateThemeIcon(theme) {
+  const btn = document.getElementById("themeToggleBtn");
+  if (btn) btn.textContent = theme === "dark" ? "🌙" : "☀️";
+}
+
 // ------ Init ------
 document.addEventListener("DOMContentLoaded", async () => {
   try {
+    initTheme();
     await checkAuth();
     await loadSettings();
     renderMonthLabel();
@@ -490,6 +518,9 @@ function initListeners() {
       if (tab.dataset.tab === "nextbudget") loadNextBudget(getNextMonthKey());
     });
   });
+
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  if (themeToggleBtn) themeToggleBtn.addEventListener("click", toggleTheme);
 
   document.getElementById("logoutBtn").addEventListener("click", handleLogout);
   document
@@ -2917,13 +2948,13 @@ function renderSpendingPace() {
         data: [Math.min(parseFloat(budgetConsumedPct), 100)],
       },
     ],
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "bar",
       height: 220,
       toolbar: { show: false },
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     plotOptions: {
       bar: {
@@ -2937,7 +2968,7 @@ function renderSpendingPace() {
     colors: ["#636e72", spendColor],
     dataLabels: {
       enabled: true,
-      style: { fontSize: "14px", fontWeight: "700", colors: ["#e2e8f0"] },
+      style: { fontSize: "14px", fontWeight: "700", colors: [getChartColor()] },
       formatter: function (val) {
         return val.toFixed(1) + "%";
       },
@@ -3060,13 +3091,13 @@ function renderCategoryDailyAllowance() {
       { name: "Daily Allowance", data: dailyAllowance },
       { name: "Today's Spent", data: dailyUsed },
     ],
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "bar",
       height: Math.max(220, categories.length * 55),
       toolbar: { show: false },
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     plotOptions: {
       bar: {
@@ -3080,7 +3111,7 @@ function renderCategoryDailyAllowance() {
     dataLabels: {
       enabled: true,
       offsetX: 25,
-      style: { fontSize: "11px", fontWeight: "600", colors: ["#e2e8f0"] },
+      style: { fontSize: "11px", fontWeight: "600", colors: [getChartColor()] },
       formatter: function (val) {
         return val > 0 ? fmtCurr(val) : "";
       },
@@ -3149,13 +3180,13 @@ function renderIncomeVsExpenseChart() {
       { name: "Expenses", data: [totalSpent] },
       { name: savings >= 0 ? "Savings" : "Deficit", data: [Math.abs(savings)] },
     ],
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "bar",
       height: 200,
       toolbar: { show: false },
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     plotOptions: {
       bar: {
@@ -3169,7 +3200,7 @@ function renderIncomeVsExpenseChart() {
     dataLabels: {
       enabled: true,
       offsetY: -20,
-      style: { fontSize: "13px", colors: ["#e2e8f0"], fontWeight: "700" },
+      style: { fontSize: "13px", colors: [getChartColor()], fontWeight: "700" },
       formatter: function (val) {
         return fmtCurr(val);
       },
@@ -3339,13 +3370,13 @@ function renderSpendingVelocity() {
 
   const options = {
     series: series,
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "area",
       height: 280,
       toolbar: { show: false },
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     colors: ["#6c5ce7", "#636e72"],
     fill: {
@@ -3457,13 +3488,13 @@ function renderWeeklyHeatmap() {
 
   const options = {
     series: series,
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "heatmap",
       height: 260,
       toolbar: { show: false },
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     dataLabels: { enabled: false },
     colors: ["#6c5ce7"],
@@ -3535,12 +3566,12 @@ function renderCategoryChart() {
 
   const options = {
     series: data,
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "pie",
       height: 320,
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     labels: labels.map((c) => getCatIcon(c) + " " + c),
     colors: CHART_COLORS,
@@ -3608,13 +3639,13 @@ function renderDailyChart() {
 
   const options = {
     series: [{ name: "Spent", data: data }],
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "area",
       height: 300,
       toolbar: { show: false },
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     colors: ["#0984e3"],
     fill: {
@@ -3710,13 +3741,13 @@ function renderBudgetProgress() {
       { name: "Planned Limit", data: planned },
       { name: "Actual Spent", data: spentData },
     ],
-    theme: { mode: "dark" },
+    theme: { mode: getChartTheme() },
     chart: {
       type: "bar",
       height: Math.max(250, categories.length * 60),
       toolbar: { show: false },
       background: "transparent",
-      foreColor: "#e2e8f0",
+      foreColor: getChartColor(),
     },
     plotOptions: {
       bar: {
@@ -3730,7 +3761,7 @@ function renderBudgetProgress() {
     dataLabels: {
       enabled: true,
       offsetX: 25,
-      style: { fontSize: "12px", colors: ["#e2e8f0"] },
+      style: { fontSize: "12px", colors: [getChartColor()] },
       formatter: function (val) {
         return val > 0 ? fmtCurr(val) : "";
       },

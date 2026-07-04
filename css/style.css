@@ -1357,7 +1357,7 @@ body {
   background: var(--bg-hover);
 }
 
-.kpi-data {
+.kpi-body {
   flex: 1;
   min-width: 0;
 }
@@ -2085,5 +2085,234 @@ select {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/* ===============================================
+   DAILY SPENDING ROOM — Trends Dashboard
+   =============================================== */
+.daily-room-card {
+  border-left: 3px solid var(--accent);
+}
+
+.card-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  margin: -8px 0 16px 0;
+}
+
+.card-subtitle-sm {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin: -8px 0 12px 0;
+}
+
+.daily-room-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.daily-room-kpi {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: all 0.25s ease;
+}
+
+.daily-room-kpi:hover {
+  border-color: var(--border-light);
+  transform: translateY(-1px);
+}
+
+.daily-room-kpi.highlight-kpi {
+  border-color: rgba(45, 212, 168, 0.2);
+  background: linear-gradient(135deg, var(--bg-primary) 0%, rgba(45, 212, 168, 0.04) 100%);
+}
+
+.daily-room-kpi-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.daily-room-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.daily-room-kpi-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.daily-room-kpi-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.daily-room-kpi-sub {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+/* ---- Chart 2-column layout ---- */
+.chart-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.chart-row-2col .card {
+  margin-bottom: 0;
+}
+
+/* ---- Tags Grid ---- */
+.tags-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ===============================================
+   THEME TOGGLE BUTTON
+   =============================================== */
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.theme-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+}
+
+/* ===============================================
+   LIGHT MODE THEME
+   =============================================== */
+[data-theme="light"] {
+  --bg-primary: #f5f6f8;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.03);
+  --bg-input: #f0f1f4;
+
+  --text-primary: #1a1d2e;
+  --text-secondary: #5c6178;
+  --text-muted: #8e93a6;
+
+  --accent: #16a085;
+  --accent-light: #1abc9c;
+  --accent-dim: rgba(22, 160, 133, 0.10);
+
+  --blue: #3b82f6;
+  --green: #10b981;
+  --green-dim: rgba(16, 185, 129, 0.10);
+  --orange: #f59e0b;
+  --orange-dim: rgba(245, 158, 11, 0.10);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.08);
+
+  --border: rgba(0, 0, 0, 0.08);
+  --border-light: rgba(0, 0, 0, 0.12);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.10);
+}
+
+/* Light mode specific overrides */
+[data-theme="light"] body {
+  background: var(--bg-primary);
+}
+
+[data-theme="light"] .topbar {
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="light"] .card {
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="light"] .kpi-card {
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="light"] .balance-item {
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="light"] .modal-overlay {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="light"] .modal-box {
+  box-shadow: var(--shadow-lg);
+}
+
+[data-theme="light"] .toast {
+  box-shadow: var(--shadow);
+}
+
+[data-theme="light"] .btn-primary {
+  color: #fff;
+}
+
+[data-theme="light"] .auth-card {
+  box-shadow: var(--shadow-lg);
+}
+
+[data-theme="light"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238e93a6'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+}
+
+[data-theme="light"] .daily-room-kpi {
+  background: var(--bg-primary);
+}
+
+/* ---- Responsive additions for trends ---- */
+@media (max-width: 640px) {
+  .daily-room-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-row-2col {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-room-kpi {
+    padding: 12px;
+  }
+
+  .daily-room-kpi-value {
+    font-size: 1rem;
   }
 }
