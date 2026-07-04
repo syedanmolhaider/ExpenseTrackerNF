@@ -17,7 +17,8 @@ let searchQuery = "";
 let userSettings = { month_start_day: 1, month_end_day: 0, currency: "Rs" };
 let selectedExpenseTags = []; // Tags selected for new expense
 let editSelectedExpenseTags = []; // Tags selected for editing expense
-let inHandAmount = 0; // Actual in-hand cash amount
+let inHandAmount = 0; // Actual in-hand cash amount (base)
+let inHandBaseSpent = 0; // Total spent at the time in-hand was saved
 
 // ------ Utility Functions ------
 // Escape HTML to prevent XSS
@@ -2144,15 +2145,19 @@ function updateBalanceBar() {
   loadInHandAmount();
   const inHandEl = document.getElementById("balanceInHand");
   const diffEl = document.getElementById("balanceDiff");
+  
+  // Calculate current in-hand based on expenses logged since saving
+  const currentInHand = inHandAmount > 0 ? (inHandAmount - (totalSpent - inHandBaseSpent)) : 0;
+  
   if (inHandEl) {
-    inHandEl.textContent = inHandAmount > 0 ? fmtCurr(inHandAmount) : "Not set";
+    inHandEl.textContent = inHandAmount > 0 ? fmtCurr(currentInHand) : "Not set";
     inHandEl.className = inHandAmount > 0 ? "balance-value text-accent" : "balance-value text-muted";
   }
   if (diffEl) {
     if (inHandAmount > 0) {
-      // Expected = Income - Spent, Difference = InHand - Expected
+      // Expected = Income - Spent, Difference = CurrentInHand - Expected
       const expected = incomeTotal - totalSpent;
-      const diff = inHandAmount - expected;
+      const diff = currentInHand - expected;
       diffEl.textContent = `${fmtCurr(diff)}`;
       if (Math.abs(diff) < 1) {
         diffEl.className = "balance-value text-green";
@@ -2179,12 +2184,25 @@ function getInHandKey() {
 
 function loadInHandAmount() {
   const saved = localStorage.getItem(getInHandKey());
-  inHandAmount = saved ? parseFloat(saved) : 0;
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      inHandAmount = parseFloat(parsed.amount) || 0;
+      inHandBaseSpent = parseFloat(parsed.baseSpent) || 0;
+    } catch (e) {
+      inHandAmount = parseFloat(saved) || 0;
+      inHandBaseSpent = 0;
+    }
+  } else {
+    inHandAmount = 0;
+    inHandBaseSpent = 0;
+  }
 }
 
 function saveInHandAmount(amount) {
   inHandAmount = amount;
-  localStorage.setItem(getInHandKey(), String(amount));
+  inHandBaseSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  localStorage.setItem(getInHandKey(), JSON.stringify({ amount: inHandAmount, baseSpent: inHandBaseSpent }));
 }
 
 function initInHandEditor() {
