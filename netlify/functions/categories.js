@@ -24,6 +24,36 @@ const DEFAULT_CATEGORIES = [
   { name: "Other", icon: "📦" },
 ];
 
+let tableVerified = false;
+
+async function ensureTableExists() {
+  if (tableVerified) return;
+  try {
+    const result = await query(
+      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_categories')`
+    );
+    if (!result.rows[0].exists) {
+      console.log("Creating user_categories table...");
+      await query(`
+        CREATE TABLE user_categories (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          name VARCHAR(100) NOT NULL,
+          icon VARCHAR(10) DEFAULT '📦',
+          is_default BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, name)
+        )
+      `);
+      console.log("✓ user_categories table created successfully");
+    }
+    tableVerified = true;
+  } catch (err) {
+    console.error("Failed to ensure user_categories table exists:", err);
+  }
+}
+
 exports.handler = async (event) => {
   // Handle CORS preflight
   if (event.httpMethod === "OPTIONS") {
@@ -44,6 +74,9 @@ exports.handler = async (event) => {
     if (!decoded) {
       return createResponse(401, { error: "Unauthorized" });
     }
+
+    // Ensure database table exists before querying
+    await ensureTableExists();
 
     const userId = decoded.userId;
     const pathParts = event.path.replace(/\/$/, "").split("/");
