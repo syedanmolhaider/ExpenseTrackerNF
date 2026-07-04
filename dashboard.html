@@ -466,20 +466,12 @@
                 />
               </div>
               <div class="form-field full-width">
-                <label for="expenseTags">Tags <small>(optional)</small></label>
-                <div class="tags-input-container">
-                  <div id="selectedTags" class="selected-tags"></div>
-                  <input
-                    type="text"
-                    id="expenseTags"
-                    placeholder="Type tag name and press Enter..."
-                    autocomplete="off"
-                  />
-                  <div
-                    id="tagSuggestions"
-                    class="tag-suggestions"
-                    style="display: none"
-                  ></div>
+                <label for="expenseTag">Budget Item / Tag <small>(optional)</small></label>
+                <div class="custom-select-wrapper">
+                  <select id="expenseTag" name="expenseTag">
+                    <option value="">None</option>
+                    <!-- Populated dynamically -->
+                  </select>
                 </div>
               </div>
               <div class="form-field full-width">

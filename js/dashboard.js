@@ -139,6 +139,41 @@ function getExpenseTagsHTML(expenseTags) {
     .join("")}</div>`;
 }
 
+async function ensureTagExists(tagName) {
+  let tag = tags.find(t => t.name === tagName);
+  if (tag) return tag;
+  try {
+    const res = await fetch("/api/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ name: tagName, color: "#6c5ce7" })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      tags.push(data.tag);
+      return data.tag;
+    }
+  } catch (err) {
+    console.error("Failed to create tag on the fly", err);
+  }
+  return null;
+}
+
+function populateBudgetTags() {
+  const select = document.getElementById("expenseTag");
+  if (!select) return;
+  select.innerHTML = '<option value="">None</option>';
+  
+  budgetItems.forEach(item => {
+    const opt = document.createElement("option");
+    opt.value = item.title;
+    opt.dataset.category = item.category;
+    opt.textContent = `${item.title} (${item.category})`;
+    select.appendChild(opt);
+  });
+}
+
 // ------ Global Interceptor ------
 const originalFetch = window.fetch;
 window.fetch = async function (...args) {
@@ -446,6 +481,15 @@ function initListeners() {
   document
     .getElementById("addExpenseForm")
     .addEventListener("submit", handleAddExpense);
+  const expenseTagEl = document.getElementById("expenseTag");
+  if (expenseTagEl) {
+    expenseTagEl.addEventListener("change", (e) => {
+      const selectedOpt = e.target.options[e.target.selectedIndex];
+      if (selectedOpt && selectedOpt.dataset.category) {
+        document.getElementById("expenseCategory").value = selectedOpt.dataset.category;
+      }
+    });
+  }
   document
     .getElementById("editExpenseForm")
     .addEventListener("submit", handleEditExpense);
@@ -883,18 +927,21 @@ async function handleAddExpense(e) {
       const result = await res.json();
       const expenseId = result.expense?.id;
 
+      const tagSelect = document.getElementById("expenseTag");
+      const selectedBudgetTitle = tagSelect ? tagSelect.value : "";
+      let tagsToLink = [];
+      if (selectedBudgetTitle) {
+        const t = await ensureTagExists(selectedBudgetTitle);
+        if (t) tagsToLink.push(t);
+      }
+
       // Add tags to the new expense
-      if (expenseId && selectedExpenseTags.length > 0) {
-        await addTagsToExpense(expenseId, selectedExpenseTags);
+      if (expenseId && tagsToLink.length > 0) {
+        await addTagsToExpense(expenseId, tagsToLink);
       }
 
       form.reset();
       setDefaultDate();
-      selectedExpenseTags = [];
-      renderSelectedTags(
-        selectedExpenseTags,
-        document.getElementById("selectedTags"),
-      );
       toast("Expense logged", "success");
       await loadExpenses(getMonthKey());
       updateBalanceBar();
@@ -999,6 +1046,7 @@ async function loadBudget(month) {
     if (!res.ok) throw new Error();
     const data = await res.json();
     budgetItems = data.items || [];
+    populateBudgetTags();
     displayBudget();
     updateBudgetSummary();
   } catch {
@@ -1068,12 +1116,13 @@ function displayBudget() {
 
     catExpenses.forEach((e) => {
       const eTitle = e.title.toLowerCase().trim();
+      const eTags = e.tags ? e.tags.map(t => t.name.toLowerCase().trim()) : [];
       let matchedIdx = -1;
 
-      // Phase 1: Exact match first
+      // Phase 1: Explicit match via Tags, then Exact match
       for (let i = 0; i < items.length; i++) {
         const bTitle = items[i].title.toLowerCase().trim();
-        if (eTitle === bTitle) {
+        if (eTags.includes(bTitle) || eTitle === bTitle) {
           matchedIdx = i;
           break;
         }

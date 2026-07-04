@@ -29,28 +29,22 @@ let tableVerified = false;
 async function ensureTableExists() {
   if (tableVerified) return;
   try {
-    const result = await query(
-      `SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'user_categories')`
-    );
-    if (!result.rows[0].exists) {
-      console.log("Creating user_categories table...");
-      await query(`
-        CREATE TABLE user_categories (
-          id SERIAL PRIMARY KEY,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-          name VARCHAR(100) NOT NULL,
-          icon VARCHAR(10) DEFAULT '📦',
-          is_default BOOLEAN DEFAULT FALSE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id, name)
-        )
-      `);
-      console.log("✓ user_categories table created successfully");
-    }
+    console.log("Ensuring user_categories table exists...");
+    await query(`
+      CREATE TABLE IF NOT EXISTS user_categories (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(100) NOT NULL,
+        icon VARCHAR(10) DEFAULT '📦',
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, name)
+      )
+    `);
     tableVerified = true;
   } catch (err) {
-    console.error("Failed to ensure user_categories table exists:", err);
+    console.error("Failed to ensure user_categories table exists. Error:", err.message);
   }
 }
 
