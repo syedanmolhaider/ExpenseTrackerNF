@@ -228,10 +228,31 @@ function updateThemeIcon(theme) {
   if (btn) btn.textContent = theme === "dark" ? "🌙" : "☀️";
 }
 
+// ------ Mask Values Toggle ------
+function initMask() {
+  const isMasked = localStorage.getItem("kt-mask") === "true";
+  if (isMasked) {
+    document.body.classList.add("mask-values");
+  }
+  updateMaskIcon(isMasked);
+}
+
+function toggleMask() {
+  const isMasked = document.body.classList.toggle("mask-values");
+  localStorage.setItem("kt-mask", isMasked);
+  updateMaskIcon(isMasked);
+}
+
+function updateMaskIcon(isMasked) {
+  const btn = document.getElementById("maskToggleBtn");
+  if (btn) btn.textContent = isMasked ? "🙈" : "👁️";
+}
+
 // ------ Init ------
 document.addEventListener("DOMContentLoaded", async () => {
   try {
     initTheme();
+    initMask();
     await checkAuth();
     await loadSettings();
     renderMonthLabel();
@@ -521,6 +542,9 @@ function initListeners() {
 
   const themeToggleBtn = document.getElementById("themeToggleBtn");
   if (themeToggleBtn) themeToggleBtn.addEventListener("click", toggleTheme);
+
+  const maskToggleBtn = document.getElementById("maskToggleBtn");
+  if (maskToggleBtn) maskToggleBtn.addEventListener("click", toggleMask);
 
   document.getElementById("logoutBtn").addEventListener("click", handleLogout);
   document

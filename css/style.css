@@ -2316,3 +2316,27 @@ select {
     font-size: 1rem;
   }
 }
+
+/* ===============================================
+   MASK VALUES MODE
+   =============================================== */
+.kpi-value,
+.daily-room-kpi-value,
+.balance-item h3,
+.budget-val,
+.expense-amount,
+.amount {
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+body.mask-values .kpi-value,
+body.mask-values .daily-room-kpi-value,
+body.mask-values .balance-item h3,
+body.mask-values .budget-val,
+body.mask-values .expense-amount,
+body.mask-values .amount {
+  filter: blur(6px);
+  opacity: 0.7;
+  user-select: none;
+  pointer-events: none;
+}
