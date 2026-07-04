@@ -433,7 +433,7 @@ function renderMonthLabel() {
   }
 }
 
-function changeMonth(offset) {
+async function changeMonth(offset) {
   currentMonth = new Date(
     currentMonth.getFullYear(),
     currentMonth.getMonth() + offset,
