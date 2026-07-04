@@ -1221,39 +1221,12 @@ function displayBudget() {
       const eTags = e.tags ? e.tags.map(t => t.name.toLowerCase().trim()) : [];
       let matchedIdx = -1;
 
-      // Phase 1: Explicit match via Tags, then Exact match
+      // Strictly match via Tags (Expense tags must include the Budget item title)
       for (let i = 0; i < items.length; i++) {
         const bTitle = items[i].title.toLowerCase().trim();
-        if (eTags.includes(bTitle) || eTitle === bTitle) {
+        if (eTags.includes(bTitle)) {
           matchedIdx = i;
           break;
-        }
-      }
-
-      // Phase 2: Safe Substring match via Word Boundaries (prevent "Car" matching "Card")
-      if (matchedIdx === -1) {
-        for (let i = 0; i < items.length; i++) {
-          const bTitle = items[i].title.toLowerCase().trim();
-          // Escape regex characters just in case
-          const safeBTitle = bTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          const safeETitle = eTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-          try {
-            // Check if the budget title is a standalone word in the expense title, OR vice versa
-            const bInE = new RegExp(`\\b${safeBTitle}\\b`).test(eTitle);
-            const eInB = new RegExp(`\\b${safeETitle}\\b`).test(bTitle);
-
-            if (bInE || eInB) {
-              matchedIdx = i;
-              break;
-            }
-          } catch (err) {
-            // Fallback to simple includes if regex fails maliciously
-            if (eTitle.includes(bTitle) || bTitle.includes(eTitle)) {
-              matchedIdx = i;
-              break;
-            }
-          }
         }
       }
 
