@@ -241,11 +241,47 @@ function parseLocalDate(dateStr) {
 
 // Returns the financial month key (YYYY-MM) for a given date
 function getFinancialMonthKey(d) {
-  let y = d.getFullYear();
-  let m = d.getMonth() + 1; // 1-12
+  const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
+  // Try candidate month keys around the date's calendar month
+  const targetYear = d.getFullYear();
+  const targetMonth = d.getMonth() + 1;
+
+  // Candidate offsets: -1, 0, +1 month keys
+  const candidates = [-1, 0, 1].map((offset) => {
+    let m = targetMonth + offset;
+    let y = targetYear;
+    if (m <= 0) {
+      m += 12;
+      y -= 1;
+    } else if (m > 12) {
+      m -= 12;
+      y += 1;
+    }
+    return `${y}-${String(m).padStart(2, "0")}`;
+  });
+
+  // Check which candidate's range contains the date d
+  for (const candidateKey of candidates) {
+    const range = getDateRangeForMonth(candidateKey, 0);
+    if (dStr >= range.from && dStr <= range.to) {
+      return candidateKey;
+    }
+  }
+
+  // Fallback if there is a gap and it doesn't fall in any candidate range
+  let y = d.getFullYear();
+  let m = d.getMonth() + 1;
   const startDay = userSettings.month_start_day;
-  if (startDay > 1) {
+  const endDay =
+    userSettings.month_end_day > 0
+      ? userSettings.month_end_day
+      : startDay > 1
+        ? startDay - 1
+        : 0;
+  const startInPrevMonth = startDay > endDay;
+
+  if (startInPrevMonth && startDay > 1) {
     if (d.getDate() >= startDay) {
       m += 1;
       if (m > 12) {
@@ -258,7 +294,6 @@ function getFinancialMonthKey(d) {
 }
 
 // Returns the financial month key for the CURRENTLY VIEWED cycle
-// M6 FIX: Now uses the same logic as getFinancialMonthKey for consistency
 function getMonthKey(d = currentMonth) {
   return getFinancialMonthKey(d);
 }
@@ -267,11 +302,18 @@ function getMonthKey(d = currentMonth) {
 // Accounts for custom financial month start/end days
 function getDateRangeForMonth(targetMonthKey, extraMonthsBefore = 0) {
   const startDay = userSettings.month_start_day;
+  const endDay =
+    userSettings.month_end_day > 0
+      ? userSettings.month_end_day
+      : startDay > 1
+        ? startDay - 1
+        : 0;
+
   const [year, month] = targetMonthKey.split("-").map(Number);
 
   let fromDate, toDate;
 
-  if (startDay === 1) {
+  if (startDay === 1 && endDay === 0) {
     // Standard calendar month
     const fromYear = month - extraMonthsBefore <= 0 ? year - 1 : year;
     const fromMonth = ((month - 1 - extraMonthsBefore + 12) % 12) + 1;
@@ -280,20 +322,27 @@ function getDateRangeForMonth(targetMonthKey, extraMonthsBefore = 0) {
     const lastDay = new Date(year, month, 0).getDate();
     toDate = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
   } else {
-    // Custom financial month: cycle starts on startDay of previous calendar month
-    // For target YYYY-MM, the cycle runs from (month-1)/startDay to month/(startDay-1)
-    const prevMonth = month - 1 <= 0 ? 12 : month - 1;
-    const prevYear = month - 1 <= 0 ? year - 1 : year;
-    const endDay =
-      userSettings.month_end_day > 0
-        ? userSettings.month_end_day
-        : startDay - 1;
+    // Custom financial cycle
+    const startInPrevMonth = startDay > endDay;
 
-    // Start from extra months before
-    const extraPrevMonth = ((prevMonth - 1 - extraMonthsBefore + 12) % 12) + 1;
-    const extraPrevYear =
-      prevMonth - extraMonthsBefore <= 0 ? prevYear - 1 : prevYear;
-    fromDate = `${extraPrevYear}-${String(extraPrevMonth).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
+    let startYear, startMonth;
+    if (startInPrevMonth) {
+      startYear = month - 1 <= 0 ? year - 1 : year;
+      startMonth = month - 1 <= 0 ? 12 : month - 1;
+    } else {
+      startYear = year;
+      startMonth = month;
+    }
+
+    // Adjust start month based on extraMonthsBefore
+    let extraStartMonth = startMonth - extraMonthsBefore;
+    let extraStartYear = startYear;
+    while (extraStartMonth <= 0) {
+      extraStartMonth += 12;
+      extraStartYear -= 1;
+    }
+
+    fromDate = `${extraStartYear}-${String(extraStartMonth).padStart(2, "0")}-${String(startDay).padStart(2, "0")}`;
     toDate = `${year}-${String(month).padStart(2, "0")}-${String(endDay).padStart(2, "0")}`;
   }
 
@@ -729,9 +778,11 @@ async function loadExpenses(month) {
     const data = await res.json();
     console.log(`Received ${data.expenses?.length || 0} expenses from API`);
     allExpenses = data.expenses || [];
-    expenses = allExpenses.filter(
-      (exp) => getFinancialMonthKey(parseLocalDate(exp.date)) === month,
-    );
+    const currentRange = getDateRangeForMonth(month, 0);
+    expenses = allExpenses.filter((exp) => {
+      const dStr = exp.date.split("T")[0];
+      return dStr >= currentRange.from && dStr <= currentRange.to;
+    });
     console.log(`Filtered to ${expenses.length} expenses for current month`);
     displayExpenses();
   } catch (err) {
@@ -1717,9 +1768,11 @@ async function loadIncome(month) {
     if (!res.ok) throw new Error();
     const data = await res.json();
     const allIncome = data.entries || [];
-    incomeEntries = allIncome.filter(
-      (exp) => getFinancialMonthKey(new Date(exp.date)) === month,
-    );
+    const currentRange = getDateRangeForMonth(month, 0);
+    incomeEntries = allIncome.filter((exp) => {
+      const dStr = exp.date.split("T")[0];
+      return dStr >= currentRange.from && dStr <= currentRange.to;
+    });
     displayIncome();
     updateIncomeSummary();
   } catch {
@@ -2358,33 +2411,7 @@ function renderKPIs() {
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
 
   // Days calculation
-  const startDay = userSettings.month_start_day;
-  const now = new Date();
-  const cycleStartDate = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
-    startDay,
-  );
-  const eYear = currentMonth.getFullYear();
-  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
-  const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(
-    eYear,
-    eMonth,
-    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
-  );
-
-  const daysElapsed = Math.max(
-    1,
-    Math.ceil(
-      (Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24),
-    ),
-  );
-  const totalDays = Math.max(
-    1,
-    Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)),
-  );
-  const daysLeft = Math.max(0, totalDays - daysElapsed);
+  const { daysElapsed, totalDays, daysLeft } = getCycleDates();
 
   // 1. Average Daily Spend
   const avgDaily = totalSpent / daysElapsed;
@@ -2517,30 +2544,24 @@ function renderKPIs() {
 // DAILY SPENDING ROOM (KPI summary cards)
 // =============================================
 function getCycleDates() {
-  const startDay = userSettings.month_start_day;
-  const cycleStartDate = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
-    startDay,
-  );
-  const eYear = currentMonth.getFullYear();
-  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
-  const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(
-    eYear,
-    eMonth,
-    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
-  );
+  const monthKey = getMonthKey();
+  const range = getDateRangeForMonth(monthKey, 0);
+
+  const cycleStartDate = parseLocalDate(range.from);
+  const cycleEndDate = parseLocalDate(range.to);
+
   const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
   const daysElapsed = Math.max(
     1,
     Math.ceil(
-      (Math.min(now, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24),
-    ),
+      (Math.min(today, cycleEndDate) - cycleStartDate) / (1000 * 60 * 60 * 24),
+    ) + 1,
   );
   const totalDays = Math.max(
     1,
-    Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)),
+    Math.ceil((cycleEndDate - cycleStartDate) / (1000 * 60 * 60 * 24)) + 1,
   );
   const daysLeft = Math.max(0, totalDays - daysElapsed);
   return { cycleStartDate, cycleEndDate, daysElapsed, totalDays, daysLeft };
@@ -3177,27 +3198,10 @@ function renderSpendingVelocity() {
     return;
   }
 
-  const startDay = userSettings.month_start_day;
-  const startDate = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
-    startDay,
-  );
-  const eYear = currentMonth.getFullYear();
-  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
-  const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(
-    eYear,
-    eMonth,
-    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
-  );
+  const { cycleStartDate: startDate, cycleEndDate, totalDays } = getCycleDates();
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   const endDate = cycleEndDate > today ? today : cycleEndDate;
-
-  const totalDays = Math.ceil(
-    (cycleEndDate - startDate) / (1000 * 60 * 60 * 24),
-  );
   const incomeTotal = incomeEntries.reduce(
     (s, e) => s + parseFloat(e.amount),
     0,
@@ -3309,20 +3313,7 @@ function renderWeeklyHeatmap() {
   }
 
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const startDay = userSettings.month_start_day;
-  const startDate = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
-    startDay,
-  );
-  const eYear = currentMonth.getFullYear();
-  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
-  const eDate = startDay > 1 ? startDay - 1 : 0;
-  const cycleEndDate = new Date(
-    eYear,
-    eMonth,
-    eDate || new Date(eYear, eMonth + 1, 0).getDate(),
-  );
+  const { cycleStartDate: startDate, cycleEndDate } = getCycleDates();
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   const endDate = cycleEndDate > today ? today : cycleEndDate;
@@ -3493,17 +3484,7 @@ function renderDailyChart() {
     return;
   }
 
-  const startDay = userSettings.month_start_day;
-  const startDate = new Date(
-    currentMonth.getFullYear(),
-    currentMonth.getMonth() - (startDay > 1 ? 1 : 0),
-    startDay,
-  );
-  const eYear = currentMonth.getFullYear();
-  const eMonth = currentMonth.getMonth() + (startDay > 1 ? 0 : 1);
-  const eDate = startDay > 1 ? startDay - 1 : 0;
-
-  const cycleEndDate = new Date(eYear, eMonth, eDate);
+  const { cycleStartDate: startDate, cycleEndDate } = getCycleDates();
   const today = new Date();
   today.setHours(23, 59, 59, 999);
   const endDate = cycleEndDate > today ? today : cycleEndDate;
@@ -3724,9 +3705,11 @@ function renderMonthComparison() {
     thisLabel = "This cycle";
   }
 
-  const lastExpenses = allExpenses.filter(
-    (e) => getFinancialMonthKey(new Date(e.date)) === lastMonthKey,
-  );
+  const lastRange = getDateRangeForMonth(lastMonthKey, 0);
+  const lastExpenses = allExpenses.filter((e) => {
+    const dStr = e.date.split("T")[0];
+    return dStr >= lastRange.from && dStr <= lastRange.to;
+  });
   const thisTotal = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const lastTotal = lastExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
   const thisCats = {},
