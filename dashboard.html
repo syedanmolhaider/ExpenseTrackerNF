@@ -454,17 +454,7 @@
                 <label for="expenseDate">Date</label>
                 <input type="date" id="expenseDate" name="date" required />
               </div>
-              <div class="form-field full-width">
-                <label for="expenseNotes"
-                  >Notes <small>(optional)</small></label
-                >
-                <input
-                  type="text"
-                  id="expenseNotes"
-                  name="notes"
-                  placeholder="Quick note..."
-                />
-              </div>
+              <!-- Notes removed -->
               <div class="form-field full-width">
                 <label for="expenseTag">Budget Item / Tag <small>(optional)</small></label>
                 <div class="custom-select-wrapper">
@@ -953,24 +943,12 @@
             <input type="date" id="editExpenseDate" name="date" required />
           </div>
           <div class="form-field full-width">
-            <label for="editExpenseNotes">Notes</label>
-            <input type="text" id="editExpenseNotes" name="notes" />
-          </div>
-          <div class="form-field full-width">
-            <label for="editExpenseTags">Tags</label>
-            <div class="tags-input-container">
-              <div id="editSelectedTags" class="selected-tags"></div>
-              <input
-                type="text"
-                id="editExpenseTags"
-                placeholder="Type tag name and press Enter..."
-                autocomplete="off"
-              />
-              <div
-                id="editTagSuggestions"
-                class="tag-suggestions"
-                style="display: none"
-              ></div>
+            <label for="editExpenseTag">Budget Item / Tag <small>(optional)</small></label>
+            <div class="custom-select-wrapper">
+              <select id="editExpenseTag" name="editExpenseTag">
+                <option value="">None</option>
+                <!-- Populated dynamically -->
+              </select>
             </div>
           </div>
           <div class="modal-actions full-width">

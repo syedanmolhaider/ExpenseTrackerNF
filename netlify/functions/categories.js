@@ -183,7 +183,7 @@ exports.handler = async (event) => {
       } catch (err) {
         console.error("Error creating category:", err.message);
         return createResponse(500, {
-          error: "Database table not found. Please run database setup first.",
+          error: "Database error: " + err.message,
         });
       }
     }

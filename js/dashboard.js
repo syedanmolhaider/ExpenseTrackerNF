@@ -162,16 +162,29 @@ async function ensureTagExists(tagName) {
 
 function populateBudgetTags() {
   const select = document.getElementById("expenseTag");
-  if (!select) return;
-  select.innerHTML = '<option value="">None</option>';
+  const editSelect = document.getElementById("editExpenseTag");
   
-  budgetItems.forEach(item => {
-    const opt = document.createElement("option");
-    opt.value = item.title;
-    opt.dataset.category = item.category;
-    opt.textContent = `${item.title} (${item.category})`;
-    select.appendChild(opt);
-  });
+  if (select) {
+    select.innerHTML = '<option value="">None</option>';
+    budgetItems.forEach(item => {
+      const opt = document.createElement("option");
+      opt.value = item.title;
+      opt.dataset.category = item.category;
+      opt.textContent = `${item.title} (${item.category})`;
+      select.appendChild(opt);
+    });
+  }
+  
+  if (editSelect) {
+    editSelect.innerHTML = '<option value="">None</option>';
+    budgetItems.forEach(item => {
+      const opt = document.createElement("option");
+      opt.value = item.title;
+      opt.dataset.category = item.category;
+      opt.textContent = `${item.title} (${item.category})`;
+      editSelect.appendChild(opt);
+    });
+  }
 }
 
 // ------ Global Interceptor ------
@@ -428,6 +441,12 @@ function changeMonth(offset) {
   );
   renderMonthLabel();
   renderNextMonthLabel();
+  
+  // Seamless auto-setup to fix missing DB tables (e.g., user_categories)
+  try {
+    await fetch("/api/setup-db", { method: "POST" });
+  } catch (e) {}
+  
   loadAll();
 }
 
@@ -487,6 +506,15 @@ function initListeners() {
       const selectedOpt = e.target.options[e.target.selectedIndex];
       if (selectedOpt && selectedOpt.dataset.category) {
         document.getElementById("expenseCategory").value = selectedOpt.dataset.category;
+      }
+    });
+  }
+  const editExpenseTagEl = document.getElementById("editExpenseTag");
+  if (editExpenseTagEl) {
+    editExpenseTagEl.addEventListener("change", (e) => {
+      const selectedOpt = e.target.options[e.target.selectedIndex];
+      if (selectedOpt && selectedOpt.dataset.category) {
+        document.getElementById("editExpenseCategory").value = selectedOpt.dataset.category;
       }
     });
   }
@@ -962,19 +990,22 @@ function openEditModal(id) {
   document.getElementById("editExpenseTitle").value = exp.title;
   document.getElementById("editExpenseAmount").value = exp.amount;
   document.getElementById("editExpenseCategory").value = exp.category;
-  document.getElementById("editExpenseDate").value = exp.date
-    ? exp.date.split("T")[0]
-    : "";
-  document.getElementById("editExpenseNotes").value = exp.notes || "";
+  document.getElementById("editExpenseDate").value = exp.date.split("T")[0];
 
-  // Load existing tags for this expense
-  editSelectedExpenseTags = exp.tags ? exp.tags.map((t) => t.id) : [];
-  renderSelectedTags(
-    editSelectedExpenseTags,
-    document.getElementById("editSelectedTags"),
-  );
+  // Load existing tags for this expense to prepopulate dropdown
+  const editExpenseTagDropdown = document.getElementById("editExpenseTag");
+  if (editExpenseTagDropdown) {
+    if (exp.tags && exp.tags.length > 0) {
+      const existingTagName = exp.tags[0].name;
+      editExpenseTagDropdown.value = existingTagName;
+    } else {
+      editExpenseTagDropdown.value = "";
+    }
+  }
+
   document.getElementById("editModal").classList.add("show");
 }
+
 function closeEditModal() {
   document.getElementById("editModal").classList.remove("show");
   editSelectedExpenseTags = [];
@@ -991,7 +1022,7 @@ async function handleEditExpense(e) {
     amount: form.amount.value,
     category: form.category.value,
     date: form.date.value,
-    notes: form.notes.value.trim(),
+    notes: "",
   };
   try {
     const res = await fetch(`/api/expenses/${id}`, {
@@ -1001,12 +1032,19 @@ async function handleEditExpense(e) {
       body: JSON.stringify(data),
     });
     if (res.ok) {
-      // Update tags for the expense
-      await updateExpenseTags(parseInt(id), editSelectedExpenseTags);
+      const tagSelect = document.getElementById("editExpenseTag");
+      const selectedBudgetTitle = tagSelect ? tagSelect.value : "";
+      let tagsToLink = [];
+      if (selectedBudgetTitle) {
+        const t = await ensureTagExists(selectedBudgetTitle);
+        if (t) tagsToLink.push(t);
+      }
+      if (tagsToLink.length > 0) {
+        await addTagsToExpense(parseInt(id), tagsToLink);
+      }
 
       closeEditModal();
-      toast("Updated", "success");
-      editSelectedExpenseTags = [];
+      toast("Expense updated", "success");
       await loadExpenses(getMonthKey());
       updateBalanceBar();
       renderChartsIfActive();
