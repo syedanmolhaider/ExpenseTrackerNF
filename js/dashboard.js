@@ -994,7 +994,7 @@ function displayExpenses() {
             <span>${fmtDate(exp.date)}</span>
           </div>
           ${exp.notes ? `<div class="expense-notes-text">${esc(exp.notes)}</div>` : ""}
-          ${getExpenseTagsHTML(exp.tags)}
+          ${exp.budget_tag ? `<div class="expense-tags"><span class="tag-badge" style="background: var(--accent-alpha); color: var(--accent); border: 1px solid var(--accent)40;">📌 ${esc(exp.budget_tag)}</span></div>` : getExpenseTagsHTML(exp.tags)}
         </div>
         <div class="expense-amount-val">${fmtCurr(exp.amount)}</div>
       </div>
@@ -1036,7 +1036,10 @@ async function handleAddExpense(e) {
     return;
   }
 
-  const data = { title, amount, category, date, notes: "" };
+  // Get selected budget tag from dropdown
+  const tagSelect = document.getElementById("expenseTag");
+  const budgetTag = tagSelect ? tagSelect.value : "";
+  const data = { title, amount, category, date, notes: "", budget_tag: budgetTag || null };
 
   try {
     const res = await fetch("/api/expenses", {
@@ -1046,21 +1049,6 @@ async function handleAddExpense(e) {
       body: JSON.stringify(data),
     });
     if (res.ok) {
-      const result = await res.json();
-      const expenseId = result.expense?.id;
-
-      const tagSelect = document.getElementById("expenseTag");
-      const selectedBudgetTitle = tagSelect ? tagSelect.value : "";
-      let tagsToLink = [];
-      if (selectedBudgetTitle) {
-        const t = await ensureTagExists(selectedBudgetTitle);
-        if (t) tagsToLink.push(t);
-      }
-
-      // Add tags to the new expense
-      if (expenseId) {
-        await addTagsToExpense(expenseId, tagsToLink);
-      }
 
       form.reset();
       setDefaultDate();
@@ -1088,15 +1076,10 @@ function openEditModal(id) {
   document.getElementById("editExpenseCategory").value = exp.category;
   document.getElementById("editExpenseDate").value = exp.date.split("T")[0];
 
-  // Load existing tags for this expense to prepopulate dropdown
+  // Load existing budget_tag for this expense to prepopulate dropdown
   const editExpenseTagDropdown = document.getElementById("editExpenseTag");
   if (editExpenseTagDropdown) {
-    if (exp.tags && exp.tags.length > 0) {
-      const existingTagName = exp.tags[0].name;
-      editExpenseTagDropdown.value = existingTagName;
-    } else {
-      editExpenseTagDropdown.value = "";
-    }
+    editExpenseTagDropdown.value = exp.budget_tag || "";
   }
 
   document.getElementById("editModal").classList.add("show");
@@ -1113,12 +1096,15 @@ async function handleEditExpense(e) {
   e.preventDefault();
   const id = document.getElementById("editExpenseId").value;
   const form = e.target;
+  const tagSelect = document.getElementById("editExpenseTag");
+  const budgetTag = tagSelect ? tagSelect.value : "";
   const data = {
     title: form.title.value.trim(),
     amount: form.amount.value,
     category: form.category.value,
     date: form.date.value,
     notes: "",
+    budget_tag: budgetTag || null,
   };
   try {
     const res = await fetch(`/api/expenses/${id}`, {
@@ -1128,22 +1114,19 @@ async function handleEditExpense(e) {
       body: JSON.stringify(data),
     });
     if (res.ok) {
-      const tagSelect = document.getElementById("editExpenseTag");
-      const selectedBudgetTitle = tagSelect ? tagSelect.value : "";
-      let tagsToLink = [];
-      if (selectedBudgetTitle) {
-        const t = await ensureTagExists(selectedBudgetTitle);
-        if (t) tagsToLink.push(t);
-      }
-      await addTagsToExpense(parseInt(id), tagsToLink);
-
       closeEditModal();
       toast("Expense updated", "success");
       await loadExpenses(getMonthKey());
+      displayBudget();
+      updateBudgetSummary();
       updateBalanceBar();
       renderChartsIfActive();
-    } else toast("Failed to update", "error");
-  } catch {
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      toast(errData.error || "Failed to update", "error");
+    }
+  } catch (err) {
+    console.error("Edit expense error:", err);
     toast("Network error", "error");
   }
 }
@@ -1247,16 +1230,17 @@ function displayBudget() {
     let unallocatedSpent = 0;
 
     catExpenses.forEach((e) => {
-      const eTitle = e.title.toLowerCase().trim();
-      const eTags = e.tags ? e.tags.map(t => t.name.toLowerCase().trim()) : [];
+      const eBudgetTag = (e.budget_tag || "").toLowerCase().trim();
       let matchedIdx = -1;
 
-      // Match strictly via Tags (Expense tags must include the Budget item title)
-      for (let i = 0; i < items.length; i++) {
-        const bTitle = items[i].title.toLowerCase().trim();
-        if (eTags.includes(bTitle)) {
-          matchedIdx = i;
-          break;
+      // Match via budget_tag field (saved directly on the expense record)
+      if (eBudgetTag) {
+        for (let i = 0; i < items.length; i++) {
+          const bTitle = items[i].title.toLowerCase().trim();
+          if (eBudgetTag === bTitle) {
+            matchedIdx = i;
+            break;
+          }
         }
       }
 

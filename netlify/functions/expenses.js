@@ -2,6 +2,20 @@ const { query } = require("./utils/db");
 const { getUserFromRequest, createResponse } = require("./utils/auth");
 const { rateLimitCheck } = require("./utils/rate-limit");
 
+// Self-migration: ensure budget_tag column exists
+let migrationDone = false;
+async function ensureBudgetTagColumn() {
+  if (migrationDone) return;
+  try {
+    await query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS budget_tag VARCHAR(255) DEFAULT NULL`);
+    migrationDone = true;
+    console.log("budget_tag column ensured");
+  } catch (err) {
+    console.log("budget_tag migration note:", err.message);
+    migrationDone = true; // Don't retry on every request
+  }
+}
+
 exports.handler = async (event) => {
   // Handle CORS preflight
   if (event.httpMethod === "OPTIONS") {
@@ -26,6 +40,9 @@ exports.handler = async (event) => {
     const userId = decoded.userId;
     const params = event.queryStringParameters || {};
 
+    // Ensure budget_tag column exists
+    await ensureBudgetTagColumn();
+
     // Handle GET request - fetch expenses for user (with optional date range filter)
     if (event.httpMethod === "GET") {
       console.log(`GET expenses for userId: ${userId}, params:`, params);
@@ -43,7 +60,7 @@ exports.handler = async (event) => {
       let sql, values, paramIdx;
       
       if (tagsExist) {
-        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.created_at, e.updated_at,
+        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.budget_tag, e.created_at, e.updated_at,
                   COALESCE(
                     json_agg(
                       json_build_object('id', t.id, 'name', t.name, 'color', t.color)
@@ -57,7 +74,7 @@ exports.handler = async (event) => {
         values = [userId];
         paramIdx = 2;
       } else {
-        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.created_at, e.updated_at,
+        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.budget_tag, e.created_at, e.updated_at,
                   '[]'::json as tags
            FROM expenses e
            WHERE e.user_id = $1`;
@@ -105,7 +122,7 @@ exports.handler = async (event) => {
 
     // Handle POST request - create new expense
     if (event.httpMethod === "POST") {
-      const { title, amount, category, date, notes } = JSON.parse(event.body);
+      const { title, amount, category, date, notes, budget_tag } = JSON.parse(event.body);
 
       // Validate input
       if (!title || !amount || !category || !date) {
@@ -132,10 +149,10 @@ exports.handler = async (event) => {
       }
 
       const result = await query(
-        `INSERT INTO expenses (user_id, title, amount, category, date, notes) 
-         VALUES ($1, $2, $3, $4, $5, $6) 
-         RETURNING id, title, amount, category, date, notes, created_at, updated_at`,
-        [userId, title, parseFloat(amount), category, date, notes || null],
+        `INSERT INTO expenses (user_id, title, amount, category, date, notes, budget_tag) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+         RETURNING id, title, amount, category, date, notes, budget_tag, created_at, updated_at`,
+        [userId, title, parseFloat(amount), category, date, notes || null, budget_tag || null],
       );
 
       return createResponse(201, {
@@ -153,7 +170,7 @@ exports.handler = async (event) => {
         return createResponse(400, { error: "Expense ID is required" });
       }
 
-      const { title, amount, category, date, notes } = JSON.parse(event.body);
+      const { title, amount, category, date, notes, budget_tag } = JSON.parse(event.body);
 
       // Validate input
       if (!title || !amount || !category || !date) {
@@ -191,15 +208,16 @@ exports.handler = async (event) => {
 
       const result = await query(
         `UPDATE expenses 
-         SET title = $1, amount = $2, category = $3, date = $4, notes = $5, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $6 AND user_id = $7 
-         RETURNING id, title, amount, category, date, notes, created_at, updated_at`,
+         SET title = $1, amount = $2, category = $3, date = $4, notes = $5, budget_tag = $6, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $7 AND user_id = $8 
+         RETURNING id, title, amount, category, date, notes, budget_tag, created_at, updated_at`,
         [
           title,
           parseFloat(amount),
           category,
           date,
           notes || null,
+          budget_tag || null,
           expenseId,
           userId,
         ],
