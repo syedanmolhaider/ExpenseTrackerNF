@@ -936,14 +936,21 @@ function updateDailySummary(filteredData = expenses) {
 async function handleAddExpense(e) {
   e.preventDefault();
   const form = e.target;
-  const data = {
-    title: form.title.value.trim(),
-    amount: form.amount.value,
-    category: form.category.value,
-    date: form.date.value,
-    notes: form.notes.value.trim(),
-  };
-  if (!data.title || !data.amount || !data.category || !data.date) return;
+  const title = form.title ? form.title.value.trim() : "";
+  const amount = form.amount ? form.amount.value : "";
+  const category = form.category ? form.category.value : "";
+  const date = form.date ? form.date.value : "";
+
+  console.log("handleAddExpense called:", { title, amount, category, date });
+
+  if (!title || !amount || !category || !date) {
+    console.warn("Expense form validation failed:", { title, amount, category, date });
+    toast("Please fill all required fields", "error");
+    return;
+  }
+
+  const data = { title, amount, category, date, notes: "" };
+
   try {
     const res = await fetch("/api/expenses", {
       method: "POST",
@@ -975,11 +982,13 @@ async function handleAddExpense(e) {
       updateBalanceBar();
       renderChartsIfActive();
     } else {
-      const r = await res.json();
-      toast(r.error || "Failed", "error");
+      const r = await res.json().catch(() => ({}));
+      console.error("Add expense API error:", r);
+      toast(r.error || "Failed to add expense", "error");
     }
-  } catch {
-    toast("Network error", "error");
+  } catch (err) {
+    console.error("Add expense network error:", err);
+    toast("Network error: " + (err.message || "unknown"), "error");
   }
 }
 
