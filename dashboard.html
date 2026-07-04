@@ -196,7 +196,6 @@
           📊 Daily Tracker
         </button>
         <button class="tab" data-tab="income" id="tab-income">💵 Income</button>
-        <button class="tab" data-tab="tags" id="tab-tags">🏷️ Tags</button>
         <button class="tab" data-tab="trends" id="tab-trends">📈 Trends</button>
       </nav>
 
@@ -642,42 +641,7 @@
           </div>
         </section>
 
-        <!-- ========== TAGS SECTION ========== -->
-        <section class="tab-panel" id="panel-tags">
-          <!-- Add Tag -->
-          <div class="card add-card">
-            <h2 class="card-title">Create New Tag</h2>
-            <form id="addTagForm" class="inline-form">
-              <input
-                type="text"
-                id="tagName"
-                placeholder="Tag name (e.g. vacation, work)"
-                required
-                style="flex: 1"
-              />
-              <input
-                type="color"
-                id="tagColor"
-                value="#6c5ce7"
-                title="Tag color"
-                style="width: 50px; height: 38px; border: none; cursor: pointer"
-              />
-              <button type="submit" class="btn btn-primary">
-                + Create Tag
-              </button>
-            </form>
-          </div>
 
-          <!-- Tags List -->
-          <div class="card">
-            <h2 class="card-title">Your Tags</h2>
-            <div id="tagsList" class="tags-grid">
-              <p class="empty-msg">
-                No tags created yet. Create your first tag above!
-              </p>
-            </div>
-          </div>
-        </section>
 
         <!-- ========== TRENDS SECTION ========== -->
         <section class="tab-panel" id="panel-trends">

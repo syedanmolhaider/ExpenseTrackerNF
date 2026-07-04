@@ -1,6 +1,6 @@
 /* ===============================================
-   KING'S TRACKER — Material Minimalist Theme
-   Clean surfaces · Subtle elevation · Soft palettes
+   KING'S TRACKER — iOS 26 Frosted Glass Theme
+   Glassmorphism · Subtle elevation · Mesh Gradients
    =============================================== */
 
 /* Reset & Base */
@@ -13,44 +13,45 @@
 }
 
 :root {
-  /* Surface System — Soft dark with warm undertones */
-  --bg-primary: #121318;
-  --bg-secondary: #18191f;
-  --bg-card: #1e1f26;
-  --bg-hover: rgba(255, 255, 255, 0.04);
-  --bg-input: #15161c;
+  /* Surface System — Frosted Glass Base */
+  --bg-primary: #0a0a0c;
+  --bg-secondary: rgba(20, 20, 25, 0.45);
+  --bg-card: rgba(25, 25, 30, 0.55);
+  --bg-hover: rgba(255, 255, 255, 0.08);
+  --bg-input: rgba(0, 0, 0, 0.3);
 
   /* Text Hierarchy */
-  --text-primary: #e4e6ed;
-  --text-secondary: #9096a8;
-  --text-muted: #575d72;
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --text-muted: rgba(255, 255, 255, 0.4);
 
-  /* Accent — Cool teal/mint */
-  --accent: #2dd4a8;
-  --accent-light: #5eecc5;
-  --accent-dim: rgba(45, 212, 168, 0.12);
+  /* Accent — Vibrant iOS 26 Blue/Purple */
+  --accent: #5e5ce6;
+  --accent-light: #7d7aff;
+  --accent-dim: rgba(94, 92, 230, 0.15);
 
   /* Semantic Colors */
-  --blue: #60a5fa;
-  --green: #34d399;
-  --green-dim: rgba(52, 211, 153, 0.12);
-  --orange: #fbbf24;
-  --orange-dim: rgba(251, 191, 36, 0.12);
-  --red: #f87171;
-  --red-dim: rgba(248, 113, 113, 0.10);
+  --blue: #32ade6;
+  --green: #34c759;
+  --green-dim: rgba(52, 199, 89, 0.12);
+  --orange: #ff9f0a;
+  --orange-dim: rgba(255, 159, 10, 0.12);
+  --red: #ff453a;
+  --red-dim: rgba(255, 69, 58, 0.12);
 
-  /* Surfaces */
-  --border: rgba(255, 255, 255, 0.06);
-  --border-light: rgba(255, 255, 255, 0.10);
+  /* Surfaces & Glass Edges */
+  --border: rgba(255, 255, 255, 0.12);
+  --border-light: rgba(255, 255, 255, 0.2);
+  --glass-blur: blur(24px);
 
   /* Shape & Motion */
-  --radius: 14px;
-  --radius-sm: 8px;
-  --radius-xs: 5px;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
-  --shadow: 0 4px 16px rgba(0,0,0,0.25);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.35);
-  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --radius: 20px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.15);
+  --shadow: 0 8px 32px rgba(0,0,0,0.3);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.4);
+  --transition: 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 html {
@@ -60,19 +61,26 @@ html {
 
 body {
   font-family:
-    "Inter",
     -apple-system,
     BlinkMacSystemFont,
+    "SF Pro Display",
     "Segoe UI",
     Roboto,
     sans-serif;
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
+  /* Mesh Gradient Background for Glassmorphism */
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(94, 92, 230, 0.25) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(50, 173, 230, 0.2) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(255, 159, 10, 0.15) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(52, 199, 89, 0.1) 0px, transparent 50%);
+  background-attachment: fixed;
   color: var(--text-primary);
-  line-height: 1.6;
+  line-height: 1.5;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 /* ===============================================
@@ -2216,42 +2224,47 @@ select {
 }
 
 /* ===============================================
-   LIGHT MODE THEME
+   LIGHT MODE THEME (Frosted Glass)
    =============================================== */
 [data-theme="light"] {
-  --bg-primary: #f5f6f8;
-  --bg-secondary: #ffffff;
-  --bg-card: #ffffff;
-  --bg-hover: rgba(0, 0, 0, 0.03);
-  --bg-input: #f0f1f4;
+  --bg-primary: #f2f2f7;
+  --bg-secondary: rgba(255, 255, 255, 0.5);
+  --bg-card: rgba(255, 255, 255, 0.65);
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-input: rgba(255, 255, 255, 0.8);
 
-  --text-primary: #1a1d2e;
-  --text-secondary: #5c6178;
-  --text-muted: #8e93a6;
+  --text-primary: #1c1c1e;
+  --text-secondary: rgba(60, 60, 67, 0.75);
+  --text-muted: rgba(60, 60, 67, 0.5);
 
-  --accent: #16a085;
-  --accent-light: #1abc9c;
-  --accent-dim: rgba(22, 160, 133, 0.10);
+  --accent: #007aff;
+  --accent-light: #5ac8fa;
+  --accent-dim: rgba(0, 122, 255, 0.15);
 
-  --blue: #3b82f6;
-  --green: #10b981;
-  --green-dim: rgba(16, 185, 129, 0.10);
-  --orange: #f59e0b;
-  --orange-dim: rgba(245, 158, 11, 0.10);
-  --red: #ef4444;
-  --red-dim: rgba(239, 68, 68, 0.08);
+  --blue: #007aff;
+  --green: #34c759;
+  --green-dim: rgba(52, 199, 89, 0.15);
+  --orange: #ff9f0a;
+  --orange-dim: rgba(255, 159, 10, 0.15);
+  --red: #ff3b30;
+  --red-dim: rgba(255, 59, 48, 0.12);
 
   --border: rgba(0, 0, 0, 0.08);
-  --border-light: rgba(0, 0, 0, 0.12);
+  --border-light: rgba(255, 255, 255, 0.5);
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow: 0 4px 16px rgba(0,0,0,0.08);
-  --shadow-lg: 0 12px 40px rgba(0,0,0,0.10);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+  --shadow: 0 8px 32px rgba(0,0,0,0.08);
+  --shadow-lg: 0 16px 48px rgba(0,0,0,0.12);
 }
 
 /* Light mode specific overrides */
 [data-theme="light"] body {
-  background: var(--bg-primary);
+  background-color: var(--bg-primary);
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(0, 122, 255, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(90, 200, 250, 0.12) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(255, 159, 10, 0.1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(52, 199, 89, 0.08) 0px, transparent 50%);
 }
 
 [data-theme="light"] .topbar {
@@ -2315,6 +2328,37 @@ select {
   .daily-room-kpi-value {
     font-size: 1rem;
   }
+}
+
+/* ===============================================
+   FROSTED GLASS SURFACES
+   =============================================== */
+.card,
+.kpi-card,
+.daily-room-kpi,
+.topbar,
+.modal-box,
+.auth-card,
+.balance-item {
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* In light mode, intensify the white borders for glass contrast */
+[data-theme="light"] .card,
+[data-theme="light"] .kpi-card,
+[data-theme="light"] .daily-room-kpi,
+[data-theme="light"] .topbar,
+[data-theme="light"] .modal-box,
+[data-theme="light"] .auth-card,
+[data-theme="light"] .balance-item {
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .daily-room-kpi.highlight-kpi {
+  background: linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(45, 212, 168, 0.15) 100%);
+  border-color: rgba(45, 212, 168, 0.4);
 }
 
 /* ===============================================
