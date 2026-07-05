@@ -3724,26 +3724,36 @@ function renderCategoryChart() {
   }
   el.innerHTML = "";
 
-  const options = {
+    const options = {
     series: data,
     theme: { mode: getChartTheme() },
     chart: {
-      type: "pie",
+      type: "donut",
       height: 320,
       background: "transparent",
       foreColor: getChartColor(),
     },
     labels: labels.map((c) => getCatIcon(c) + " " + c),
     colors: CHART_COLORS,
-    plotOptions: { pie: { expandOnClick: true } },
-    dataLabels: {
-      enabled: true,
-      formatter: function (val) {
-        return val.toFixed(1) + "%";
-      },
+    plotOptions: { 
+      pie: { 
+        donut: {
+          size: '65%',
+          labels: {
+            show: true,
+            name: { show: true, fontSize: '14px', color: getChartColor() },
+            value: { show: true, fontSize: '20px', fontWeight: 600, formatter: (val) => fmtCurr(val) },
+            total: { show: true, showAlways: true, label: 'Total', fontSize: '16px', color: getChartColor(), formatter: (w) => fmtCurr(w.globals.seriesTotals.reduce((a, b) => a + b, 0)) }
+          }
+        },
+        expandOnClick: true 
+      } 
     },
-    legend: { position: "bottom" },
-    stroke: { show: false },
+    dataLabels: {
+      enabled: false,
+    },
+    legend: { position: "bottom", fontSize: '13px', markers: { radius: 12 } },
+    stroke: { show: true, width: 2, colors: [getChartTheme() === 'dark' ? '#1C1C1E' : '#FFFFFF'] },
     tooltip: {
       theme: "dark",
       y: {

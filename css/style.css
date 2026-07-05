@@ -1,6 +1,6 @@
 /* ===============================================
-   KING'S TRACKER — iOS 26 Frosted Glass Theme
-   Glassmorphism · Subtle elevation · Mesh Gradients
+   KING'S TRACKER — Material You / One UI Theme
+   Clean surfaces · Rounded corners · Soft elevations
    =============================================== */
 
 /* Reset & Base */
@@ -13,45 +13,68 @@
 }
 
 :root {
-  /* Surface System — Frosted Glass Base */
-  --bg-primary: #0a0a0c;
-  --bg-secondary: rgba(20, 20, 25, 0.45);
-  --bg-card: rgba(25, 25, 30, 0.55);
+  /* Dark Mode Surface System (Material Dark) */
+  --bg-primary: #000000;
+  --bg-secondary: #1C1C1E;
+  --bg-card: #1C1C1E;
   --bg-hover: rgba(255, 255, 255, 0.08);
-  --bg-input: rgba(0, 0, 0, 0.3);
+  --bg-input: #2C2C2E;
 
   /* Text Hierarchy */
-  --text-primary: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.65);
-  --text-muted: rgba(255, 255, 255, 0.4);
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.45);
 
-  /* Accent — Vibrant iOS 26 Blue/Purple */
-  --accent: #5e5ce6;
-  --accent-light: #7d7aff;
-  --accent-dim: rgba(94, 92, 230, 0.15);
+  /* Accent — One UI Blue */
+  --accent: #0A84FF;
+  --accent-light: #5E5CE6;
+  --accent-dim: rgba(10, 132, 255, 0.15);
 
   /* Semantic Colors */
-  --blue: #32ade6;
-  --green: #34c759;
-  --green-dim: rgba(52, 199, 89, 0.12);
-  --orange: #ff9f0a;
+  --blue: #0A84FF;
+  --green: #30D158;
+  --green-dim: rgba(48, 209, 88, 0.12);
+  --orange: #FF9F0A;
   --orange-dim: rgba(255, 159, 10, 0.12);
-  --red: #ff453a;
+  --red: #FF453A;
   --red-dim: rgba(255, 69, 58, 0.12);
 
   /* Surfaces & Glass Edges */
-  --border: rgba(255, 255, 255, 0.12);
-  --border-light: rgba(255, 255, 255, 0.2);
-  --glass-blur: blur(24px);
+  --border: rgba(255, 255, 255, 0.1);
+  --border-light: rgba(255, 255, 255, 0.15);
+  --glass-blur: blur(0px); /* Removed heavy glassmorphism for Material/OneUI */
 
   /* Shape & Motion */
-  --radius: 20px;
-  --radius-sm: 12px;
-  --radius-xs: 8px;
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.15);
-  --shadow: 0 8px 32px rgba(0,0,0,0.3);
-  --shadow-lg: 0 16px 48px rgba(0,0,0,0.4);
-  --transition: 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  --radius: 24px;
+  --radius-sm: 16px;
+  --radius-xs: 12px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+  --shadow: 0 4px 12px rgba(0,0,0,0.2);
+  --shadow-lg: 0 12px 24px rgba(0,0,0,0.3);
+  --transition: 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+[data-theme="light"] {
+  --bg-primary: #F2F2F7;
+  --bg-secondary: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-input: #E5E5EA;
+
+  --text-primary: #1C1C1E;
+  --text-secondary: rgba(60, 60, 67, 0.75);
+  --text-muted: rgba(60, 60, 67, 0.45);
+
+  --accent: #007AFF;
+  --accent-light: #5856D6;
+  --accent-dim: rgba(0, 122, 255, 0.1);
+
+  --border: rgba(0, 0, 0, 0.05);
+  --border-light: rgba(0, 0, 0, 0.1);
+  
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow: 0 4px 12px rgba(0,0,0,0.05);
+  --shadow-lg: 0 12px 24px rgba(0,0,0,0.08);
 }
 
 html {
@@ -68,13 +91,6 @@ body {
     Roboto,
     sans-serif;
   background-color: var(--bg-primary);
-  /* Mesh Gradient Background for Glassmorphism */
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(94, 92, 230, 0.25) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(50, 173, 230, 0.2) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(255, 159, 10, 0.15) 0px, transparent 50%),
-    radial-gradient(at 0% 100%, rgba(52, 199, 89, 0.1) 0px, transparent 50%);
-  background-attachment: fixed;
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100vh;
@@ -203,13 +219,13 @@ body {
 
 .btn-primary {
   background: var(--accent);
-  color: #111;
+  color: #FFFFFF;
   width: 100%;
 }
 
 .btn-primary:hover {
   background: var(--accent-light);
-  box-shadow: 0 4px 20px rgba(45, 212, 168, 0.25);
+  box-shadow: 0 4px 14px var(--accent-dim);
   transform: translateY(-1px);
 }
 
@@ -448,6 +464,7 @@ body {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  scroll-snap-type: x mandatory;
 }
 
 .balance-bar::-webkit-scrollbar {
@@ -458,7 +475,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  min-width: 115px;
+  min-width: 130px;
   padding: 12px 16px;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -466,6 +483,7 @@ body {
   position: relative;
   overflow: hidden;
   transition: all 0.25s ease;
+  scroll-snap-align: start;
 }
 
 .balance-item::after {
@@ -1307,51 +1325,29 @@ body {
    =============================================== */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .kpi-card {
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 18px 16px;
+  border-radius: var(--radius-sm);
+  padding: 20px;
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 16px;
   transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
   background: var(--bg-card);
-}
-
-.kpi-card:hover {
-  border-color: var(--border-light);
-  transform: translateY(-2px);
   box-shadow: var(--shadow-sm);
 }
 
-/* Bottom accent lines — thin & minimal */
-.kpi-card::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  transition: height 0.25s ease;
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
 }
-
-.kpi-card:hover::after {
-  height: 3px;
-}
-
-.kpi-card:nth-child(1)::after { background: var(--accent); }
-.kpi-card:nth-child(2)::after { background: var(--blue); }
-.kpi-card:nth-child(3)::after { background: var(--orange); }
-.kpi-card:nth-child(4)::after { background: var(--green); }
-.kpi-card:nth-child(5)::after { background: var(--red); }
-.kpi-card:nth-child(6)::after { background: #c084fc; }
 
 .kpi-icon {
   font-size: 1.5rem;
@@ -1368,6 +1364,9 @@ body {
 .kpi-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .kpi-label {
