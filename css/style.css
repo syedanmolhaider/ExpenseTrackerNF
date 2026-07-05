@@ -55,26 +55,26 @@
 }
 
 [data-theme="light"] {
-  --bg-primary: #F2F2F7;
+  --bg-primary: #F0F2F5;
   --bg-secondary: #FFFFFF;
   --bg-card: #FFFFFF;
   --bg-hover: rgba(0, 0, 0, 0.04);
-  --bg-input: #E5E5EA;
+  --bg-input: #F1F3F4; /* Google UI input gray */
 
-  --text-primary: #1C1C1E;
-  --text-secondary: rgba(60, 60, 67, 0.75);
-  --text-muted: rgba(60, 60, 67, 0.45);
+  --text-primary: #202124; /* Google UI dark gray */
+  --text-secondary: #5F6368;
+  --text-muted: rgba(0, 0, 0, 0.45);
 
-  --accent: #007AFF;
-  --accent-light: #5856D6;
-  --accent-dim: rgba(0, 122, 255, 0.1);
+  --accent: #1A73E8; /* Google Blue */
+  --accent-light: #4285F4;
+  --accent-dim: rgba(26, 115, 232, 0.1);
 
-  --border: rgba(0, 0, 0, 0.05);
-  --border-light: rgba(0, 0, 0, 0.1);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-light: rgba(0, 0, 0, 0.12);
   
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
   --shadow: 0 4px 12px rgba(0,0,0,0.05);
-  --shadow-lg: 0 12px 24px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
 }
 
 html {
@@ -157,7 +157,7 @@ body {
 .form-group textarea {
   width: 100%;
   padding: 12px 14px;
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   font-size: 0.92rem;
@@ -425,7 +425,7 @@ body {
 .search-input {
   width: 100%;
   padding: 9px 12px 9px 36px;
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -646,7 +646,7 @@ body {
 .inline-form input,
 .inline-form select {
   padding: 10px 12px;
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -710,7 +710,7 @@ body {
 .form-field input,
 .form-field select {
   padding: 10px 12px;
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -811,7 +811,7 @@ body {
   flex: 1;
   min-width: 150px;
   padding: 9px 12px;
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -920,7 +920,7 @@ body {
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-muted);
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   padding: 2px 7px;
   border-radius: var(--radius-xs);
 }
@@ -1234,7 +1234,7 @@ body {
 .modal-box input[type="text"] {
   width: 100%;
   padding: 11px 14px;
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -1533,7 +1533,7 @@ body {
 .add-category-form input,
 .add-category-form select {
   padding: 8px 12px;
-  background: var(--bg-input);
+  background-color: var(--bg-input);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
