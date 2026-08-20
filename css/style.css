@@ -15,10 +15,10 @@
 :root {
   /* Dark Mode Surface System (Material Dark) */
   --bg-primary: #000000;
-  --bg-secondary: #1C1C1E;
-  --bg-card: #1C1C1E;
+  --bg-secondary: #000000;
+  --bg-card: #000000;
   --bg-hover: rgba(255, 255, 255, 0.08);
-  --bg-input: #2C2C2E;
+  --bg-input: #121212;
 
   /* Text Hierarchy */
   --text-primary: #FFFFFF;
