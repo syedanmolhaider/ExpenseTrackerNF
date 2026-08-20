@@ -1,6 +1,6 @@
 const { query } = require("./utils/db");
-const { getUserFromRequest, createResponse } = require("./utils/auth");
-const { rateLimitCheck } = require("./utils/rate-limit");
+const { createResponse } = require("./utils/auth");
+const { withMiddleware } = require("./utils/middleware");
 
 // Default categories that cannot be deleted
 const DEFAULT_CATEGORIES = [
@@ -55,31 +55,11 @@ async function ensureTableExists() {
   }
 }
 
-exports.handler = async (event) => {
-  // Handle CORS preflight
-  if (event.httpMethod === "OPTIONS") {
-    return createResponse(200, { message: "OK" });
-  }
-
-  // Rate limit: 60 requests per minute per IP
-  const limited = rateLimitCheck(event, {
-    maxRequests: 60,
-    windowMs: 60000,
-    prefix: "categories",
-  });
-  if (limited) return limited;
-
-  try {
-    // Authenticate user
-    const decoded = getUserFromRequest(event);
-    if (!decoded) {
-      return createResponse(401, { error: "Unauthorized" });
-    }
-
+exports.handler = withMiddleware({ rateLimitPrefix: "categories" }, async (event, context, user) => {
     // Ensure database table exists before querying
     await ensureTableExists();
 
-    const userId = decoded.userId;
+    const userId = user.userId;
     const pathParts = event.path.replace(/\/$/, "").split("/");
     const lastPart = pathParts[pathParts.length - 1];
     const categoryId = lastPart !== "categories" ? lastPart : null;
@@ -353,8 +333,4 @@ exports.handler = async (event) => {
     }
 
     return createResponse(405, { error: "Method not allowed" });
-  } catch (error) {
-    console.error("Categories error:", error.message);
-    return createResponse(500, { error: "Internal server error" });
-  }
-};
+});

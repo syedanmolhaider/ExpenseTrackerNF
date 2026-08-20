@@ -1,6 +1,6 @@
 const { query } = require("./utils/db");
-const { getUserFromRequest, createResponse } = require("./utils/auth");
-const { rateLimitCheck } = require("./utils/rate-limit");
+const { createResponse } = require("./utils/auth");
+const { withMiddleware } = require("./utils/middleware");
 
 // Calculate next date based on frequency
 function calculateNextDate(currentDate, frequency) {
@@ -30,28 +30,8 @@ function calculateNextDate(currentDate, frequency) {
   return date.toISOString().split("T")[0];
 }
 
-exports.handler = async (event) => {
-  // Handle CORS preflight
-  if (event.httpMethod === "OPTIONS") {
-    return createResponse(200, { message: "OK" });
-  }
-
-  // Rate limit: 10 requests per minute per IP (processing can be expensive)
-  const limited = rateLimitCheck(event, {
-    maxRequests: 10,
-    windowMs: 60000,
-    prefix: "recurring-process",
-  });
-  if (limited) return limited;
-
-  try {
-    // Authenticate user
-    const decoded = getUserFromRequest(event);
-    if (!decoded) {
-      return createResponse(401, { error: "Unauthorized" });
-    }
-
-    const userId = decoded.userId;
+exports.handler = withMiddleware({ rateLimitPrefix: "recurring-process", maxRequests: 10 }, async (event, context, user) => {
+    const userId = user.userId;
 
     // Only POST allowed
     if (event.httpMethod !== "POST") {
@@ -136,8 +116,4 @@ exports.handler = async (event) => {
       processed: processedCount,
       items: processedItems,
     });
-  } catch (error) {
-    console.error("Recurring process error:", error.message);
-    return createResponse(500, { error: "Internal server error" });
-  }
-};
+});

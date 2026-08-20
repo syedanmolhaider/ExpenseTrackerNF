@@ -6,23 +6,12 @@ const {
   createResponse,
   isValidEmail,
 } = require("./utils/auth");
-const { rateLimitCheck } = require("./utils/rate-limit");
+const { withMiddleware } = require("./utils/middleware");
 
-exports.handler = async (event) => {
-  // Handle CORS preflight
-  if (event.httpMethod === "OPTIONS") {
-    return createResponse(200, { message: "OK" });
-  }
-
-  // Rate limit: 5 signup attempts per minute per IP
-  const limited = rateLimitCheck(event, { maxRequests: 5, windowMs: 60000, prefix: "signup" });
-  if (limited) return limited;
-
+exports.handler = withMiddleware({ rateLimitPrefix: "signup", maxRequests: 5, requireAuth: false }, async (event) => {
   if (event.httpMethod !== "POST") {
     return createResponse(405, { error: "Method not allowed" });
   }
-
-  try {
     const { name, email, password } = JSON.parse(event.body);
 
     // Validate input
@@ -89,10 +78,4 @@ exports.handler = async (event) => {
       },
       authCookie
     );
-  } catch (error) {
-    console.error("Signup error:", error.message);
-    return createResponse(500, {
-      error: "Internal server error",
-    });
-  }
-};
+});

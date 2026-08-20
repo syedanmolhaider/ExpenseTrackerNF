@@ -1,23 +1,9 @@
 const { query } = require("./utils/db");
-const { getUserFromRequest, createResponse } = require("./utils/auth");
-const { rateLimitCheck } = require("./utils/rate-limit");
+const { createResponse } = require("./utils/auth");
+const { withMiddleware } = require("./utils/middleware");
 
-exports.handler = async (event) => {
-    if (event.httpMethod === "OPTIONS") {
-        return createResponse(200, { message: "OK" });
-    }
-
-    // Rate limit: 3 requests per minute per IP (destructive operation)
-    const limited = rateLimitCheck(event, { maxRequests: 3, windowMs: 60000, prefix: "reset" });
-    if (limited) return limited;
-
-    try {
-        const decoded = getUserFromRequest(event);
-        if (!decoded) {
-            return createResponse(401, { error: "Unauthorized" });
-        }
-
-        const userId = decoded.userId;
+exports.handler = withMiddleware({ rateLimitPrefix: "reset", maxRequests: 3 }, async (event, context, user) => {
+        const userId = user.userId;
 
         // Only allow DELETE method
         if (event.httpMethod !== "DELETE") {
@@ -32,8 +18,4 @@ exports.handler = async (event) => {
         return createResponse(200, {
             message: "All data has been reset successfully",
         });
-    } catch (error) {
-        console.error("Reset error:", error.message);
-        return createResponse(500, { error: "Internal server error" });
-    }
-};
+});

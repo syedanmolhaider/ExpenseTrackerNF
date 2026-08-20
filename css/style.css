@@ -742,10 +742,12 @@ body {
   padding: 0;
   overflow: hidden;
   position: relative;
+  justify-content: center;
 }
 
 .summary-cell {
   flex: 1;
+  max-width: 250px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -1911,6 +1913,7 @@ body {
   .summary-cell {
     border-right: none;
     border-bottom: 1px solid var(--border);
+    max-width: none;
     flex-direction: row;
     justify-content: space-between;
     padding: 10px 16px;

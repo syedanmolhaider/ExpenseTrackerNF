@@ -82,7 +82,7 @@
           <span class="balance-value text-accent" id="balanceInHand">Rs 0</span>
           <div id="inHandEditor" style="display:none;position:absolute;top:100%;left:0;z-index:100;background:var(--card-bg);border:1px solid var(--border);border-radius:12px;padding:10px;backdrop-filter:blur(20px);width:100%;min-width:160px;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
             <label style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:4px;display:block;">Actual cash in hand</label>
-            <input type="number" id="inHandInput" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);font-size:0.9rem;" placeholder="Enter amount">
+            <input type=\"text\" inputmode=\"decimal\" id=\"inHandInput\" style="width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-primary);font-size:0.9rem;" placeholder="Enter amount">
             <div style="display:flex;gap:6px;margin-top:6px;">
               <button id="saveInHandBtn" class="btn btn-sm" style="flex:1;font-size:0.75rem;">Save</button>
               <button id="cancelInHandBtn" class="btn btn-sm btn-ghost" style="flex:1;font-size:0.75rem;">Cancel</button>
@@ -278,9 +278,8 @@
                 <label for="repeatFalse">1️⃣ One-Time</label>
                 <div class="segmented-control-bg"></div>
               </div>
-              <input
-                type="number"
-                id="budgetAmount"
+              <input type=\"text\" inputmode=\"decimal\"
+                id=\"budgetAmount\"
                 placeholder="Limit (Rs)"
                 step="0.01"
                 min="0.01"
@@ -387,9 +386,8 @@
                 <option value="Dining Out">🍽️ Dining Out</option>
                 <option value="Other">📦 Other</option>
               </select>
-              <input
-                type="number"
-                id="nextBudgetAmount"
+              <input type=\"text\" inputmode=\"decimal\"
+                id=\"nextBudgetAmount\"
                 placeholder="Limit (Rs)"
                 step="0.01"
                 min="0.01"
@@ -448,9 +446,8 @@
               </div>
               <div class="form-field">
                 <label for="expenseAmount">Amount (Rs)</label>
-                <input
-                  type="number"
-                  id="expenseAmount"
+                <input type=\"text\" inputmode=\"decimal\"
+                  id=\"expenseAmount\"
                   name="amount"
                   step="0.01"
                   min="0.01"
@@ -595,9 +592,8 @@
               </div>
               <div class="form-field">
                 <label for="incomeAmount">Amount (Rs)</label>
-                <input
-                  type="number"
-                  id="incomeAmount"
+                <input type=\"text\" inputmode=\"decimal\"
+                  id=\"incomeAmount\"
                   name="amount"
                   step="0.01"
                   min="0.01"
@@ -903,9 +899,8 @@
           </div>
           <div class="form-field">
             <label for="editExpenseAmount">Amount (Rs)</label>
-            <input
-              type="number"
-              id="editExpenseAmount"
+            <input type=\"text\" inputmode=\"decimal\"
+              id=\"editExpenseAmount\"
               name="amount"
               step="0.01"
               min="0.01"
@@ -1003,9 +998,8 @@
           </div>
           <div class="form-field" style="grid-column: span 2">
             <label for="editBudgetAmount">Limit Amount (Rs)</label>
-            <input
-              type="number"
-              id="editBudgetAmount"
+            <input type=\"text\" inputmode=\"decimal\"
+              id=\"editBudgetAmount\"
               name="amount"
               step="0.01"
               min="0.01"
@@ -1057,9 +1051,8 @@
           </div>
           <div class="form-field" style="grid-column: span 2">
             <label for="editNextBudgetAmount">Limit Amount (Rs)</label>
-            <input
-              type="number"
-              id="editNextBudgetAmount"
+            <input type=\"text\" inputmode=\"decimal\"
+              id=\"editNextBudgetAmount\"
               name="amount"
               step="0.01"
               min="0.01"
@@ -1088,9 +1081,8 @@
           </div>
           <div class="form-field">
             <label for="editIncomeAmount">Amount</label>
-            <input
-              type="number"
-              id="editIncomeAmount"
+            <input type=\"text\" inputmode=\"decimal\"
+              id=\"editIncomeAmount\"
               name="amount"
               step="0.01"
               min="0.01"
@@ -1176,6 +1168,6 @@
     <div class="toast" id="toast"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <script src="js/dashboard.js"></script>
+    <script src="src/state.js"></script><script src="src/utils.js"></script><script src="src/api.js"></script><script src="src/main.js"></script>
   </body>
 </html>

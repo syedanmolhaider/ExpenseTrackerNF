@@ -4,8 +4,8 @@
   "description": "King's Tracker with Netlify Functions and Neon Database",
   "main": "index.js",
   "scripts": {
-    "dev": "netlify dev",
-    "build": "echo 'No build step required for static HTML'"
+    "dev": "vite",
+    "build": "vite build"
   },
   "keywords": [
     "expense-tracker",
@@ -22,6 +22,7 @@
     "pg": "^8.11.3"
   },
   "devDependencies": {
-    "netlify-cli": "^17.0.0"
+    "netlify-cli": "^17.0.0",
+    "vite": "^5.0.0"
   }
 }

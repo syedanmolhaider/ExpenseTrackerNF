@@ -1,6 +1,6 @@
 const { query } = require("./utils/db");
-const { getUserFromRequest, createResponse } = require("./utils/auth");
-const { rateLimitCheck } = require("./utils/rate-limit");
+const { createResponse } = require("./utils/auth");
+const { withMiddleware } = require("./utils/middleware");
 
 // Self-migration: ensure budget_tag column exists
 let migrationDone = false;
@@ -16,29 +16,9 @@ async function ensureBudgetTagColumn() {
   }
 }
 
-exports.handler = async (event) => {
-  // Handle CORS preflight
-  if (event.httpMethod === "OPTIONS") {
-    return createResponse(200, { message: "OK" });
-  }
-
-  // Rate limit: 60 requests per minute per IP
-  const limited = rateLimitCheck(event, {
-    maxRequests: 60,
-    windowMs: 60000,
-    prefix: "expenses",
-  });
-  if (limited) return limited;
-
-  try {
-    // Authenticate user
-    const decoded = getUserFromRequest(event);
-    if (!decoded) {
-      return createResponse(401, { error: "Unauthorized" });
-    }
-
-    const userId = decoded.userId;
-    const params = event.queryStringParameters || {};
+exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, context, user) => {
+  const userId = user.userId;
+  const params = event.queryStringParameters || {};
 
     // Ensure budget_tag column exists
     await ensureBudgetTagColumn();
@@ -259,8 +239,4 @@ exports.handler = async (event) => {
     }
 
     return createResponse(405, { error: "Method not allowed" });
-  } catch (error) {
-    console.error("Expenses error:", error);
-    return createResponse(500, { error: "Internal server error" });
-  }
-};
+});
