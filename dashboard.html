@@ -312,7 +312,10 @@
 
           <!-- Budget Items List -->
           <div class="card">
-            <h2 class="card-title">Budget Items</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h2 class="card-title" style="margin: 0;">Budget Items</h2>
+              <button id="toggleAllBudgetBtn" class="btn-sm" style="background: transparent; border: 1px solid var(--border); color: var(--text-secondary);">Expand All ▼</button>
+            </div>
             <div id="budgetList" class="item-list">
               <p class="empty-msg">
                 No budget items yet. Add your first one above!
@@ -418,7 +421,10 @@
 
           <!-- Next Month Budget Items List -->
           <div class="card">
-            <h2 class="card-title">Next Month Budget Items</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+              <h2 class="card-title" style="margin: 0;">Next Month Budget Items</h2>
+              <button id="toggleAllNextBudgetBtn" class="btn-sm" style="background: transparent; border: 1px solid var(--border); color: var(--text-secondary);">Expand All ▼</button>
+            </div>
             <div id="nextBudgetList" class="item-list">
               <p class="empty-msg">
                 No budget items planned for next month yet. Add items above or

@@ -979,6 +979,7 @@ function displayBudget() {
       </div>`;
 
     // Allocate expenses to items to prevent double-counting
+    html += `<div class="budget-sub-items" style="display: none;">`;
     let itemSpends = items.map(() => 0);
     let unallocatedSpent = 0;
 
@@ -1068,7 +1069,7 @@ function displayBudget() {
         </div>
       </div>`;
     }
-
+    html += `</div>`; // Close sub-items
     html += `</div>`;
   });
 
@@ -1115,6 +1116,7 @@ function displayBudget() {
       </div>`;
 
     // Show each unplanned category with its expenses
+    html += `<div class="budget-sub-items" style="display: none;">`;
     Object.entries(unplannedGrouped).forEach(([cat, catExps]) => {
       const catTotal = catExps.reduce((s, e) => s + parseFloat(e.amount), 0);
       catExps.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1149,6 +1151,7 @@ function displayBudget() {
       html += `</div>`;
     });
 
+    html += `</div>`; // Close sub-items
     html += `</div>`;
   }
 
@@ -1460,6 +1463,7 @@ function displayNextBudget() {
       </div>`;
 
     // Sub-items
+    html += `<div class="budget-sub-items" style="display: none;">`;
     items.forEach((item) => {
       const limit = parseFloat(item.amount);
       const itemPct =
@@ -1482,7 +1486,7 @@ function displayNextBudget() {
         </div>
       </div>`;
     });
-
+    html += `</div>`; // Close sub-items
     html += `</div>`;
   });
 
@@ -4279,4 +4283,31 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
   });
+});
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const toggleAllBudgetBtn = document.getElementById('toggleAllBudgetBtn');
+  if (toggleAllBudgetBtn) {
+    toggleAllBudgetBtn.addEventListener('click', () => {
+      const budgetList = document.getElementById('budgetList');
+      const items = budgetList.querySelectorAll('.budget-sub-items');
+      const isExpanded = toggleAllBudgetBtn.textContent.includes('Collapse');
+      
+      items.forEach(el => el.style.display = isExpanded ? 'none' : 'block');
+      toggleAllBudgetBtn.textContent = isExpanded ? 'Expand All ▼' : 'Collapse All ▲';
+    });
+  }
+
+  const toggleAllNextBudgetBtn = document.getElementById('toggleAllNextBudgetBtn');
+  if (toggleAllNextBudgetBtn) {
+    toggleAllNextBudgetBtn.addEventListener('click', () => {
+      const nextBudgetList = document.getElementById('nextBudgetList');
+      const items = nextBudgetList.querySelectorAll('.budget-sub-items');
+      const isExpanded = toggleAllNextBudgetBtn.textContent.includes('Collapse');
+      
+      items.forEach(el => el.style.display = isExpanded ? 'none' : 'block');
+      toggleAllNextBudgetBtn.textContent = isExpanded ? 'Expand All ▼' : 'Collapse All ▲';
+    });
+  }
 });
