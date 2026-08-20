@@ -1138,7 +1138,7 @@ function displayBudget() {
       // List each individual expense in this unplanned category
       catExps.forEach((exp) => {
         html += `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0 4px 24px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid rgba(255,255,255,0.04);">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0 4px 24px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid var(--border);">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="color: var(--red); font-size: 0.7rem;">●</span>
             <span style="font-weight: 500;">${esc(exp.title)}</span>
@@ -2759,7 +2759,7 @@ function renderDailyRoomGauge() {
         startAngle: -135,
         endAngle: 135,
         hollow: { size: "60%", background: "transparent" },
-        track: { background: "rgba(255,255,255,0.06)", strokeWidth: "100%" },
+        track: { background: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', strokeWidth: '100%' },
         dataLabels: {
           name: {
             fontSize: "13px",
@@ -2897,7 +2897,7 @@ function renderSpendingPace() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.spendPace = new ApexCharts(el, options);
@@ -3042,7 +3042,7 @@ function renderCategoryDailyAllowance() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.catDaily = new ApexCharts(el, options);
@@ -3126,7 +3126,7 @@ function renderIncomeVsExpenseChart() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.incVsExp = new ApexCharts(el, options);
@@ -3175,7 +3175,7 @@ function renderSavingsGauge() {
         startAngle: -135,
         endAngle: 135,
         hollow: { size: "65%", background: "transparent" },
-        track: { background: "rgba(255,255,255,0.06)", strokeWidth: "100%" },
+        track: { background: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', strokeWidth: '100%' },
         dataLabels: {
           name: { fontSize: "14px", color: "#a0aec0", offsetY: 24 },
           value: {
@@ -3316,7 +3316,7 @@ function renderSpendingVelocity() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.velocity = new ApexCharts(el, options);
