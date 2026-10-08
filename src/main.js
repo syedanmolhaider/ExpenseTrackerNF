@@ -981,6 +981,18 @@ function displayBudget() {
     return;
   }
 
+  // Preserve which category groups were expanded before re-rendering
+  const toggleAllBudgetBtn = document.getElementById("toggleAllBudgetBtn");
+  const previouslyExpanded = new Set();
+  const existingGroups = list.querySelectorAll(".budget-category-group");
+  existingGroups.forEach((group) => {
+    const sub = group.querySelector(".budget-sub-items");
+    const catGroup = group.dataset.categoryGroup;
+    if (sub && sub.style.display !== "none" && catGroup) {
+      previouslyExpanded.add(catGroup);
+    }
+  });
+
   // Group items by category
   const grouped = {};
   budgetItems.forEach((item) => {
@@ -1008,7 +1020,8 @@ function displayBudget() {
         ? ((categorySpent / categoryLimit) * 100).toFixed(0)
         : 0;
 
-    html += `<div class="budget-category-group">`;
+    const shouldOpen = previouslyExpanded.has(cat);
+    html += `<div class="budget-category-group" data-category-group="${esc(cat)}">`;
     // Category header with totals
     html += `
       <div class="budget-cat-header ${isOver ? "over-budget" : ""}">
@@ -1029,7 +1042,7 @@ function displayBudget() {
       </div>`;
 
     // Allocate expenses to items to prevent double-counting
-    html += `<div class="budget-sub-items" style="display: none;">`;
+    html += `<div class="budget-sub-items" style="display: ${shouldOpen ? "block" : "none"};">`;
     let itemSpends = items.map(() => 0);
     let unallocatedSpent = 0;
 
@@ -1146,8 +1159,9 @@ function displayBudget() {
       0,
     );
 
+    const shouldOpenUnplanned = previouslyExpanded.has("__unplanned__");
     html += `
-    <div class="budget-category-group unplanned-section">
+    <div class="budget-category-group unplanned-section" data-category-group="__unplanned__">
       <div class="budget-cat-header over-budget" style="border-left: 3px solid var(--red); padding-left: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <div style="font-weight: 700; font-size: 1.1rem; color: var(--red);">⚠️ Unplanned Spending <span class="budget-cat-count">${unplannedExpenses.length} expense${unplannedExpenses.length > 1 ? "s" : ""} in ${Object.keys(unplannedGrouped).length} categor${Object.keys(unplannedGrouped).length > 1 ? "ies" : "y"}</span></div>
@@ -1166,7 +1180,7 @@ function displayBudget() {
       </div>`;
 
     // Show each unplanned category with its expenses
-    html += `<div class="budget-sub-items" style="display: none;">`;
+    html += `<div class="budget-sub-items" style="display: ${shouldOpenUnplanned ? "block" : "none"};">`;
     Object.entries(unplannedGrouped).forEach(([cat, catExps]) => {
       const catTotal = catExps.reduce((s, e) => s + parseFloat(e.amount), 0);
       catExps.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1206,6 +1220,14 @@ function displayBudget() {
   }
 
   list.innerHTML = html;
+
+  if (toggleAllBudgetBtn) {
+    const subItems = list.querySelectorAll(".budget-sub-items");
+    if (subItems.length > 0) {
+      const anyOpen = Array.from(subItems).some((el) => el.style.display !== "none");
+      toggleAllBudgetBtn.textContent = anyOpen ? "Collapse All ▲" : "Expand All ▼";
+    }
+  }
 }
 
 function updateBudgetSummary() {
@@ -1462,6 +1484,18 @@ function displayNextBudget() {
     return;
   }
 
+  // Preserve which category groups were expanded before re-rendering
+  const toggleAllNextBtn = document.getElementById("toggleAllNextBudgetBtn");
+  const previouslyNextExpanded = new Set();
+  const existingNextGroups = list.querySelectorAll(".budget-category-group");
+  existingNextGroups.forEach((group) => {
+    const sub = group.querySelector(".budget-sub-items");
+    const catGroup = group.dataset.categoryGroup;
+    if (sub && sub.style.display !== "none" && catGroup) {
+      previouslyNextExpanded.add(catGroup);
+    }
+  });
+
   // Group by category
   const grouped = {};
   nextBudgetItems.forEach((item) => {
@@ -1495,7 +1529,8 @@ function displayNextBudget() {
             : "text-blue"
         : "text-accent";
 
-    html += `<div class="budget-category-group next-budget-item">`;
+    const shouldOpenNext = previouslyNextExpanded.has(cat);
+    html += `<div class="budget-category-group next-budget-item" data-category-group="${esc(cat)}">`;
     // Category header
     html += `
       <div class="budget-cat-header">
@@ -1513,7 +1548,7 @@ function displayNextBudget() {
       </div>`;
 
     // Sub-items
-    html += `<div class="budget-sub-items" style="display: none;">`;
+    html += `<div class="budget-sub-items" style="display: ${shouldOpenNext ? "block" : "none"};">`;
     items.forEach((item) => {
       const limit = parseFloat(item.amount);
       const itemPct =
@@ -1541,6 +1576,14 @@ function displayNextBudget() {
   });
 
   list.innerHTML = html;
+
+  if (toggleAllNextBtn) {
+    const subItems = list.querySelectorAll(".budget-sub-items");
+    if (subItems.length > 0) {
+      const anyOpen = Array.from(subItems).some((el) => el.style.display !== "none");
+      toggleAllNextBtn.textContent = anyOpen ? "Collapse All ▲" : "Expand All ▼";
+    }
+  }
 }
 
 function updateNextBudgetSummary() {
@@ -4363,11 +4406,15 @@ document.addEventListener("DOMContentLoaded", () => {
   if (toggleAllBudgetBtn) {
     toggleAllBudgetBtn.addEventListener('click', () => {
       const budgetList = document.getElementById('budgetList');
+      if (!budgetList) return;
       const items = budgetList.querySelectorAll('.budget-sub-items');
-      const isExpanded = toggleAllBudgetBtn.textContent.includes('Collapse');
+      if (items.length === 0) return;
       
-      items.forEach(el => el.style.display = isExpanded ? 'none' : 'block');
-      toggleAllBudgetBtn.textContent = isExpanded ? 'Expand All ▼' : 'Collapse All ▲';
+      const anyVisible = Array.from(items).some(el => el.style.display !== 'none');
+      const shouldCollapse = anyVisible;
+      
+      items.forEach(el => el.style.display = shouldCollapse ? 'none' : 'block');
+      toggleAllBudgetBtn.textContent = shouldCollapse ? 'Expand All ▼' : 'Collapse All ▲';
     });
   }
 
@@ -4375,11 +4422,43 @@ document.addEventListener("DOMContentLoaded", () => {
   if (toggleAllNextBudgetBtn) {
     toggleAllNextBudgetBtn.addEventListener('click', () => {
       const nextBudgetList = document.getElementById('nextBudgetList');
+      if (!nextBudgetList) return;
       const items = nextBudgetList.querySelectorAll('.budget-sub-items');
-      const isExpanded = toggleAllNextBudgetBtn.textContent.includes('Collapse');
+      if (items.length === 0) return;
       
-      items.forEach(el => el.style.display = isExpanded ? 'none' : 'block');
-      toggleAllNextBudgetBtn.textContent = isExpanded ? 'Expand All ▼' : 'Collapse All ▲';
+      const anyVisible = Array.from(items).some(el => el.style.display !== 'none');
+      const shouldCollapse = anyVisible;
+      
+      items.forEach(el => el.style.display = shouldCollapse ? 'none' : 'block');
+      toggleAllNextBudgetBtn.textContent = shouldCollapse ? 'Expand All ▼' : 'Collapse All ▲';
     });
   }
+
+  // Delegated click handler to toggle individual category groups when their header is clicked
+  document.addEventListener('click', (e) => {
+    const header = e.target.closest('.budget-cat-header');
+    if (!header) return;
+    if (e.target.closest('button, a, input, select, textarea')) return;
+
+    const group = header.closest('.budget-category-group');
+    if (!group) return;
+    const sub = group.querySelector('.budget-sub-items');
+    if (!sub) return;
+
+    const isHidden = sub.style.display === 'none';
+    sub.style.display = isHidden ? 'block' : 'none';
+
+    // Synchronize the corresponding Toggle All button
+    const container = group.closest('#budgetList') || group.closest('#nextBudgetList');
+    if (container) {
+      const btn = container.id === 'budgetList'
+        ? document.getElementById('toggleAllBudgetBtn')
+        : document.getElementById('toggleAllNextBudgetBtn');
+      if (btn) {
+        const allItems = container.querySelectorAll('.budget-sub-items');
+        const anyOpen = Array.from(allItems).some(el => el.style.display !== 'none');
+        btn.textContent = anyOpen ? 'Collapse All ▲' : 'Expand All ▼';
+      }
+    }
+  });
 });

@@ -890,6 +890,13 @@ body {
   padding: 14px 16px;
   background: rgba(255,255,255,0.02);
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition);
+}
+
+.budget-cat-header:hover {
+  background: rgba(255,255,255,0.04);
 }
 
 .budget-cat-header.over-budget {
