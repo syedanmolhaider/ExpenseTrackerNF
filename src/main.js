@@ -352,8 +352,33 @@ function initListeners() {
   if (expenseTagEl) {
     expenseTagEl.addEventListener("change", (e) => {
       const selectedOpt = e.target.options[e.target.selectedIndex];
-      if (selectedOpt && selectedOpt.dataset.category) {
-        document.getElementById("expenseCategory").value = selectedOpt.dataset.category;
+      if (!selectedOpt || !selectedOpt.value) return;
+
+      const titleInput = document.getElementById("expenseTitle");
+      const amountInput = document.getElementById("expenseAmount");
+      const categorySelect = document.getElementById("expenseCategory");
+      const dateInput = document.getElementById("expenseDate");
+
+      // 1. Fill Title with budget item name
+      if (titleInput && selectedOpt.dataset.title) {
+        titleInput.value = selectedOpt.dataset.title;
+      }
+
+      // 2. Fill Category
+      if (categorySelect && selectedOpt.dataset.category) {
+        categorySelect.value = selectedOpt.dataset.category;
+      }
+
+      // 3. Fill Amount with remaining budget allocated to that item
+      if (amountInput && selectedOpt.dataset.remaining !== undefined) {
+        const remaining = parseFloat(selectedOpt.dataset.remaining);
+        const fillAmount = !isNaN(remaining) && remaining > 0 ? Number(remaining.toFixed(2)) : 0;
+        amountInput.value = fillAmount;
+      }
+
+      // 4. In Date already today's date is entered (ensure today's date if empty)
+      if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split("T")[0];
       }
     });
   }
@@ -654,6 +679,7 @@ async function loadAll() {
   // loadBudget finishes before loadExpenses, causing spent to show as 0)
   displayBudget();
   updateBudgetSummary();
+  if (typeof populateBudgetTags === "function") populateBudgetTags();
   displayNextBudget();
   updateNextBudgetSummary();
   updateBalanceBar();

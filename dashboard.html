@@ -441,6 +441,15 @@
           <div class="card add-card">
             <h2 class="card-title">Log Expense</h2>
             <form id="addExpenseForm" class="form-grid">
+              <div class="form-field full-width">
+                <label for="expenseTag">Budget Item / Tag <small>(optional)</small></label>
+                <div class="custom-select-wrapper">
+                  <select id="expenseTag" name="expenseTag">
+                    <option value="">None</option>
+                    <!-- Populated dynamically -->
+                  </select>
+                </div>
+              </div>
               <div class="form-field">
                 <label for="expenseTitle">Title</label>
                 <input
@@ -491,15 +500,6 @@
                 <input type="date" id="expenseDate" name="date" required />
               </div>
               <!-- Notes removed -->
-              <div class="form-field full-width">
-                <label for="expenseTag">Budget Item / Tag <small>(optional)</small></label>
-                <div class="custom-select-wrapper">
-                  <select id="expenseTag" name="expenseTag">
-                    <option value="">None</option>
-                    <!-- Populated dynamically -->
-                  </select>
-                </div>
-              </div>
               <div class="form-field full-width">
                 <button type="submit" class="btn btn-primary">
                   + Log Expense

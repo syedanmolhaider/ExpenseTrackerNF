@@ -174,30 +174,75 @@ async function ensureTagExists(tagName) {
   return null;
 }
 
+// Calculate remaining budget for a specific budget item
+function getBudgetItemRemaining(item) {
+  if (!item) return 0;
+  const limit = parseFloat(item.amount || 0);
+  const itemTitle = (item.title || "").toLowerCase().trim();
+  const itemCat = (item.category || "Other").toLowerCase().trim();
+
+  // Sum expenses tagged with this budget item title in this category
+  const spent = (expenses || []).reduce((sum, e) => {
+    const eTag = (e.budget_tag || "").toLowerCase().trim();
+    const eCat = (e.category || "Other").toLowerCase().trim();
+    if (eTag && eTag === itemTitle && eCat === itemCat) {
+      return sum + (parseFloat(e.amount || 0) || 0);
+    }
+    return sum;
+  }, 0);
+
+  return limit - spent;
+}
+
 function populateBudgetTags() {
   const select = document.getElementById("expenseTag");
   const editSelect = document.getElementById("editExpenseTag");
-  
-  if (select) {
-    select.innerHTML = '<option value="">None</option>';
-    budgetItems.forEach(item => {
+  if (!select && !editSelect) return;
+
+  // Compute remaining for each item
+  const itemsWithStats = (budgetItems || []).map((item) => {
+    const remaining = getBudgetItemRemaining(item);
+    return { item, remaining };
+  });
+
+  // Sort: based on budget amount left (highest remaining first), then alphabetically.
+  // Items whose budget is full (remaining <= 0) naturally move to the bottom.
+  itemsWithStats.sort((a, b) => {
+    if (b.remaining !== a.remaining) {
+      return b.remaining - a.remaining;
+    }
+    return (a.item.title || "").localeCompare(b.item.title || "", undefined, {
+      sensitivity: "base",
+    });
+  });
+
+  const renderOptions = (targetSelect) => {
+    if (!targetSelect) return;
+    const currentVal = targetSelect.value;
+    targetSelect.innerHTML = '<option value="">None</option>';
+
+    itemsWithStats.forEach(({ item, remaining }) => {
       const opt = document.createElement("option");
       opt.value = item.title;
-      opt.dataset.category = item.category;
-      opt.textContent = `${item.title} (${item.category})`;
-      select.appendChild(opt);
+      opt.dataset.category = item.category || "";
+      opt.dataset.title = item.title || "";
+      opt.dataset.remaining = remaining;
+
+      const remainingText =
+        remaining > 0
+          ? `${fmtCurr(remaining)} left`
+          : "Budget Full (0 left)";
+
+      opt.textContent = `${item.title} (${item.category}) — ${remainingText}`;
+      targetSelect.appendChild(opt);
     });
-  }
-  
-  if (editSelect) {
-    editSelect.innerHTML = '<option value="">None</option>';
-    budgetItems.forEach(item => {
-      const opt = document.createElement("option");
-      opt.value = item.title;
-      opt.dataset.category = item.category;
-      opt.textContent = `${item.title} (${item.category})`;
-      editSelect.appendChild(opt);
-    });
-  }
+
+    if (currentVal) {
+      targetSelect.value = currentVal;
+    }
+  };
+
+  renderOptions(select);
+  renderOptions(editSelect);
 }
 
