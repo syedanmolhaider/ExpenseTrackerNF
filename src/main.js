@@ -309,11 +309,29 @@ function initListeners() {
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
-      switchTab(tab.dataset.tab);
-      if (tab.dataset.tab === "trends") renderCharts();
-      if (tab.dataset.tab === "nextbudget") loadNextBudget(getNextMonthKey());
+      const target = tab.dataset.tab;
+      switchTab(target);
+      if (target === "budget") {
+        displayBudget();
+        updateBudgetSummary();
+      } else if (target === "tracker") {
+        displayExpenses();
+        if (typeof populateBudgetTags === "function") populateBudgetTags();
+        if (typeof updateTagFilter === "function") updateTagFilter();
+      } else if (target === "income") {
+        displayIncome();
+        updateIncomeSummary();
+      } else if (target === "nextbudget") {
+        loadNextBudget(getNextMonthKey());
+      } else if (target === "trends") {
+        renderCharts();
+      }
+      updateBalanceBar();
     });
   });
+
+  const refreshBtn = document.getElementById("refreshBtn");
+  if (refreshBtn) refreshBtn.addEventListener("click", () => refreshDashboard(true));
 
   const themeToggleBtn = document.getElementById("themeToggleBtn");
   if (themeToggleBtn) themeToggleBtn.addEventListener("click", toggleTheme);
@@ -644,6 +662,43 @@ async function loadAll() {
     renderCharts();
 }
 
+// Synchronize all views, summaries, and balance metrics across all tabs
+function syncAllViews() {
+  displayBudget();
+  updateBudgetSummary();
+  displayExpenses();
+  displayIncome();
+  updateIncomeSummary();
+  displayNextBudget();
+  updateNextBudgetSummary();
+  updateBalanceBar();
+  if (typeof populateBudgetTags === "function") populateBudgetTags();
+  if (typeof updateTagFilter === "function") updateTagFilter();
+  if (typeof renderChartsIfActive === "function") renderChartsIfActive();
+}
+
+// Full refresh triggered by the refresh button or manual request
+async function refreshDashboard(showToastNotification = false) {
+  const btn = document.getElementById("refreshBtn");
+  if (btn) btn.classList.add("spinning");
+  try {
+    await loadAll();
+    if (showToastNotification) {
+      toast("Dashboard refreshed", "success");
+    }
+  } catch (err) {
+    console.error("Dashboard refresh error:", err);
+    if (showToastNotification) {
+      toast("Failed to refresh dashboard", "error");
+    }
+  } finally {
+    if (btn) {
+      setTimeout(() => btn.classList.remove("spinning"), 400);
+    }
+  }
+}
+
+
 // =============================================
 // EXPENSES
 // =============================================
@@ -807,8 +862,7 @@ async function handleAddExpense(e) {
       setDefaultDate();
       toast("Expense logged", "success");
       await loadExpenses(getMonthKey());
-      updateBalanceBar();
-      renderChartsIfActive();
+      syncAllViews();
     } else {
       const r = await res.json().catch(() => ({}));
       console.error("Add expense API error:", r);
@@ -870,10 +924,7 @@ async function handleEditExpense(e) {
       closeEditModal();
       toast("Expense updated", "success");
       await loadExpenses(getMonthKey());
-      displayBudget();
-      updateBudgetSummary();
-      updateBalanceBar();
-      renderChartsIfActive();
+      syncAllViews();
     } else {
       const errData = await res.json().catch(() => ({}));
       toast(errData.error || "Failed to update", "error");
@@ -894,8 +945,7 @@ async function handleDelete(id) {
     if (res.ok) {
       toast("Deleted", "success");
       await loadExpenses(getMonthKey());
-      updateBalanceBar();
-      renderChartsIfActive();
+      syncAllViews();
     }
   } catch {
     toast("Failed", "error");
@@ -1247,7 +1297,7 @@ async function handleAddBudget(e) {
       e.target.reset();
       toast("Budget limit added", "success");
       await loadBudget(getMonthKey());
-      updateBalanceBar();
+      syncAllViews();
     } else {
       const d = await res.json();
       toast(d.error || "Failed", "error");
@@ -1302,7 +1352,7 @@ async function handleCloneBudget() {
     if (cloned > 0) {
       toast(`${cloned} budget items cloned`, "success");
       await loadBudget(getMonthKey());
-      updateBalanceBar();
+      syncAllViews();
     } else {
       toast("No new budget items to clone (already exist)", "error");
     }
@@ -1358,7 +1408,7 @@ async function handleEditBudget(e) {
       closeEditBudgetModal();
       toast("Budget limit updated", "success");
       await loadBudget(getMonthKey());
-      updateBalanceBar();
+      syncAllViews();
     } else toast("Failed to update", "error");
   } catch {
     toast("Network error", "error");
@@ -1375,7 +1425,7 @@ async function deleteBudget(id) {
     if (res.ok) {
       toast("Deleted", "success");
       await loadBudget(getMonthKey());
-      updateBalanceBar();
+      syncAllViews();
     }
   } catch {
     toast("Failed", "error");
@@ -1559,6 +1609,7 @@ async function handleAddNextBudget(e) {
       e.target.reset();
       toast("Next month budget item added", "success");
       await loadNextBudget(getNextMonthKey());
+      syncAllViews();
     } else {
       const d = await res.json();
       toast(d.error || "Failed", "error");
@@ -1614,6 +1665,7 @@ async function handleCopyCurrentBudget() {
       "success",
     );
     await loadNextBudget(getNextMonthKey());
+    syncAllViews();
   } else if (skipped > 0) {
     toast(
       `All items already exist in next month's budget (${skipped} skipped)`,
@@ -1660,6 +1712,7 @@ async function handleEditNextBudget(e) {
       closeEditNextBudgetModal();
       toast("Next month budget updated", "success");
       await loadNextBudget(getNextMonthKey());
+      syncAllViews();
     } else toast("Failed to update", "error");
   } catch {
     toast("Network error", "error");
@@ -1676,6 +1729,7 @@ async function deleteNextBudget(id) {
     if (res.ok) {
       toast("Deleted", "success");
       await loadNextBudget(getNextMonthKey());
+      syncAllViews();
     }
   } catch {
     toast("Failed", "error");
@@ -1787,8 +1841,7 @@ async function handleAddIncome(e) {
       setDefaultDate("incomeDate");
       toast("Income added", "success");
       await loadIncome(getMonthKey());
-      updateBalanceBar();
-      renderChartsIfActive();
+      syncAllViews();
     } else {
       const r = await res.json();
       toast(r.error || "Failed", "error");
@@ -1808,8 +1861,7 @@ async function deleteIncome(id) {
     if (res.ok) {
       toast("Deleted", "success");
       await loadIncome(getMonthKey());
-      updateBalanceBar();
-      renderChartsIfActive();
+      syncAllViews();
     }
   } catch {
     toast("Failed", "error");
@@ -1857,8 +1909,7 @@ async function handleEditIncome(e) {
       closeEditIncomeModal();
       toast("Income updated", "success");
       await loadIncome(getMonthKey());
-      updateBalanceBar();
-      renderChartsIfActive();
+      syncAllViews();
     } else toast("Failed to update", "error");
   } catch {
     toast("Network error", "error");
@@ -1951,6 +2002,24 @@ function updateBalanceBar() {
       diffEl.className = "balance-value text-muted";
     }
   }
+
+  // Update repeating and one-time spent in balance bar
+  const repeatingExpenses = expenses.filter(e => {
+    const b = budgetItems.find(b => b.title === e.budget_tag);
+    return !b || String(b.is_repeating) !== 'false';
+  }).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+  const oneTimeExpenses = expenses.filter(e => {
+    const b = budgetItems.find(b => b.title === e.budget_tag);
+    return b && String(b.is_repeating) === 'false';
+  }).reduce((s, e) => s + parseFloat(e.amount), 0);
+
+  if (document.getElementById("budgetRepeatingExpenses")) {
+    document.getElementById("budgetRepeatingExpenses").textContent = `${fmtCurr(repeatingExpenses)}`;
+  }
+  if (document.getElementById("budgetOneTimeExpenses")) {
+    document.getElementById("budgetOneTimeExpenses").textContent = `${fmtCurr(oneTimeExpenses)}`;
+  }
 }
 
 // =============================================
@@ -2004,7 +2073,7 @@ function initInHandEditor() {
     const val = parseFloat(input.value) || 0;
     saveInHandAmount(val);
     editor.style.display = "none";
-    updateBalanceBar();
+    syncAllViews();
     toast("In-hand amount saved", "success");
   });
 
@@ -2194,7 +2263,7 @@ async function handleImport(e) {
     imported > 0 ? "success" : "error",
   );
   await loadExpenses(getMonthKey());
-  updateBalanceBar();
+  syncAllViews();
 }
 
 function parseCSVRow(line) {
@@ -3896,6 +3965,7 @@ async function deleteTag(id) {
       toast("Tag deleted", "success");
       await loadTags();
       await loadExpenses(getMonthKey());
+      syncAllViews();
     } else {
       toast("Failed to delete tag", "error");
     }
@@ -4224,6 +4294,7 @@ async function updateCategory(id, name, icon) {
       await loadCategories();
       await loadExpenses(getMonthKey());
       await loadBudget(getMonthKey());
+      syncAllViews();
     } else {
       const data = await res.json();
       toast(data.error || "Failed to update category", "error");
@@ -4247,6 +4318,7 @@ async function deleteCategory(id, name) {
     if (res.ok) {
       toast("Category deleted", "success");
       await loadCategories();
+      syncAllViews();
     } else {
       toast(data.error || "Failed to delete category", "error");
     }
