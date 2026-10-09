@@ -41,6 +41,11 @@ function setDefaultDate() {
   });
 }
 
+// Get today's date formatted as YYYY-MM-DD
+function getTodayString() {
+  return new Date().toISOString().split("T")[0];
+}
+
 // Toast notification
 function toast(message, type = "info") {
   const el = document.getElementById("toast");
@@ -2601,7 +2606,7 @@ async function handleAddCardLog(e) {
     }
   } catch (err) {
     console.error("Error adding card log:", err);
-    toast("Network error. Please try again.", "error");
+    toast(err.message || "Network error. Please try again.", "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2680,7 +2685,7 @@ async function handleSaveEditCardLog(e) {
     }
   } catch (err) {
     console.error("Error updating card log:", err);
-    toast("Network error. Please try again.", "error");
+    toast(err.message || "Network error. Please try again.", "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2709,7 +2714,7 @@ async function deleteCardLog(id, title) {
     }
   } catch (err) {
     console.error("Error deleting card log:", err);
-    toast("Network error. Please try again.", "error");
+    toast(err.message || "Network error. Please try again.", "error");
   }
 }
 

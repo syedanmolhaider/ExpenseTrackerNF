@@ -20,6 +20,11 @@ function setDefaultDate() {
   });
 }
 
+// Get today's date formatted as YYYY-MM-DD
+function getTodayString() {
+  return new Date().toISOString().split("T")[0];
+}
+
 // Toast notification
 function toast(message, type = "info") {
   const el = document.getElementById("toast");
