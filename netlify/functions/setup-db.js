@@ -165,6 +165,26 @@ exports.handler = async (event) => {
       console.log("✓ user_categories table already exists");
     }
 
+    // Create card_logs table
+    if (!(await tableExists('card_logs'))) {
+      await query(`
+        CREATE TABLE card_logs (
+          id SERIAL PRIMARY KEY,
+          user_id VARCHAR(255) NOT NULL,
+          card_type VARCHAR(50) NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          amount DECIMAL(10, 2) NOT NULL,
+          date DATE NOT NULL,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log("✓ card_logs table created");
+    } else {
+      console.log("✓ card_logs table already exists");
+    }
+
     // Create indexes for better performance
     await query(
       `CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id)`,
@@ -182,6 +202,7 @@ exports.handler = async (event) => {
       `CREATE INDEX IF NOT EXISTS idx_income_user_id ON income(user_id)`,
     );
     await query(`CREATE INDEX IF NOT EXISTS idx_income_date ON income(date)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_card_logs_user_id ON card_logs(user_id)`);
     console.log("✓ indexes created");
 
     console.log("Database setup completed successfully!");
@@ -197,6 +218,7 @@ exports.handler = async (event) => {
         "expense_tags",
         "expense_tag_map",
         "user_categories",
+        "card_logs",
       ],
     });
   } catch (error) {

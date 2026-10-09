@@ -319,6 +319,7 @@ function initListeners() {
         if (typeof populateBudgetTags === "function") populateBudgetTags();
         if (typeof updateTagFilter === "function") updateTagFilter();
       } else if (target === "creditcard") {
+        setDefaultDate();
         displayCreditCard();
       } else if (target === "income") {
         displayIncome();
@@ -629,6 +630,23 @@ function initListeners() {
     });
   }
 
+  // Card Log Form & Modal events
+  const addCardLogForm = document.getElementById("addCardLogForm");
+  if (addCardLogForm) addCardLogForm.addEventListener("submit", handleAddCardLog);
+
+  const editCardLogForm = document.getElementById("editCardLogForm");
+  if (editCardLogForm) editCardLogForm.addEventListener("submit", handleSaveEditCardLog);
+
+  const cancelEditCardLogBtn = document.getElementById("cancelEditCardLogBtn");
+  if (cancelEditCardLogBtn) cancelEditCardLogBtn.addEventListener("click", closeEditCardLogModal);
+
+  const editCardLogModal = document.getElementById("editCardLogModal");
+  if (editCardLogModal) {
+    editCardLogModal.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeEditCardLogModal();
+    });
+  }
+
   // Keyboard: Escape
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -638,6 +656,7 @@ function initListeners() {
       closeEditNextBudgetModal();
       closeEditIncomeModal();
       closeEditCategoryModal();
+      closeEditCardLogModal();
       document.getElementById("settingsModal").classList.remove("show");
     }
   });
@@ -725,6 +744,7 @@ async function loadAll() {
     loadBudget(month),
     loadIncome(month),
     loadNextBudget(getNextMonthKey()),
+    loadCardLogs(month),
   ]);
   // Re-render budget AFTER expenses are loaded (fixes race condition where
   // loadBudget finishes before loadExpenses, causing spent to show as 0)
@@ -2134,9 +2154,17 @@ function updateBalanceBar() {
   // Flexi Card Cash Advances recorded in Income tab
   const flexiIncomeAdvances = incomeEntries.filter(isFlexiCardIncome);
 
-  const platinumSpent = platinumExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  // Card-specific past/external logs (bank app adjustments that do not disturb other calculations)
+  const platinumExtraTotal = (cardLogs || [])
+    .filter((l) => l.card_type === "platinum" || l.card_type === "platinum_card")
+    .reduce((s, l) => s + parseFloat(l.amount || 0), 0);
+  const flexiExtraTotal = (cardLogs || [])
+    .filter((l) => l.card_type === "flexi" || l.card_type === "flexi_card")
+    .reduce((s, l) => s + parseFloat(l.amount || 0), 0);
+
+  const platinumSpent = platinumExpenses.reduce((s, e) => s + parseFloat(e.amount), 0) + platinumExtraTotal;
   const flexiSpent = flexiExpenses.reduce((s, e) => s + parseFloat(e.amount), 0) +
-                     flexiIncomeAdvances.reduce((s, i) => s + parseFloat(i.amount), 0);
+                     flexiIncomeAdvances.reduce((s, i) => s + parseFloat(i.amount), 0) + flexiExtraTotal;
   const totalCCDue = platinumSpent + flexiSpent;
   const cashSpent = cashExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
@@ -2239,6 +2267,199 @@ function updateBalanceBar() {
 }
 
 // =============================================
+// CARD LOGS (Past / External Entries / Bank App Adjustments)
+// =============================================
+async function loadCardLogs(month) {
+  try {
+    const res = await fetch(`/api/card-logs?month=${month}`, {
+      credentials: "include",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      cardLogs = data.logs || [];
+      try {
+        localStorage.setItem(`card_logs_${month}`, JSON.stringify(cardLogs));
+      } catch (e) {}
+    } else {
+      throw new Error("HTTP " + res.status);
+    }
+  } catch (err) {
+    console.warn("loadCardLogs API note, falling back to cache:", err);
+    try {
+      const cached = localStorage.getItem(`card_logs_${month}`);
+      cardLogs = cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      cardLogs = [];
+    }
+  }
+}
+
+async function handleAddCardLog(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const cardType = document.getElementById("ccLogCardType").value;
+  const title = document.getElementById("ccLogTitle").value.trim();
+  const amount = parseFloat(document.getElementById("ccLogAmount").value);
+  const date = document.getElementById("ccLogDate").value;
+  const notes = (document.getElementById("ccLogNotes").value || "").trim();
+  const btn = document.getElementById("saveCardLogBtn");
+
+  if (!title) {
+    toast("Title is required", "error");
+    return;
+  }
+  if (isNaN(amount) || amount <= 0) {
+    toast("Please enter a valid amount", "error");
+    return;
+  }
+  if (!date) {
+    toast("Date is required", "error");
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Adding...";
+  }
+
+  try {
+    const res = await fetch("/api/card-logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ card_type: cardType, title, amount, date, notes }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      toast(`Added "${title}" to ${cardType === "flexi" ? "Flexi" : "Platinum"} Card!`, "success");
+      document.getElementById("addCardLogForm").reset();
+      const dateEl = document.getElementById("ccLogDate");
+      if (dateEl) dateEl.value = getTodayString();
+      await loadCardLogs(getMonthKey());
+      displayCreditCard();
+      updateBalanceBar();
+    } else {
+      toast(data.error || "Failed to add card log", "error");
+    }
+  } catch (err) {
+    console.error("Error adding card log:", err);
+    toast("Network error. Please try again.", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "+ Add to Card Bill";
+    }
+  }
+}
+
+function openEditCardLogModal(id) {
+  const log = (cardLogs || []).find((l) => String(l.id) === String(id));
+  if (!log) return;
+
+  const modal = document.getElementById("editCardLogModal");
+  if (!modal) return;
+
+  document.getElementById("editCardLogId").value = log.id;
+  document.getElementById("editCcLogCardType").value = log.card_type === "flexi" ? "flexi" : "platinum";
+  document.getElementById("editCcLogTitle").value = log.title || "";
+  document.getElementById("editCcLogAmount").value = log.amount || "";
+  document.getElementById("editCcLogDate").value = log.date ? log.date.split("T")[0] : getTodayString();
+  document.getElementById("editCcLogNotes").value = log.notes || "";
+
+  modal.classList.add("show");
+}
+
+function closeEditCardLogModal() {
+  const modal = document.getElementById("editCardLogModal");
+  if (modal) modal.classList.remove("show");
+}
+
+async function handleSaveEditCardLog(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  const id = document.getElementById("editCardLogId").value;
+  const cardType = document.getElementById("editCcLogCardType").value;
+  const title = document.getElementById("editCcLogTitle").value.trim();
+  const amount = parseFloat(document.getElementById("editCcLogAmount").value);
+  const date = document.getElementById("editCcLogDate").value;
+  const notes = (document.getElementById("editCcLogNotes").value || "").trim();
+  const btn = document.getElementById("saveEditCardLogBtn");
+
+  if (!title) {
+    toast("Title is required", "error");
+    return;
+  }
+  if (isNaN(amount) || amount <= 0) {
+    toast("Please enter a valid amount", "error");
+    return;
+  }
+  if (!date) {
+    toast("Date is required", "error");
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Updating...";
+  }
+
+  try {
+    const res = await fetch(`/api/card-logs/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ card_type: cardType, title, amount, date, notes }),
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      toast("Card log updated successfully", "success");
+      closeEditCardLogModal();
+      await loadCardLogs(getMonthKey());
+      displayCreditCard();
+      updateBalanceBar();
+    } else {
+      toast(data.error || "Failed to update card log", "error");
+    }
+  } catch (err) {
+    console.error("Error updating card log:", err);
+    toast("Network error. Please try again.", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Update Log";
+    }
+  }
+}
+
+async function deleteCardLog(id, title) {
+  if (!confirm(`Delete card log "${title}"?`)) return;
+
+  try {
+    const res = await fetch(`/api/card-logs/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      toast(`Card log "${title}" deleted`, "success");
+      await loadCardLogs(getMonthKey());
+      displayCreditCard();
+      updateBalanceBar();
+    } else {
+      toast(data.error || "Failed to delete card log", "error");
+    }
+  } catch (err) {
+    console.error("Error deleting card log:", err);
+    toast("Network error. Please try again.", "error");
+  }
+}
+
+window.openEditCardLogModal = openEditCardLogModal;
+window.closeEditCardLogModal = closeEditCardLogModal;
+window.deleteCardLog = deleteCardLog;
+
+// =============================================
 // CREDIT CARDS VIEW (Platinum + Flexi)
 // =============================================
 function displayCreditCard() {
@@ -2253,11 +2474,24 @@ function displayCreditCard() {
   );
   const flexiIncomeAdvances = incomeEntries.filter(isFlexiCardIncome);
 
-  const platinumSpent = platinumExpenses.reduce(
+  const platinumExtraLogs = (cardLogs || []).filter(
+    (l) => l.card_type === "platinum" || l.card_type === "platinum_card",
+  );
+  const flexiExtraLogs = (cardLogs || []).filter(
+    (l) => l.card_type === "flexi" || l.card_type === "flexi_card",
+  );
+
+  const platinumTrackerSpent = platinumExpenses.reduce(
     (s, e) => s + parseFloat(e.amount),
     0,
   );
-  const flexiCardSpends = flexiExpenses.reduce(
+  const platinumExtraTotal = platinumExtraLogs.reduce(
+    (s, l) => s + parseFloat(l.amount || 0),
+    0,
+  );
+  const platinumSpent = platinumTrackerSpent + platinumExtraTotal;
+
+  const flexiTrackerSpends = flexiExpenses.reduce(
     (s, e) => s + parseFloat(e.amount),
     0,
   );
@@ -2265,10 +2499,19 @@ function displayCreditCard() {
     (s, i) => s + parseFloat(i.amount),
     0,
   );
-  const flexiSpent = flexiCardSpends + flexiAdvanceTotal;
+  const flexiExtraTotal = flexiExtraLogs.reduce(
+    (s, l) => s + parseFloat(l.amount || 0),
+    0,
+  );
+  const flexiSpent = flexiTrackerSpends + flexiAdvanceTotal + flexiExtraTotal;
+
   const totalCardsDue = platinumSpent + flexiSpent;
   const totalCount =
-    platinumExpenses.length + flexiExpenses.length + flexiIncomeAdvances.length;
+    platinumExpenses.length +
+    flexiExpenses.length +
+    flexiIncomeAdvances.length +
+    platinumExtraLogs.length +
+    flexiExtraLogs.length;
 
   // Update top summary cards
   const totalBillEl = document.getElementById("ccTotalBill");
@@ -2294,17 +2537,17 @@ function displayCreditCard() {
 
   if (selectedFilter === "platinum") {
     if (infoEl)
-      infoEl.textContent = `Showing Platinum Card: ${fmtCurr(platinumSpent)} (${platinumExpenses.length} spends)`;
+      infoEl.textContent = `Platinum Card: Tracker (${fmtCurr(platinumTrackerSpent)}) + Past/Bank Logs (${fmtCurr(platinumExtraTotal)}) = Total ${fmtCurr(platinumSpent)}`;
     if (badgeEl) badgeEl.textContent = `Platinum Due: ${fmtCurr(platinumSpent)}`;
     if (titleEl) titleEl.textContent = "🥈 Platinum Card Logs";
   } else if (selectedFilter === "flexi") {
     if (infoEl)
-      infoEl.textContent = `Showing Flexi Card: Spends ${fmtCurr(flexiCardSpends)} + Cash Advances ${fmtCurr(flexiAdvanceTotal)} = Total ${fmtCurr(flexiSpent)}`;
+      infoEl.textContent = `Flexi Card: Spends (${fmtCurr(flexiTrackerSpends)}) + Cash Advances (${fmtCurr(flexiAdvanceTotal)}) + Past/Bank Logs (${fmtCurr(flexiExtraTotal)}) = Total ${fmtCurr(flexiSpent)}`;
     if (badgeEl) badgeEl.textContent = `Flexi Due: ${fmtCurr(flexiSpent)}`;
     if (titleEl) titleEl.textContent = "💳 Flexi Card Logs";
   } else {
     if (infoEl)
-      infoEl.textContent = `All Cards: Platinum (${fmtCurr(platinumSpent)}) + Flexi (${fmtCurr(flexiSpent)}) = Total ${fmtCurr(totalCardsDue)}`;
+      infoEl.textContent = `All Cards Due: Platinum (${fmtCurr(platinumSpent)}) + Flexi (${fmtCurr(flexiSpent)}) = Total ${fmtCurr(totalCardsDue)}`;
     if (badgeEl) badgeEl.textContent = `Total Due: ${fmtCurr(totalCardsDue)}`;
     if (titleEl) titleEl.textContent = "Credit Card Logs";
   }
@@ -2327,6 +2570,24 @@ function displayCreditCard() {
         badgeLabel: "🥈 Platinum Card",
         badgeStyle:
           "background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);",
+      });
+    });
+
+    platinumExtraLogs.forEach((l) => {
+      itemsToDisplay.push({
+        id: l.id,
+        type: "cardLog",
+        card_type: "platinum",
+        title: l.title,
+        amount: parseFloat(l.amount),
+        category: "Bank / External Log",
+        date: l.date,
+        notes: l.notes,
+        budget_tag: null,
+        tags: [],
+        badgeLabel: "🥈 Platinum · 📌 Past / Bank App Entry",
+        badgeStyle:
+          "background: rgba(14, 165, 233, 0.15); color: #0ea5e9; border: 1px solid rgba(14, 165, 233, 0.35); font-weight: 700;",
       });
     });
   }
@@ -2365,6 +2626,24 @@ function displayCreditCard() {
           "background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);",
       });
     });
+
+    flexiExtraLogs.forEach((l) => {
+      itemsToDisplay.push({
+        id: l.id,
+        type: "cardLog",
+        card_type: "flexi",
+        title: l.title,
+        amount: parseFloat(l.amount),
+        category: "Bank / External Log",
+        date: l.date,
+        notes: l.notes,
+        budget_tag: null,
+        tags: [],
+        badgeLabel: "💳 Flexi · 📌 Past / Bank App Entry",
+        badgeStyle:
+          "background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.35); font-weight: 700;",
+      });
+    });
   }
 
   if (itemsToDisplay.length === 0) {
@@ -2384,9 +2663,9 @@ function displayCreditCard() {
         <div class="expense-left">
           <div class="expense-title-text">${esc(item.title)}</div>
           <div class="expense-meta">
-            <span class="expense-cat">${item.type === "income" ? "🏦" : getCatIcon(item.category)} ${esc(item.category)}</span>
+            <span class="expense-cat">${item.type === "income" ? "🏦" : item.type === "cardLog" ? "📌" : getCatIcon(item.category)} ${esc(item.category)}</span>
             <span>${fmtDate(item.date)}</span>
-            <span style="${item.badgeStyle} padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 0.72rem;">${item.badgeLabel}</span>
+            <span style="${item.badgeStyle} padding: 2px 8px; border-radius: 6px; font-size: 0.72rem;">${item.badgeLabel}</span>
           </div>
           ${item.notes ? `<div class="expense-notes-text">${esc(item.notes)}</div>` : ""}
           ${item.budget_tag ? `<div class="expense-tags"><span class="tag-badge" style="background: var(--accent-alpha); color: var(--accent); border: 1px solid var(--accent)40;">📌 ${esc(item.budget_tag)}</span></div>` : getExpenseTagsHTML(item.tags)}
@@ -2394,8 +2673,22 @@ function displayCreditCard() {
         <div class="expense-amount-val text-orange">${fmtCurr(item.amount)}</div>
       </div>
       <div class="expense-actions">
-        <button class="btn-sm" data-action="${item.type === "income" ? "editIncome" : "editExpense"}" data-id="${item.id}" aria-label="Edit ${esc(item.title)}">Edit</button>
-        <button class="btn-sm delete" data-action="${item.type === "income" ? "deleteIncome" : "deleteExpense"}" data-id="${item.id}" aria-label="Delete ${esc(item.title)}">Delete</button>
+        ${
+          item.type === "cardLog"
+            ? `
+          <button class="btn-sm" onclick="openEditCardLogModal('${item.id}')" aria-label="Edit ${esc(item.title)}">Edit</button>
+          <button class="btn-sm delete" onclick="deleteCardLog('${item.id}', '${esc(item.title)}')" aria-label="Delete ${esc(item.title)}">Delete</button>
+        `
+            : item.type === "income"
+              ? `
+          <button class="btn-sm" data-action="editIncome" data-id="${item.id}" aria-label="Edit ${esc(item.title)}">Edit</button>
+          <button class="btn-sm delete" data-action="deleteIncome" data-id="${item.id}" aria-label="Delete ${esc(item.title)}">Delete</button>
+        `
+              : `
+          <button class="btn-sm" data-action="editExpense" data-id="${item.id}" aria-label="Edit ${esc(item.title)}">Edit</button>
+          <button class="btn-sm delete" data-action="deleteExpense" data-id="${item.id}" aria-label="Delete ${esc(item.title)}">Delete</button>
+        `
+        }
       </div>
     </div>`,
     )
@@ -4939,7 +5232,7 @@ window.deleteCategory = deleteCategory;
 
 // ------ Calculator Logic for Amount Fields ------
 document.addEventListener("DOMContentLoaded", () => {
-  const amountInputIds = ['inHandInput', 'budgetAmount', 'nextBudgetAmount', 'expenseAmount', 'incomeAmount', 'editExpenseAmount', 'editBudgetAmount', 'editNextBudgetAmount', 'editIncomeAmount'];
+  const amountInputIds = ['inHandInput', 'budgetAmount', 'nextBudgetAmount', 'expenseAmount', 'incomeAmount', 'editExpenseAmount', 'editBudgetAmount', 'editNextBudgetAmount', 'editIncomeAmount', 'ccLogAmount', 'editCcLogAmount'];
   amountInputIds.forEach(id => {
     const el = document.getElementById(id);
     if (el) {

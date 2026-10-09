@@ -14,4 +14,5 @@ let selectedExpenseTags = []; // Tags selected for new expense
 let editSelectedExpenseTags = []; // Tags selected for editing expense
 let inHandAmount = 0; // Actual in-hand cash amount (base)
 let inHandBaseSpent = 0; // Total spent at the time in-hand was saved
+let cardLogs = []; // Card-specific past/external logs (bank app adjustments)
 

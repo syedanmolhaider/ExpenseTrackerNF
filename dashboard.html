@@ -664,6 +664,70 @@
             </div>
           </div>
 
+          <!-- Log Past / External Card Expense Form -->
+          <div class="card add-card" id="ccAddLogCard">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div>
+                <h2 class="card-title" style="margin: 0; font-size: 1.05rem;">➕ Log Past / External Card Expense</h2>
+                <p class="card-subtitle-sm" style="margin: 4px 0 0 0; color: var(--text-muted);">
+                  Log other or past expenses, annual fees, or bank app dues directly here. These will <strong>only update your card bill</strong> and will <strong>not disturb</strong> your daily expenses, cash in-hand, or budget limits!
+                </p>
+              </div>
+            </div>
+            <form id="addCardLogForm" class="form-grid">
+              <div class="form-field">
+                <label for="ccLogCardType">Select Card</label>
+                <select id="ccLogCardType" name="card_type" required>
+                  <option value="platinum">🥈 Platinum Card</option>
+                  <option value="flexi">💳 Flexi Card</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label for="ccLogTitle">Title / Purpose</label>
+                <input
+                  type="text"
+                  id="ccLogTitle"
+                  name="title"
+                  placeholder="e.g. Past Spend, Bank Fee, Prior Balance"
+                  required
+                  autocomplete="off"
+                />
+              </div>
+              <div class="form-field">
+                <label for="ccLogAmount">Amount (Rs)</label>
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  id="ccLogAmount"
+                  name="amount"
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0.01"
+                  required
+                />
+              </div>
+              <div class="form-field">
+                <label for="ccLogDate">Date</label>
+                <input type="date" id="ccLogDate" name="date" required />
+              </div>
+              <div class="form-field full-width">
+                <label for="ccLogNotes">Notes <small>(optional)</small></label>
+                <input
+                  type="text"
+                  id="ccLogNotes"
+                  name="notes"
+                  placeholder="e.g. As shown in Bank App statement"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="modal-actions full-width" style="margin-top: 6px;">
+                <button type="submit" class="btn btn-primary" id="saveCardLogBtn">
+                  + Add to Card Bill
+                </button>
+              </div>
+            </form>
+          </div>
+
           <!-- Cards Logs List -->
           <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
@@ -1288,6 +1352,44 @@
           <div class="modal-actions full-width" style="margin-top: 10px;">
             <button type="button" class="btn btn-ghost" id="cancelEditCategoryBtn">Cancel</button>
             <button type="submit" class="btn btn-primary" id="saveCategoryBtn">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Card Log Modal -->
+    <div class="modal-overlay" id="editCardLogModal">
+      <div class="modal-box" style="max-width: 440px;">
+        <h3>✏️ Edit Card Expense / Adjustment</h3>
+        <p class="modal-desc">Update details of this card-specific log entry.</p>
+        <form id="editCardLogForm" class="form-grid">
+          <input type="hidden" id="editCardLogId" />
+          <div class="form-field full-width">
+            <label for="editCcLogCardType">Card</label>
+            <select id="editCcLogCardType" name="card_type" required>
+              <option value="platinum">🥈 Platinum Card</option>
+              <option value="flexi">💳 Flexi Card</option>
+            </select>
+          </div>
+          <div class="form-field full-width">
+            <label for="editCcLogTitle">Title / Purpose</label>
+            <input type="text" id="editCcLogTitle" name="title" required autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label for="editCcLogAmount">Amount (Rs)</label>
+            <input type="text" inputmode="decimal" id="editCcLogAmount" name="amount" required step="0.01" min="0.01" />
+          </div>
+          <div class="form-field">
+            <label for="editCcLogDate">Date</label>
+            <input type="date" id="editCcLogDate" name="date" required />
+          </div>
+          <div class="form-field full-width">
+            <label for="editCcLogNotes">Notes <small>(optional)</small></label>
+            <input type="text" id="editCcLogNotes" name="notes" autocomplete="off" />
+          </div>
+          <div class="modal-actions full-width" style="margin-top: 10px;">
+            <button type="button" class="btn btn-ghost" id="cancelEditCardLogBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="saveEditCardLogBtn">Update Log</button>
           </div>
         </form>
       </div>
