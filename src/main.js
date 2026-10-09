@@ -318,6 +318,8 @@ function initListeners() {
         displayExpenses();
         if (typeof populateBudgetTags === "function") populateBudgetTags();
         if (typeof updateTagFilter === "function") updateTagFilter();
+      } else if (target === "creditcard") {
+        displayCreditCard();
       } else if (target === "income") {
         displayIncome();
         updateIncomeSummary();
@@ -682,6 +684,7 @@ async function loadAll() {
   if (typeof populateBudgetTags === "function") populateBudgetTags();
   displayNextBudget();
   updateNextBudgetSummary();
+  displayCreditCard();
   updateBalanceBar();
   updateTagFilter();
   if (document.getElementById("panel-trends").classList.contains("active"))
@@ -693,6 +696,7 @@ function syncAllViews() {
   displayBudget();
   updateBudgetSummary();
   displayExpenses();
+  displayCreditCard();
   displayIncome();
   updateIncomeSummary();
   displayNextBudget();
@@ -826,6 +830,7 @@ function displayExpenses() {
           <div class="expense-meta">
             <span class="expense-cat">${getCatIcon(exp.category)} ${esc(exp.category)}</span>
             <span>${fmtDate(exp.date)}</span>
+            ${(exp.payment_method || 'cash') === 'credit_card' ? `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 0.72rem; border: 1px solid rgba(245, 158, 11, 0.25);">💳 Card</span>` : ''}
           </div>
           ${exp.notes ? `<div class="expense-notes-text">${esc(exp.notes)}</div>` : ""}
           ${exp.budget_tag ? `<div class="expense-tags"><span class="tag-badge" style="background: var(--accent-alpha); color: var(--accent); border: 1px solid var(--accent)40;">📌 ${esc(exp.budget_tag)}</span></div>` : getExpenseTagsHTML(exp.tags)}
@@ -873,7 +878,9 @@ async function handleAddExpense(e) {
   // Get selected budget tag from dropdown
   const tagSelect = document.getElementById("expenseTag");
   const budgetTag = tagSelect ? tagSelect.value : "";
-  const data = { title, amount, category, date, notes: "", budget_tag: budgetTag || null };
+  const paymentMethodEl = document.getElementById("expensePaymentMethod");
+  const payment_method = paymentMethodEl ? paymentMethodEl.value : "cash";
+  const data = { title, amount, category, date, notes: "", budget_tag: budgetTag || null, payment_method };
 
   try {
     const res = await fetch("/api/expenses", {
@@ -915,6 +922,12 @@ function openEditModal(id) {
     editExpenseTagDropdown.value = exp.budget_tag || "";
   }
 
+  // Prepopulate payment method dropdown
+  const editExpensePaymentMethodDropdown = document.getElementById("editExpensePaymentMethod");
+  if (editExpensePaymentMethodDropdown) {
+    editExpensePaymentMethodDropdown.value = exp.payment_method || "cash";
+  }
+
   document.getElementById("editModal").classList.add("show");
 }
 
@@ -931,6 +944,8 @@ async function handleEditExpense(e) {
   const form = e.target;
   const tagSelect = document.getElementById("editExpenseTag");
   const budgetTag = tagSelect ? tagSelect.value : "";
+  const editPaymentMethodEl = document.getElementById("editExpensePaymentMethod");
+  const payment_method = editPaymentMethodEl ? editPaymentMethodEl.value : "cash";
   const data = {
     title: form.title.value.trim(),
     amount: form.amount.value,
@@ -938,6 +953,7 @@ async function handleEditExpense(e) {
     date: form.date.value,
     notes: "",
     budget_tag: budgetTag || null,
+    payment_method,
   };
   try {
     const res = await fetch(`/api/expenses/${id}`, {
@@ -2040,6 +2056,12 @@ function updateBalanceBar() {
   );
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const cashSpent = expenses
+    .filter((e) => (e.payment_method || "cash") !== "credit_card")
+    .reduce((s, e) => s + parseFloat(e.amount), 0);
+  const ccSpent = expenses
+    .filter((e) => (e.payment_method || "cash") === "credit_card")
+    .reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Calculate remaining budget limits per category (Required Amount)
   let budgetRequired = 0;
@@ -2059,7 +2081,7 @@ function updateBalanceBar() {
     }
   });
 
-  const remaining = incomeTotal - totalSpent; // Available cash
+  const remaining = incomeTotal - cashSpent; // Available cash (excluding unpaid CC)
   const extraAvailable = remaining - budgetRequired; // Unreserved cash
 
   if (document.getElementById("balanceIncome")) {
@@ -2083,14 +2105,17 @@ function updateBalanceBar() {
     document.getElementById("balanceExtraAvailable").className =
       extraAvailable < 0 ? "balance-value text-red" : "balance-value text-green";
   }
+  if (document.getElementById("balanceCCDue")) {
+    document.getElementById("balanceCCDue").textContent = `${fmtCurr(ccSpent)}`;
+  }
 
   // In-Hand Amount & Difference
   loadInHandAmount();
   const inHandEl = document.getElementById("balanceInHand");
   const diffEl = document.getElementById("balanceDiff");
   
-  // Calculate current in-hand based on expenses logged since saving
-  const currentInHand = inHandAmount > 0 ? (inHandAmount - (totalSpent - inHandBaseSpent)) : 0;
+  // Calculate current in-hand based on CASH expenses logged since saving
+  const currentInHand = inHandAmount > 0 ? (inHandAmount - (cashSpent - inHandBaseSpent)) : 0;
   
   if (inHandEl) {
     inHandEl.textContent = inHandAmount > 0 ? fmtCurr(currentInHand) : "Not set";
@@ -2098,8 +2123,8 @@ function updateBalanceBar() {
   }
   if (diffEl) {
     if (inHandAmount > 0) {
-      // Expected = Income - Spent, Difference = CurrentInHand - Expected
-      const expected = incomeTotal - totalSpent;
+      // Expected = Income - CashSpent, Difference = CurrentInHand - Expected
+      const expected = incomeTotal - cashSpent;
       const diff = currentInHand - expected;
       diffEl.textContent = `${fmtCurr(diff)}`;
       if (Math.abs(diff) < 1) {
@@ -2137,6 +2162,78 @@ function updateBalanceBar() {
 }
 
 // =============================================
+// CREDIT CARD VIEW
+// =============================================
+function displayCreditCard() {
+  const list = document.getElementById("creditCardList");
+  if (!list) return;
+
+  const ccExpenses = expenses.filter(
+    (e) => (e.payment_method || "cash") === "credit_card",
+  );
+  const totalBill = ccExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+
+  const billEl = document.getElementById("ccTotalBill");
+  if (billEl) billEl.textContent = fmtCurr(totalBill);
+
+  const badgeEl = document.getElementById("ccBillBadge");
+  if (badgeEl) badgeEl.textContent = `Bill: ${fmtCurr(totalBill)}`;
+
+  const countEl = document.getElementById("ccTotalCount");
+  if (countEl) countEl.textContent = ccExpenses.length;
+
+  const topCatEl = document.getElementById("ccTopCategory");
+  if (topCatEl) {
+    if (ccExpenses.length === 0) {
+      topCatEl.textContent = "—";
+    } else {
+      const catTotals = {};
+      ccExpenses.forEach((e) => {
+        const c = e.category || "Other";
+        catTotals[c] = (catTotals[c] || 0) + parseFloat(e.amount);
+      });
+      const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
+      topCatEl.textContent = topCat ? `${getCatIcon(topCat[0])} ${topCat[0]}` : "—";
+    }
+  }
+
+  if (ccExpenses.length === 0) {
+    list.innerHTML =
+      '<p class="empty-msg">No credit card expenses logged this month.</p>';
+    return;
+  }
+
+  const sorted = [...ccExpenses].sort(
+    (a, b) => new Date(b.date) - new Date(a.date),
+  );
+
+  list.innerHTML = sorted
+    .map(
+      (exp) => `
+    <div class="expense-item">
+      <div class="expense-row">
+        <div class="expense-left">
+          <div class="expense-title-text">${esc(exp.title)}</div>
+          <div class="expense-meta">
+            <span class="expense-cat">${getCatIcon(exp.category)} ${esc(exp.category)}</span>
+            <span>${fmtDate(exp.date)}</span>
+            <span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 0.72rem; border: 1px solid rgba(245, 158, 11, 0.25);">💳 Credit Card</span>
+          </div>
+          ${exp.notes ? `<div class="expense-notes-text">${esc(exp.notes)}</div>` : ""}
+          ${exp.budget_tag ? `<div class="expense-tags"><span class="tag-badge" style="background: var(--accent-alpha); color: var(--accent); border: 1px solid var(--accent)40;">📌 ${esc(exp.budget_tag)}</span></div>` : getExpenseTagsHTML(exp.tags)}
+        </div>
+        <div class="expense-amount-val text-orange">${fmtCurr(exp.amount)}</div>
+      </div>
+      <div class="expense-actions">
+        <button class="btn-sm" data-action="editExpense" data-id="${exp.id}" aria-label="Edit expense ${esc(exp.title)}">Edit</button>
+        <button class="btn-sm delete" data-action="deleteExpense" data-id="${exp.id}" aria-label="Delete expense ${esc(exp.title)}">Delete</button>
+      </div>
+    </div>`,
+    )
+    .join("");
+}
+
+// =============================================
 // IN-HAND AMOUNT — stored per month in localStorage
 // =============================================
 function getInHandKey() {
@@ -2162,7 +2259,9 @@ function loadInHandAmount() {
 
 function saveInHandAmount(amount) {
   inHandAmount = amount;
-  inHandBaseSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  inHandBaseSpent = expenses
+    .filter((e) => (e.payment_method || "cash") !== "credit_card")
+    .reduce((s, e) => s + parseFloat(e.amount), 0);
   localStorage.setItem(getInHandKey(), JSON.stringify({ amount: inHandAmount, baseSpent: inHandBaseSpent }));
 }
 

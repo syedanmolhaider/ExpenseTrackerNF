@@ -2,16 +2,17 @@ const { query } = require("./utils/db");
 const { createResponse } = require("./utils/auth");
 const { withMiddleware } = require("./utils/middleware");
 
-// Self-migration: ensure budget_tag column exists
+// Self-migration: ensure budget_tag and payment_method columns exist
 let migrationDone = false;
-async function ensureBudgetTagColumn() {
+async function ensureColumns() {
   if (migrationDone) return;
   try {
     await query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS budget_tag VARCHAR(255) DEFAULT NULL`);
+    await query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'cash'`);
     migrationDone = true;
-    console.log("budget_tag column ensured");
+    console.log("expenses columns ensured");
   } catch (err) {
-    console.log("budget_tag migration note:", err.message);
+    console.log("migration note:", err.message);
     migrationDone = true; // Don't retry on every request
   }
 }
@@ -20,8 +21,8 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
   const userId = user.userId;
   const params = event.queryStringParameters || {};
 
-    // Ensure budget_tag column exists
-    await ensureBudgetTagColumn();
+    // Ensure columns exist
+    await ensureColumns();
 
     // Handle GET request - fetch expenses for user (with optional date range filter)
     if (event.httpMethod === "GET") {
@@ -40,7 +41,7 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
       let sql, values, paramIdx;
       
       if (tagsExist) {
-        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.budget_tag, e.created_at, e.updated_at,
+        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.budget_tag, COALESCE(e.payment_method, 'cash') as payment_method, e.created_at, e.updated_at,
                   COALESCE(
                     json_agg(
                       json_build_object('id', t.id, 'name', t.name, 'color', t.color)
@@ -54,7 +55,7 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
         values = [userId];
         paramIdx = 2;
       } else {
-        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.budget_tag, e.created_at, e.updated_at,
+        sql = `SELECT e.id, e.title, e.amount, e.category, e.date, e.notes, e.budget_tag, COALESCE(e.payment_method, 'cash') as payment_method, e.created_at, e.updated_at,
                   '[]'::json as tags
            FROM expenses e
            WHERE e.user_id = $1`;
@@ -102,7 +103,7 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
 
     // Handle POST request - create new expense
     if (event.httpMethod === "POST") {
-      const { title, amount, category, date, notes, budget_tag } = JSON.parse(event.body);
+      const { title, amount, category, date, notes, budget_tag, payment_method } = JSON.parse(event.body);
 
       // Validate input
       if (!title || !amount || !category || !date) {
@@ -129,10 +130,10 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
       }
 
       const result = await query(
-        `INSERT INTO expenses (user_id, title, amount, category, date, notes, budget_tag) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) 
-         RETURNING id, title, amount, category, date, notes, budget_tag, created_at, updated_at`,
-        [userId, title, parseFloat(amount), category, date, notes || null, budget_tag || null],
+        `INSERT INTO expenses (user_id, title, amount, category, date, notes, budget_tag, payment_method) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+         RETURNING id, title, amount, category, date, notes, budget_tag, payment_method, created_at, updated_at`,
+        [userId, title, parseFloat(amount), category, date, notes || null, budget_tag || null, payment_method || 'cash'],
       );
 
       return createResponse(201, {
@@ -150,7 +151,7 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
         return createResponse(400, { error: "Expense ID is required" });
       }
 
-      const { title, amount, category, date, notes, budget_tag } = JSON.parse(event.body);
+      const { title, amount, category, date, notes, budget_tag, payment_method } = JSON.parse(event.body);
 
       // Validate input
       if (!title || !amount || !category || !date) {
@@ -188,9 +189,9 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
 
       const result = await query(
         `UPDATE expenses 
-         SET title = $1, amount = $2, category = $3, date = $4, notes = $5, budget_tag = $6, updated_at = CURRENT_TIMESTAMP 
-         WHERE id = $7 AND user_id = $8 
-         RETURNING id, title, amount, category, date, notes, budget_tag, created_at, updated_at`,
+         SET title = $1, amount = $2, category = $3, date = $4, notes = $5, budget_tag = $6, payment_method = $7, updated_at = CURRENT_TIMESTAMP 
+         WHERE id = $8 AND user_id = $9 
+         RETURNING id, title, amount, category, date, notes, budget_tag, payment_method, created_at, updated_at`,
         [
           title,
           parseFloat(amount),
@@ -198,6 +199,7 @@ exports.handler = withMiddleware({ rateLimitPrefix: "expenses" }, async (event, 
           date,
           notes || null,
           budget_tag || null,
+          payment_method || 'cash',
           expenseId,
           userId,
         ],
