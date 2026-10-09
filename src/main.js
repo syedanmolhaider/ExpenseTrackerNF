@@ -335,6 +335,11 @@ function initListeners() {
   const refreshBtn = document.getElementById("refreshBtn");
   if (refreshBtn) refreshBtn.addEventListener("click", () => refreshDashboard(true));
 
+  const ccCardFilterEl = document.getElementById("ccCardFilter");
+  if (ccCardFilterEl) {
+    ccCardFilterEl.addEventListener("change", displayCreditCard);
+  }
+
   const themeToggleBtn = document.getElementById("themeToggleBtn");
   if (themeToggleBtn) themeToggleBtn.addEventListener("click", toggleTheme);
 
@@ -830,7 +835,7 @@ function displayExpenses() {
           <div class="expense-meta">
             <span class="expense-cat">${getCatIcon(exp.category)} ${esc(exp.category)}</span>
             <span>${fmtDate(exp.date)}</span>
-            ${(exp.payment_method || 'cash') === 'credit_card' ? `<span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 0.72rem; border: 1px solid rgba(245, 158, 11, 0.25);">💳 Card</span>` : ''}
+            ${getExpenseCardType(exp) === 'platinum' ? `<span style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 0.72rem;">🥈 Platinum</span>` : getExpenseCardType(exp) === 'flexi' ? `<span style="background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 0.72rem;">💳 Flexi</span>` : ''}
           </div>
           ${exp.notes ? `<div class="expense-notes-text">${esc(exp.notes)}</div>` : ""}
           ${exp.budget_tag ? `<div class="expense-tags"><span class="tag-badge" style="background: var(--accent-alpha); color: var(--accent); border: 1px solid var(--accent)40;">📌 ${esc(exp.budget_tag)}</span></div>` : getExpenseTagsHTML(exp.tags)}
@@ -925,7 +930,9 @@ function openEditModal(id) {
   // Prepopulate payment method dropdown
   const editExpensePaymentMethodDropdown = document.getElementById("editExpensePaymentMethod");
   if (editExpensePaymentMethodDropdown) {
-    editExpensePaymentMethodDropdown.value = exp.payment_method || "cash";
+    let pm = exp.payment_method || "cash";
+    if (pm === "credit_card") pm = "platinum_card";
+    editExpensePaymentMethodDropdown.value = pm;
   }
 
   document.getElementById("editModal").classList.add("show");
@@ -2046,6 +2053,24 @@ async function handleEditIncome(e) {
   }
 }
 
+// Helper: Check if income entry represents cash withdrawn/advanced from Flexi Card
+function isFlexiCardIncome(entry) {
+  if (!entry) return false;
+  const src = (entry.source || "").toLowerCase();
+  const title = (entry.title || "").toLowerCase();
+  return src.includes("flexi") || title.includes("flexi");
+}
+
+// Helper: Determine card type for expense (platinum, flexi, or null)
+function getExpenseCardType(exp) {
+  if (!exp) return null;
+  const pm = (exp.payment_method || "").toLowerCase();
+  if (pm === "platinum_card" || pm === "platinum") return "platinum";
+  if (pm === "flexi_card" || pm === "flexi") return "flexi";
+  if (pm === "credit_card") return "platinum"; // default legacy credit_card to platinum
+  return null;
+}
+
 // =============================================
 // BALANCE
 // =============================================
@@ -2056,12 +2081,20 @@ function updateBalanceBar() {
   );
   const budgetTotal = budgetItems.reduce((s, i) => s + parseFloat(i.amount), 0);
   const totalSpent = expenses.reduce((s, e) => s + parseFloat(e.amount), 0);
-  const cashSpent = expenses
-    .filter((e) => (e.payment_method || "cash") !== "credit_card")
-    .reduce((s, e) => s + parseFloat(e.amount), 0);
-  const ccSpent = expenses
-    .filter((e) => (e.payment_method || "cash") === "credit_card")
-    .reduce((s, e) => s + parseFloat(e.amount), 0);
+  
+  // Expenses split by payment method
+  const cashExpenses = expenses.filter((e) => !getExpenseCardType(e));
+  const platinumExpenses = expenses.filter((e) => getExpenseCardType(e) === "platinum");
+  const flexiExpenses = expenses.filter((e) => getExpenseCardType(e) === "flexi");
+
+  // Flexi Card Cash Advances recorded in Income tab
+  const flexiIncomeAdvances = incomeEntries.filter(isFlexiCardIncome);
+
+  const platinumSpent = platinumExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const flexiSpent = flexiExpenses.reduce((s, e) => s + parseFloat(e.amount), 0) +
+                     flexiIncomeAdvances.reduce((s, i) => s + parseFloat(i.amount), 0);
+  const totalCCDue = platinumSpent + flexiSpent;
+  const cashSpent = cashExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
 
   // Calculate remaining budget limits per category (Required Amount)
   let budgetRequired = 0;
@@ -2106,7 +2139,7 @@ function updateBalanceBar() {
       extraAvailable < 0 ? "balance-value text-red" : "balance-value text-green";
   }
   if (document.getElementById("balanceCCDue")) {
-    document.getElementById("balanceCCDue").textContent = `${fmtCurr(ccSpent)}`;
+    document.getElementById("balanceCCDue").textContent = `${fmtCurr(totalCCDue)}`;
   }
 
   // In-Hand Amount & Difference
@@ -2162,71 +2195,163 @@ function updateBalanceBar() {
 }
 
 // =============================================
-// CREDIT CARD VIEW
+// CREDIT CARDS VIEW (Platinum + Flexi)
 // =============================================
 function displayCreditCard() {
   const list = document.getElementById("creditCardList");
   if (!list) return;
 
-  const ccExpenses = expenses.filter(
-    (e) => (e.payment_method || "cash") === "credit_card",
+  const platinumExpenses = expenses.filter(
+    (e) => getExpenseCardType(e) === "platinum",
   );
-  const totalBill = ccExpenses.reduce((s, e) => s + parseFloat(e.amount), 0);
+  const flexiExpenses = expenses.filter(
+    (e) => getExpenseCardType(e) === "flexi",
+  );
+  const flexiIncomeAdvances = incomeEntries.filter(isFlexiCardIncome);
 
-  const billEl = document.getElementById("ccTotalBill");
-  if (billEl) billEl.textContent = fmtCurr(totalBill);
+  const platinumSpent = platinumExpenses.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
+  const flexiCardSpends = flexiExpenses.reduce(
+    (s, e) => s + parseFloat(e.amount),
+    0,
+  );
+  const flexiAdvanceTotal = flexiIncomeAdvances.reduce(
+    (s, i) => s + parseFloat(i.amount),
+    0,
+  );
+  const flexiSpent = flexiCardSpends + flexiAdvanceTotal;
+  const totalCardsDue = platinumSpent + flexiSpent;
+  const totalCount =
+    platinumExpenses.length + flexiExpenses.length + flexiIncomeAdvances.length;
 
-  const badgeEl = document.getElementById("ccBillBadge");
-  if (badgeEl) badgeEl.textContent = `Bill: ${fmtCurr(totalBill)}`;
+  // Update top summary cards
+  const totalBillEl = document.getElementById("ccTotalBill");
+  if (totalBillEl) totalBillEl.textContent = fmtCurr(totalCardsDue);
+
+  const platinumBillEl = document.getElementById("ccPlatinumBill");
+  if (platinumBillEl) platinumBillEl.textContent = fmtCurr(platinumSpent);
+
+  const flexiBillEl = document.getElementById("ccFlexiBill");
+  if (flexiBillEl) flexiBillEl.textContent = fmtCurr(flexiSpent);
 
   const countEl = document.getElementById("ccTotalCount");
-  if (countEl) countEl.textContent = ccExpenses.length;
+  if (countEl) countEl.textContent = totalCount;
 
-  const topCatEl = document.getElementById("ccTopCategory");
-  if (topCatEl) {
-    if (ccExpenses.length === 0) {
-      topCatEl.textContent = "—";
-    } else {
-      const catTotals = {};
-      ccExpenses.forEach((e) => {
-        const c = e.category || "Other";
-        catTotals[c] = (catTotals[c] || 0) + parseFloat(e.amount);
-      });
-      const topCat = Object.entries(catTotals).sort((a, b) => b[1] - a[1])[0];
-      topCatEl.textContent = topCat ? `${getCatIcon(topCat[0])} ${topCat[0]}` : "—";
-    }
+  // Read filter dropdown: 'all', 'platinum', or 'flexi'
+  const filterSelect = document.getElementById("ccCardFilter");
+  const selectedFilter = filterSelect ? filterSelect.value : "all";
+
+  // Dynamic explanation / info text
+  const infoEl = document.getElementById("ccActiveCardInfo");
+  const badgeEl = document.getElementById("ccBillBadge");
+  const titleEl = document.getElementById("ccListTitle");
+
+  if (selectedFilter === "platinum") {
+    if (infoEl)
+      infoEl.textContent = `Showing Platinum Card: ${fmtCurr(platinumSpent)} (${platinumExpenses.length} spends)`;
+    if (badgeEl) badgeEl.textContent = `Platinum Due: ${fmtCurr(platinumSpent)}`;
+    if (titleEl) titleEl.textContent = "🥈 Platinum Card Logs";
+  } else if (selectedFilter === "flexi") {
+    if (infoEl)
+      infoEl.textContent = `Showing Flexi Card: Spends ${fmtCurr(flexiCardSpends)} + Cash Advances ${fmtCurr(flexiAdvanceTotal)} = Total ${fmtCurr(flexiSpent)}`;
+    if (badgeEl) badgeEl.textContent = `Flexi Due: ${fmtCurr(flexiSpent)}`;
+    if (titleEl) titleEl.textContent = "💳 Flexi Card Logs";
+  } else {
+    if (infoEl)
+      infoEl.textContent = `All Cards: Platinum (${fmtCurr(platinumSpent)}) + Flexi (${fmtCurr(flexiSpent)}) = Total ${fmtCurr(totalCardsDue)}`;
+    if (badgeEl) badgeEl.textContent = `Total Due: ${fmtCurr(totalCardsDue)}`;
+    if (titleEl) titleEl.textContent = "Credit Card Logs";
   }
 
-  if (ccExpenses.length === 0) {
+  // Build unified item list according to selected filter
+  let itemsToDisplay = [];
+
+  if (selectedFilter === "all" || selectedFilter === "platinum") {
+    platinumExpenses.forEach((e) => {
+      itemsToDisplay.push({
+        id: e.id,
+        type: "expense",
+        title: e.title,
+        amount: parseFloat(e.amount),
+        category: e.category,
+        date: e.date,
+        notes: e.notes,
+        budget_tag: e.budget_tag,
+        tags: e.tags,
+        badgeLabel: "🥈 Platinum Card",
+        badgeStyle:
+          "background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);",
+      });
+    });
+  }
+
+  if (selectedFilter === "all" || selectedFilter === "flexi") {
+    flexiExpenses.forEach((e) => {
+      itemsToDisplay.push({
+        id: e.id,
+        type: "expense",
+        title: e.title,
+        amount: parseFloat(e.amount),
+        category: e.category,
+        date: e.date,
+        notes: e.notes,
+        budget_tag: e.budget_tag,
+        tags: e.tags,
+        badgeLabel: "💳 Flexi Card",
+        badgeStyle:
+          "background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3);",
+      });
+    });
+
+    flexiIncomeAdvances.forEach((i) => {
+      itemsToDisplay.push({
+        id: i.id,
+        type: "income",
+        title: i.title,
+        amount: parseFloat(i.amount),
+        category: i.source || "Loan",
+        date: i.date,
+        notes: i.notes,
+        budget_tag: null,
+        tags: [],
+        badgeLabel: "💳 Flexi · 💰 Cash Advance (Added to In-Hand)",
+        badgeStyle:
+          "background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3);",
+      });
+    });
+  }
+
+  if (itemsToDisplay.length === 0) {
     list.innerHTML =
-      '<p class="empty-msg">No credit card expenses logged this month.</p>';
+      '<p class="empty-msg">No card records found for this selection.</p>';
     return;
   }
 
-  const sorted = [...ccExpenses].sort(
-    (a, b) => new Date(b.date) - new Date(a.date),
-  );
+  // Sort latest first
+  itemsToDisplay.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  list.innerHTML = sorted
+  list.innerHTML = itemsToDisplay
     .map(
-      (exp) => `
+      (item) => `
     <div class="expense-item">
       <div class="expense-row">
         <div class="expense-left">
-          <div class="expense-title-text">${esc(exp.title)}</div>
+          <div class="expense-title-text">${esc(item.title)}</div>
           <div class="expense-meta">
-            <span class="expense-cat">${getCatIcon(exp.category)} ${esc(exp.category)}</span>
-            <span>${fmtDate(exp.date)}</span>
-            <span style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 0.72rem; border: 1px solid rgba(245, 158, 11, 0.25);">💳 Credit Card</span>
+            <span class="expense-cat">${item.type === "income" ? "🏦" : getCatIcon(item.category)} ${esc(item.category)}</span>
+            <span>${fmtDate(item.date)}</span>
+            <span style="${item.badgeStyle} padding: 2px 8px; border-radius: 6px; font-weight: 600; font-size: 0.72rem;">${item.badgeLabel}</span>
           </div>
-          ${exp.notes ? `<div class="expense-notes-text">${esc(exp.notes)}</div>` : ""}
-          ${exp.budget_tag ? `<div class="expense-tags"><span class="tag-badge" style="background: var(--accent-alpha); color: var(--accent); border: 1px solid var(--accent)40;">📌 ${esc(exp.budget_tag)}</span></div>` : getExpenseTagsHTML(exp.tags)}
+          ${item.notes ? `<div class="expense-notes-text">${esc(item.notes)}</div>` : ""}
+          ${item.budget_tag ? `<div class="expense-tags"><span class="tag-badge" style="background: var(--accent-alpha); color: var(--accent); border: 1px solid var(--accent)40;">📌 ${esc(item.budget_tag)}</span></div>` : getExpenseTagsHTML(item.tags)}
         </div>
-        <div class="expense-amount-val text-orange">${fmtCurr(exp.amount)}</div>
+        <div class="expense-amount-val text-orange">${fmtCurr(item.amount)}</div>
       </div>
       <div class="expense-actions">
-        <button class="btn-sm" data-action="editExpense" data-id="${exp.id}" aria-label="Edit expense ${esc(exp.title)}">Edit</button>
-        <button class="btn-sm delete" data-action="deleteExpense" data-id="${exp.id}" aria-label="Delete expense ${esc(exp.title)}">Delete</button>
+        <button class="btn-sm" data-action="${item.type === "income" ? "editIncome" : "editExpense"}" data-id="${item.id}" aria-label="Edit ${esc(item.title)}">Edit</button>
+        <button class="btn-sm delete" data-action="${item.type === "income" ? "deleteIncome" : "deleteExpense"}" data-id="${item.id}" aria-label="Delete ${esc(item.title)}">Delete</button>
       </div>
     </div>`,
     )
@@ -2260,7 +2385,7 @@ function loadInHandAmount() {
 function saveInHandAmount(amount) {
   inHandAmount = amount;
   inHandBaseSpent = expenses
-    .filter((e) => (e.payment_method || "cash") !== "credit_card")
+    .filter((e) => !getExpenseCardType(e))
     .reduce((s, e) => s + parseFloat(e.amount), 0);
   localStorage.setItem(getInHandKey(), JSON.stringify({ amount: inHandAmount, baseSpent: inHandBaseSpent }));
 }

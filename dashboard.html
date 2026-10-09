@@ -79,7 +79,7 @@
           <span class="balance-value text-green" id="balanceExtraAvailable">Rs 0</span>
         </div>
         <div class="balance-item">
-          <label>💳 CC Due</label>
+          <label>💳 Cards Due</label>
           <span class="balance-value text-orange" id="balanceCCDue">Rs 0</span>
         </div>
         <div class="balance-item inhand-item" style="position:relative;">
@@ -225,7 +225,7 @@
           📊 Daily Tracker
         </button>
         <button class="tab" data-tab="creditcard" id="tab-creditcard">
-          💳 Credit Card
+          💳 Credit Cards
         </button>
         <button class="tab" data-tab="income" id="tab-income">💵 Income</button>
         <button class="tab" data-tab="trends" id="tab-trends">📈 Trends</button>
@@ -510,7 +510,8 @@
                 <label for="expensePaymentMethod">Payment Method</label>
                 <select id="expensePaymentMethod" name="payment_method">
                   <option value="cash" selected>💵 Cash / Bank Account (In-Hand Cash)</option>
-                  <option value="credit_card">💳 Credit Card (Bill / Payable)</option>
+                  <option value="platinum_card">🥈 Platinum Card (Card Spend)</option>
+                  <option value="flexi_card">💳 Flexi Card (Card Spend)</option>
                 </select>
               </div>
               <!-- Notes removed -->
@@ -595,43 +596,62 @@
           </div>
         </section>
 
-        <!-- ========== CREDIT CARD SECTION ========== -->
+        <!-- ========== CREDIT CARDS SECTION ========== -->
         <section class="tab-panel" id="panel-creditcard">
-          <!-- Credit Card Summary Strip -->
+          <!-- Cards Multi-Summary Strip -->
           <div class="card summary-strip">
             <div class="summary-cell">
-              <span class="summary-label">Total Credit Card Bill</span>
+              <span class="summary-label">Total Cards Due</span>
               <span class="summary-num text-orange" id="ccTotalBill">Rs 0</span>
             </div>
             <div class="summary-cell">
-              <span class="summary-label">Card Transactions</span>
-              <span class="summary-num text-blue" id="ccTotalCount">0</span>
+              <span class="summary-label">🥈 Platinum Card Bill</span>
+              <span class="summary-num text-blue" id="ccPlatinumBill">Rs 0</span>
             </div>
             <div class="summary-cell">
-              <span class="summary-label">Top Card Category</span>
-              <span class="summary-num text-accent" id="ccTopCategory">—</span>
+              <span class="summary-label">💳 Flexi Card Bill</span>
+              <span class="summary-num text-accent" id="ccFlexiBill">Rs 0</span>
+            </div>
+            <div class="summary-cell">
+              <span class="summary-label">Total Entries</span>
+              <span class="summary-num" id="ccTotalCount">0</span>
             </div>
           </div>
 
-          <!-- Quick Explainer Card -->
-          <div class="card" style="padding: 14px 18px; background: rgba(59, 130, 246, 0.07); border: 1px solid rgba(59, 130, 246, 0.2); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <!-- Card Selector / Filter Control -->
+          <div class="card controls-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 18px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <label for="ccCardFilter" style="font-weight: 700; font-size: 0.9rem; color: var(--text-primary); margin: 0;">Card View:</label>
+              <select id="ccCardFilter" class="filter-select" style="min-width: 220px; font-weight: 600;">
+                <option value="all">🌟 All Cards (Platinum + Flexi)</option>
+                <option value="platinum">🥈 Platinum Card Only</option>
+                <option value="flexi">💳 Flexi Card Only</option>
+              </select>
+            </div>
+            <div id="ccActiveCardInfo" style="font-size: 0.85rem; color: var(--text-secondary);">
+              Showing all card transactions
+            </div>
+          </div>
+
+          <!-- Flexi Card Connection Notice -->
+          <div class="card" style="padding: 12px 16px; background: rgba(59, 130, 246, 0.07); border: 1px solid rgba(59, 130, 246, 0.2); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
             <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 1.4rem;">💳</span>
+              <span style="font-size: 1.3rem;">ℹ️</span>
               <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;">
-                <strong style="color: var(--text-primary);">Credit Card Spends:</strong>
-                Card expenses count towards your category budget limits, but <strong>do not deduct from In-Hand Cash</strong> until your credit card bill is paid.
+                <strong style="color: var(--text-primary);">Flexi Card Connection:</strong>
+                Cash withdrawn from Flexi Card added in the <strong>Income Tab</strong> (with Source: <em>Flexi Card</em> or title containing <em>Flexi</em>) increases your <strong>In-Hand Cash</strong> and automatically accumulates in your <strong>Flexi Card Bill</strong>!
               </div>
             </div>
           </div>
 
-          <!-- Credit Card List -->
+          <!-- Cards Logs List -->
           <div class="card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-              <h2 class="card-title" style="margin: 0;">Credit Card Expense Logs</h2>
+              <h2 class="card-title" id="ccListTitle" style="margin: 0;">Credit Card Logs</h2>
               <span id="ccBillBadge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 4px 12px; border-radius: 999px; font-weight: 700; font-size: 0.82rem; border: 1px solid rgba(245, 158, 11, 0.3);">Bill: Rs 0</span>
             </div>
             <div id="creditCardList" class="item-list">
-              <p class="empty-msg">No credit card expenses logged this month.</p>
+              <p class="empty-msg">No card records found.</p>
             </div>
           </div>
         </section>
@@ -673,6 +693,7 @@
                   <option value="Gift">🎁 Gift</option>
                   <option value="Refund">↩️ Refund</option>
                   <option value="Loan">🏦 Loan</option>
+                  <option value="Flexi Card">💳 Flexi Card (Cash Advance / Loan)</option>
                   <option value="Rent">🏠 Rent</option>
                   <option value="Parents">👨‍👩‍👧 Parents</option>
                   <option value="Unexpected">⚠️ Unexpected</option>
@@ -1009,7 +1030,8 @@
             <label for="editExpensePaymentMethod">Payment Method</label>
             <select id="editExpensePaymentMethod" name="payment_method">
               <option value="cash">💵 Cash / Bank Account (In-Hand Cash)</option>
-              <option value="credit_card">💳 Credit Card (Bill / Payable)</option>
+              <option value="platinum_card">🥈 Platinum Card (Card Spend)</option>
+              <option value="flexi_card">💳 Flexi Card (Card Spend)</option>
             </select>
           </div>
           <div class="modal-actions full-width">
@@ -1168,6 +1190,7 @@
               <option value="Gift">🎁 Gift</option>
               <option value="Refund">↩️ Refund</option>
               <option value="Loan">🏦 Loan</option>
+              <option value="Flexi Card">💳 Flexi Card (Cash Advance / Loan)</option>
               <option value="Rent">🏠 Rent</option>
               <option value="Parents">👨‍👩‍👧 Parents</option>
               <option value="Unexpected">⚠️ Unexpected</option>
