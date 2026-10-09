@@ -151,7 +151,7 @@ exports.handler = async (event) => {
       await query(`
         CREATE TABLE user_categories (
           id SERIAL PRIMARY KEY,
-          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          user_id VARCHAR(255) NOT NULL,
           name VARCHAR(100) NOT NULL,
           icon VARCHAR(10) DEFAULT '📦',
           is_default BOOLEAN DEFAULT FALSE,

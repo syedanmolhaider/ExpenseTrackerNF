@@ -583,10 +583,51 @@ function initListeners() {
       if (e.target === e.currentTarget) closeEditIncomeModal();
     });
 
-  // Add Category button
+  // Add Category button & Enter key
   const addCategoryBtn = document.getElementById("addCategoryBtn");
   if (addCategoryBtn)
     addCategoryBtn.addEventListener("click", handleAddCategory);
+
+  const newCategoryNameInput = document.getElementById("newCategoryName");
+  if (newCategoryNameInput) {
+    newCategoryNameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAddCategory();
+      }
+    });
+  }
+
+  // Category filter tabs
+  const catFilterAll = document.getElementById("catFilterAll");
+  const catFilterCustom = document.getElementById("catFilterCustom");
+  const catFilterDefault = document.getElementById("catFilterDefault");
+  if (catFilterAll) catFilterAll.addEventListener("click", () => setCategoryFilter("all"));
+  if (catFilterCustom) catFilterCustom.addEventListener("click", () => setCategoryFilter("custom"));
+  if (catFilterDefault) catFilterDefault.addEventListener("click", () => setCategoryFilter("default"));
+
+  // Category search box
+  const catSearchInput = document.getElementById("catSearchInput");
+  if (catSearchInput) {
+    catSearchInput.addEventListener("input", (e) => {
+      categorySearchTerm = e.target.value.trim().toLowerCase();
+      displayCategories();
+    });
+  }
+
+  // Edit Category Modal events
+  const editCategoryForm = document.getElementById("editCategoryForm");
+  if (editCategoryForm) editCategoryForm.addEventListener("submit", handleSaveEditCategory);
+
+  const cancelEditCategoryBtn = document.getElementById("cancelEditCategoryBtn");
+  if (cancelEditCategoryBtn) cancelEditCategoryBtn.addEventListener("click", closeEditCategoryModal);
+
+  const editCategoryModal = document.getElementById("editCategoryModal");
+  if (editCategoryModal) {
+    editCategoryModal.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closeEditCategoryModal();
+    });
+  }
 
   // Keyboard: Escape
   document.addEventListener("keydown", (e) => {
@@ -596,6 +637,7 @@ function initListeners() {
       closeEditBudgetModal();
       closeEditNextBudgetModal();
       closeEditIncomeModal();
+      closeEditCategoryModal();
       document.getElementById("settingsModal").classList.remove("show");
     }
   });
@@ -611,6 +653,8 @@ function openSettingsModal() {
   document.getElementById("settingEndDay").value = userSettings.month_end_day;
   document.getElementById("settingCurrency").value = userSettings.currency;
   document.getElementById("settingsModal").classList.add("show");
+  // Always load fresh categories & usage metrics when opening settings
+  loadCategories();
 }
 
 async function handleSaveSettings() {
@@ -4484,22 +4528,57 @@ const DEFAULT_CATEGORIES = [
   },
 ];
 
+let categoryFilterMode = "all";
+let categorySearchTerm = "";
+
+function setCategoryFilter(mode) {
+  categoryFilterMode = mode;
+  const pills = [
+    { id: "catFilterAll", mode: "all" },
+    { id: "catFilterCustom", mode: "custom" },
+    { id: "catFilterDefault", mode: "default" },
+  ];
+  pills.forEach((p) => {
+    const el = document.getElementById(p.id);
+    if (el) {
+      if (p.mode === mode) el.classList.add("active");
+      else el.classList.remove("active");
+    }
+  });
+  displayCategories();
+}
+
 // Load all categories
 async function loadCategories() {
   try {
     const res = await fetch("/api/categories", { credentials: "include" });
-    if (!res.ok) throw new Error();
+    if (!res.ok) throw new Error("HTTP " + res.status);
     const data = await res.json();
     allCategories = data.categories || [];
-    displayCategories();
-    updateCategoryDropdowns();
   } catch (err) {
     console.error("Failed to load categories, using defaults:", err);
-    // Fallback to default categories if API fails
     allCategories = [...DEFAULT_CATEGORIES];
-    displayCategories();
-    updateCategoryDropdowns();
   }
+
+  // Update counts in badges & filter pills
+  const totalCount = allCategories.length;
+  const customCount = allCategories.filter((c) => !c.is_default).length;
+  const defaultCount = allCategories.filter((c) => c.is_default).length;
+
+  const countBadge = document.getElementById("categoryCountBadge");
+  if (countBadge) countBadge.textContent = `${totalCount} Categories`;
+
+  const countAll = document.getElementById("countAllCats");
+  if (countAll) countAll.textContent = totalCount;
+
+  const countCustom = document.getElementById("countCustomCats");
+  if (countCustom) countCustom.textContent = customCount;
+
+  const countDefault = document.getElementById("countDefaultCats");
+  if (countDefault) countDefault.textContent = defaultCount;
+
+  displayCategories();
+  updateCategoryDropdowns();
 }
 
 // Display categories in settings modal
@@ -4507,38 +4586,96 @@ function displayCategories() {
   const list = document.getElementById("categoriesList");
   if (!list) return;
 
-  if (allCategories.length === 0) {
-    list.innerHTML = '<p class="empty-msg">No categories available.</p>';
+  if (!allCategories || allCategories.length === 0) {
+    list.innerHTML = '<p class="empty-msg" style="padding:16px;text-align:center;">No categories available.</p>';
     return;
   }
 
-  list.innerHTML = allCategories
-    .map(
-      (cat) => `
-    <div class="category-item ${cat.is_default ? "default" : ""}">
-      <div class="category-item-info">
-        <span class="category-item-icon">${esc(cat.icon)}</span>
-        <span class="category-item-name">${esc(cat.name)}</span>
-        <span class="category-item-count">(${cat.usage_count || 0})</span>
-        ${cat.is_default ? '<span class="category-item-badge">Default</span>' : ""}
-      </div>
-      <div class="category-item-actions">
-        ${
-          !cat.is_default
-            ? `
-          <button onclick="openEditCategoryModal('${cat.id}', '${esc(cat.name)}', '${esc(cat.icon)}')" title="Edit">✏️</button>
-          <button class="delete" onclick="deleteCategory('${cat.id}', '${esc(cat.name)}')" title="Delete">🗑️</button>
-        `
-            : ""
-        }
-      </div>
-    </div>
-  `,
-    )
-    .join("");
+  // Filter by search query
+  let filtered = allCategories;
+  if (categorySearchTerm) {
+    filtered = filtered.filter((cat) =>
+      (cat.name || "").toLowerCase().includes(categorySearchTerm),
+    );
+  }
+
+  const customCats = filtered.filter((c) => !c.is_default);
+  const defaultCats = filtered.filter((c) => c.is_default);
+
+  let html = "";
+
+  // Render Custom Categories (at top for easy access)
+  if (categoryFilterMode === "all" || categoryFilterMode === "custom") {
+    if (customCats.length > 0) {
+      html += `<div class="category-section-title">⭐ Custom Categories (${customCats.length})</div>`;
+      html += customCats
+        .map(
+          (cat) => `
+        <div class="category-item is-custom">
+          <div class="category-item-info">
+            <div class="category-item-icon-box">${esc(cat.icon || "📦")}</div>
+            <div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="category-item-name">${esc(cat.name)}</span>
+                <span class="category-badge-custom">Custom</span>
+              </div>
+              <span class="category-item-count">${cat.usage_count || 0} expense/budget uses</span>
+            </div>
+          </div>
+          <div class="category-item-actions">
+            <button type="button" class="edit-btn" onclick="openEditCategoryModal('${cat.id}', '${esc(cat.name)}', '${esc(cat.icon || "📦")}')" title="Edit Category">✏️ Edit</button>
+            <button type="button" class="delete-btn" onclick="deleteCategory('${cat.id}', '${esc(cat.name)}')" title="Delete Category">🗑️ Delete</button>
+          </div>
+        </div>
+      `,
+        )
+        .join("");
+    } else if (categoryFilterMode === "custom" || (!categorySearchTerm && allCategories.filter((c) => !c.is_default).length === 0)) {
+      html += `
+        <div class="empty-custom-cats">
+          <span style="font-size:1rem;font-weight:600;">✨ No Custom Categories</span>
+          <span>You have not created any custom categories yet. Add one above!</span>
+        </div>
+      `;
+    }
+  }
+
+  // Render Default Categories (protected, non-editable)
+  if (categoryFilterMode === "all" || categoryFilterMode === "default") {
+    if (defaultCats.length > 0) {
+      html += `<div class="category-section-title">🔒 System Default Categories (${defaultCats.length})</div>`;
+      html += defaultCats
+        .map(
+          (cat) => `
+        <div class="category-item is-default">
+          <div class="category-item-info">
+            <div class="category-item-icon-box">${esc(cat.icon || "📦")}</div>
+            <div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="category-item-name">${esc(cat.name)}</span>
+                <span class="category-badge-default">🔒 Default</span>
+              </div>
+              <span class="category-item-count">${cat.usage_count || 0} expense uses</span>
+            </div>
+          </div>
+          <div class="category-item-actions">
+            <span style="font-size:0.75rem;color:var(--text-muted);padding-right:4px;">Protected</span>
+          </div>
+        </div>
+      `,
+        )
+        .join("");
+    }
+  }
+
+  if (!html) {
+    html = `<p class="empty-msg" style="padding:20px;text-align:center;color:var(--text-muted);">No categories matching "${esc(categorySearchTerm)}".</p>`;
+  }
+
+  list.innerHTML = html;
 }
 
-// Update category dropdowns in forms
+// Update category dropdowns in all forms and filters
 function updateCategoryDropdowns() {
   const dropdowns = [
     "expenseCategory",
@@ -4559,29 +4696,96 @@ function updateCategoryDropdowns() {
 
     select.innerHTML = isFilter
       ? '<option value="">All Categories</option>'
-      : '<option value="">Select</option>';
+      : '<option value="">Select Category</option>';
 
-    allCategories.forEach((cat) => {
+    // Group custom categories at top for quick access, then default categories
+    const customCats = allCategories.filter((c) => !c.is_default);
+    const defaultCats = allCategories.filter((c) => c.is_default);
+
+    if (customCats.length > 0) {
+      const optGroupCustom = document.createElement("optgroup");
+      optGroupCustom.label = "⭐ Custom Categories";
+      customCats.forEach((cat) => {
+        const option = document.createElement("option");
+        option.value = cat.name;
+        option.textContent = `${cat.icon || "📦"} ${cat.name}`;
+        optGroupCustom.appendChild(option);
+      });
+      select.appendChild(optGroupCustom);
+    }
+
+    const optGroupDefault = document.createElement("optgroup");
+    optGroupDefault.label = "📁 Default Categories";
+    defaultCats.forEach((cat) => {
       const option = document.createElement("option");
       option.value = cat.name;
-      option.textContent = `${cat.icon} ${cat.name}`;
-      select.appendChild(option);
+      option.textContent = `${cat.icon || "📦"} ${cat.name}`;
+      optGroupDefault.appendChild(option);
     });
+    select.appendChild(optGroupDefault);
 
-    select.value = currentValue;
+    if (currentValue) {
+      select.value = currentValue;
+    }
   });
 }
 
-// Add new category
+// Add new custom category
 async function handleAddCategory() {
   const nameInput = document.getElementById("newCategoryName");
   const iconSelect = document.getElementById("newCategoryIcon");
+  const hintEl = document.getElementById("categoryAddHint");
+  const btn = document.getElementById("addCategoryBtn");
+
+  if (!nameInput) return;
   const name = nameInput.value.trim();
-  const icon = iconSelect.value;
+  const icon = iconSelect ? iconSelect.value : "📦";
+
+  if (hintEl) {
+    hintEl.style.display = "none";
+    hintEl.textContent = "";
+  }
 
   if (!name) {
+    if (hintEl) {
+      hintEl.textContent = "Please enter a category name.";
+      hintEl.style.display = "block";
+    }
     toast("Category name is required", "error");
+    nameInput.focus();
     return;
+  }
+
+  // Conflict check with default categories (case-insensitive)
+  const isDefaultConflict = DEFAULT_CATEGORIES.some(
+    (c) => c.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (isDefaultConflict) {
+    if (hintEl) {
+      hintEl.textContent = `"${name}" is already a system default category.`;
+      hintEl.style.display = "block";
+    }
+    toast("Default categories cannot be recreated", "error");
+    return;
+  }
+
+  // Conflict check with existing custom categories
+  const isCustomConflict = allCategories.some(
+    (c) => !c.is_default && c.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (isCustomConflict) {
+    if (hintEl) {
+      hintEl.textContent = `A custom category named "${name}" already exists.`;
+      hintEl.style.display = "block";
+    }
+    toast("Category already exists", "error");
+    return;
+  }
+
+  // Button loading state
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Adding...";
   }
 
   try {
@@ -4594,31 +4798,83 @@ async function handleAddCategory() {
 
     const data = await res.json();
     if (res.ok) {
-      toast("Category created", "success");
+      toast(`Category "${name}" created successfully!`, "success");
       nameInput.value = "";
-      iconSelect.value = "📦";
+      if (iconSelect) iconSelect.value = "📦";
+      if (hintEl) hintEl.style.display = "none";
+
       await loadCategories();
+      // Switch filter to 'custom' so the newly created category is front and center
+      setCategoryFilter("custom");
     } else {
-      toast(data.error || "Failed to create category", "error");
+      const errText = data.error || "Failed to create category";
+      if (hintEl) {
+        hintEl.textContent = errText;
+        hintEl.style.display = "block";
+      }
+      toast(errText, "error");
     }
-  } catch {
-    toast("Network error", "error");
+  } catch (err) {
+    console.error("Error creating category:", err);
+    toast("Network error. Please try again.", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "+ Add";
+    }
   }
 }
 
-// Open edit category modal
+// Open edit custom category modal
 function openEditCategoryModal(id, currentName, currentIcon) {
-  const newName = prompt("Edit category name:", currentName);
-  if (newName === null) return;
+  const modal = document.getElementById("editCategoryModal");
+  if (!modal) return;
 
-  const newIcon = prompt("Edit category icon (emoji):", currentIcon);
-  if (newIcon === null) return;
+  const idInput = document.getElementById("editCategoryId");
+  const nameInput = document.getElementById("editCategoryName");
+  const iconSelect = document.getElementById("editCategoryIcon");
 
-  updateCategory(id, newName.trim(), newIcon.trim());
+  if (idInput) idInput.value = id;
+  if (nameInput) nameInput.value = currentName;
+  if (iconSelect) iconSelect.value = currentIcon || "📦";
+
+  modal.classList.add("show");
+  if (nameInput) setTimeout(() => nameInput.focus(), 100);
 }
 
-// Update category
-async function updateCategory(id, name, icon) {
+function closeEditCategoryModal() {
+  const modal = document.getElementById("editCategoryModal");
+  if (modal) modal.classList.remove("show");
+}
+
+// Save edited custom category
+async function handleSaveEditCategory(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const id = document.getElementById("editCategoryId").value;
+  const name = document.getElementById("editCategoryName").value.trim();
+  const icon = document.getElementById("editCategoryIcon").value;
+  const saveBtn = document.getElementById("saveCategoryBtn");
+
+  if (!name) {
+    toast("Category name is required", "error");
+    return;
+  }
+
+  // Conflict check with default categories
+  const isDefaultConflict = DEFAULT_CATEGORIES.some(
+    (c) => c.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (isDefaultConflict) {
+    toast("Cannot rename to same name as a default category", "error");
+    return;
+  }
+
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = "Saving...";
+  }
+
   try {
     const res = await fetch(`/api/categories/${id}`, {
       method: "PUT",
@@ -4627,24 +4883,33 @@ async function updateCategory(id, name, icon) {
       body: JSON.stringify({ name, icon }),
     });
 
+    const data = await res.json();
     if (res.ok) {
-      toast("Category updated", "success");
+      toast("Category updated successfully", "success");
+      closeEditCategoryModal();
       await loadCategories();
       await loadExpenses(getMonthKey());
       await loadBudget(getMonthKey());
       syncAllViews();
     } else {
-      const data = await res.json();
       toast(data.error || "Failed to update category", "error");
     }
-  } catch {
-    toast("Network error", "error");
+  } catch (err) {
+    console.error("Error updating category:", err);
+    toast("Network error. Please try again.", "error");
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save Changes";
+    }
   }
 }
 
-// Delete category
+// Delete custom category
 async function deleteCategory(id, name) {
-  if (!confirm(`Delete category "${name}"? This cannot be undone.`)) return;
+  if (!confirm(`Delete custom category "${name}"?\n\nNote: Default categories cannot be deleted.`)) {
+    return;
+  }
 
   try {
     const res = await fetch(`/api/categories/${id}`, {
@@ -4654,16 +4919,22 @@ async function deleteCategory(id, name) {
 
     const data = await res.json();
     if (res.ok) {
-      toast("Category deleted", "success");
+      toast(`Category "${name}" deleted`, "success");
       await loadCategories();
       syncAllViews();
     } else {
       toast(data.error || "Failed to delete category", "error");
     }
-  } catch {
-    toast("Network error", "error");
+  } catch (err) {
+    console.error("Error deleting category:", err);
+    toast("Network error. Please try again.", "error");
   }
 }
+
+// Expose on window for inline onclick handlers
+window.openEditCategoryModal = openEditCategoryModal;
+window.closeEditCategoryModal = closeEditCategoryModal;
+window.deleteCategory = deleteCategory;
 
 
 // ------ Calculator Logic for Amount Fields ------

@@ -148,54 +148,74 @@
 
           <!-- Categories Management -->
           <div class="settings-section mt-20">
-            <h4 class="settings-section-title">📁 Expense Categories</h4>
-            <p class="settings-section-desc">
-              Manage your custom expense categories. Default categories cannot
-              be edited or deleted.
-            </p>
+            <div class="settings-section-header">
+              <div>
+                <h4 class="settings-section-title">📁 Expense Categories</h4>
+                <p class="settings-section-desc">
+                  Manage your custom expense categories. Default categories cannot be edited or deleted.
+                </p>
+              </div>
+              <div class="category-count-badge" id="categoryCountBadge">18 Categories</div>
+            </div>
 
             <!-- Add Category Form -->
-            <div class="add-category-form">
-              <input
-                type="text"
-                id="newCategoryName"
-                placeholder="Category name"
-                style="flex: 1"
-              />
-              <select id="newCategoryIcon" style="width: 60px">
-                <option value="📦">📦</option>
-                <option value="🍔">🍔</option>
-                <option value="🚗">🚗</option>
-                <option value="🎬">🎬</option>
-                <option value="🛍️">🛍️</option>
-                <option value="📄">📄</option>
-                <option value="⚕️">⚕️</option>
-                <option value="📚">📚</option>
-                <option value="🏦">🏦</option>
-                <option value="🏠">🏠</option>
-                <option value="📈">📈</option>
-                <option value="⚠️">⚠️</option>
-                <option value="🛠️">🛠️</option>
-                <option value="🪑">🪑</option>
-                <option value="🧴">🧴</option>
-                <option value="💰">💰</option>
-                <option value="🍽️">🍽️</option>
-                <option value="🎮">🎮</option>
-                <option value="✈️">✈️</option>
-                <option value="🎁">🎁</option>
-                <option value="💊">💊</option>
-                <option value="🎵">🎵</option>
-                <option value="📱">📱</option>
-                <option value="💻">💻</option>
-                <option value="🎯">🎯</option>
-              </select>
-              <button
-                type="button"
-                class="btn btn-primary btn-sm"
-                id="addCategoryBtn"
-              >
-                + Add
-              </button>
+            <div class="add-category-box">
+              <label class="add-category-label">➕ Add Custom Category</label>
+              <div class="add-category-form">
+                <select id="newCategoryIcon" class="category-icon-select" title="Select icon">
+                  <option value="📦">📦 Box / Other</option>
+                  <option value="🏋️">🏋️ Gym & Fitness</option>
+                  <option value="🎮">🎮 Gaming / Fun</option>
+                  <option value="🐕">🐕 Pets / Vet</option>
+                  <option value="☕">☕ Coffee & Cafe</option>
+                  <option value="✈️">✈️ Travel & Trip</option>
+                  <option value="💻">💻 Tech / Gadgets</option>
+                  <option value="📱">📱 Mobile / Internet</option>
+                  <option value="🎵">🎵 Music & Subs</option>
+                  <option value="🎁">🎁 Gifts & Charity</option>
+                  <option value="💊">💊 Medicines / Health</option>
+                  <option value="🧴">🧴 Skincare / Salon</option>
+                  <option value="👗">👗 Clothes / Fashion</option>
+                  <option value="🧹">🧹 Maid & Laundry</option>
+                  <option value="🚗">🚗 Vehicle / Fuel</option>
+                  <option value="🛠️">🛠️ Repair / Workshop</option>
+                  <option value="🍔">🍔 Food & Dining</option>
+                  <option value="📚">📚 Books / Courses</option>
+                  <option value="🏦">🏦 Taxes / Bank</option>
+                  <option value="🏠">🏠 Home & Decor</option>
+                  <option value="👶">👶 Kids & Baby</option>
+                  <option value="🍕">🍕 Snacks & Parties</option>
+                  <option value="🌱">🌱 Garden / Plants</option>
+                  <option value="💡">💡 Utilities</option>
+                  <option value="🎯">🎯 Hobbies</option>
+                </select>
+                <input
+                  type="text"
+                  id="newCategoryName"
+                  class="category-name-input"
+                  placeholder="Category name (e.g. Gym, Pet Care, Gaming)"
+                  maxlength="50"
+                  autocomplete="off"
+                />
+                <button
+                  type="button"
+                  class="btn btn-primary btn-sm add-cat-btn"
+                  id="addCategoryBtn"
+                >
+                  + Add
+                </button>
+              </div>
+              <div id="categoryAddHint" class="category-input-hint"></div>
+            </div>
+
+            <!-- Filter / Search Pills -->
+            <div class="category-filter-bar">
+              <div class="category-tabs">
+                <button type="button" class="cat-pill active" data-filter="all" id="catFilterAll">All (<span id="countAllCats">18</span>)</button>
+                <button type="button" class="cat-pill" data-filter="custom" id="catFilterCustom">⭐ Custom (<span id="countCustomCats">0</span>)</button>
+                <button type="button" class="cat-pill" data-filter="default" id="catFilterDefault">🔒 Default (<span id="countDefaultCats">18</span>)</button>
+              </div>
+              <input type="text" id="catSearchInput" placeholder="🔍 Search..." class="cat-search-box" />
             </div>
 
             <!-- Categories List -->
@@ -1219,6 +1239,55 @@
               Cancel
             </button>
             <button type="submit" class="btn btn-primary">Update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Edit Custom Category Modal -->
+    <div class="modal-overlay" id="editCategoryModal">
+      <div class="modal-box" style="max-width: 440px;">
+        <h3>✏️ Edit Custom Category</h3>
+        <p class="modal-desc">Update category name or icon. Default categories cannot be edited.</p>
+        <form id="editCategoryForm" class="form-grid">
+          <input type="hidden" id="editCategoryId" />
+          <div class="form-field full-width">
+            <label for="editCategoryIcon">Category Icon</label>
+            <select id="editCategoryIcon" class="category-icon-select" style="width: 100%;">
+              <option value="📦">📦 Box / Other</option>
+              <option value="🏋️">🏋️ Gym & Fitness</option>
+              <option value="🎮">🎮 Gaming / Fun</option>
+              <option value="🐕">🐕 Pets / Vet</option>
+              <option value="☕">☕ Coffee & Cafe</option>
+              <option value="✈️">✈️ Travel & Trip</option>
+              <option value="💻">💻 Tech / Gadgets</option>
+              <option value="📱">📱 Mobile / Internet</option>
+              <option value="🎵">🎵 Music & Subs</option>
+              <option value="🎁">🎁 Gifts & Charity</option>
+              <option value="💊">💊 Medicines / Health</option>
+              <option value="🧴">🧴 Skincare / Salon</option>
+              <option value="👗">👗 Clothes / Fashion</option>
+              <option value="🧹">🧹 Maid & Laundry</option>
+              <option value="🚗">🚗 Vehicle / Fuel</option>
+              <option value="🛠️">🛠️ Repair / Workshop</option>
+              <option value="🍔">🍔 Food & Dining</option>
+              <option value="📚">📚 Books / Courses</option>
+              <option value="🏦">🏦 Taxes / Bank</option>
+              <option value="🏠">🏠 Home & Decor</option>
+              <option value="👶">👶 Kids & Baby</option>
+              <option value="🍕">🍕 Snacks & Parties</option>
+              <option value="🌱">🌱 Garden / Plants</option>
+              <option value="💡">💡 Utilities</option>
+              <option value="🎯">🎯 Hobbies</option>
+            </select>
+          </div>
+          <div class="form-field full-width">
+            <label for="editCategoryName">Category Name</label>
+            <input type="text" id="editCategoryName" name="name" required maxlength="50" autocomplete="off" />
+          </div>
+          <div class="modal-actions full-width" style="margin-top: 10px;">
+            <button type="button" class="btn btn-ghost" id="cancelEditCategoryBtn">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="saveCategoryBtn">Save Changes</button>
           </div>
         </form>
       </div>
