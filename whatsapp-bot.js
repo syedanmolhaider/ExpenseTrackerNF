@@ -465,11 +465,13 @@ const authStrategy = new LocalAuth({
   dataPath: path.join(__dirname, ".wwebjs_auth"),
 });
 
-// Hook into browser launch for diagnostics
+// Hook into browser launch for diagnostics and timeout configuration
 const origAfterBrowserInit = authStrategy.afterBrowserInitialized.bind(authStrategy);
 authStrategy.afterBrowserInitialized = async function () {
   await origAfterBrowserInit();
   if (client && client.pupPage) {
+    client.pupPage.setDefaultTimeout(120000);
+    client.pupPage.setDefaultNavigationTimeout(120000);
     client.pupPage.on("pageerror", (err) => {
       console.warn("⚠️ [Browser Page Error]", err.message);
     });
@@ -504,6 +506,9 @@ const client = new Client({
       "--disable-breakpad",
       "--disable-sync",
       "--disable-notifications",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
       "--mute-audio",
       "--hide-scrollbars",
       "--window-size=800,600",
