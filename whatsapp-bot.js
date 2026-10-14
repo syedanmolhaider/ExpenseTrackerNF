@@ -133,25 +133,10 @@ function getContainerMemoryMb() {
 }
 
 async function triggerDeepGarbageCollection(reason = "routine") {
-  // 1. Force Node.js V8 GC
   if (global.gc) {
     try {
       global.gc();
     } catch (e) {}
-  }
-
-  // 2. Force Chromium V8 & C++ PartitionAlloc GC via Chrome DevTools Protocol
-  if (client && client.pupPage) {
-    try {
-      const cdp = await client.pupPage.target().createCDPSession();
-      // Signals Chromium to discard all decoded images, font caches, and return memory to OS via madvise
-      await cdp.send("Memory.simulatePressureNotification", { level: "critical" }).catch(() => {});
-      await cdp.send("Memory.forciblyPurgeJavaScriptMemory").catch(() => {});
-      await cdp.send("HeapProfiler.collectGarbage").catch(() => {});
-      await cdp.detach().catch(() => {});
-    } catch (e) {
-      // Safe to ignore if transitioning
-    }
   }
 
   const used = getContainerMemoryMb();
@@ -458,65 +443,50 @@ async function getTodayExpenses() {
 }
 
 // --- WhatsApp Client Initialization ---
-const executablePath = findBrowserExecutable();
-console.log(`[WhatsApp] Browser executable: ${executablePath || "Default Puppeteer"}`);
+function createClientInstance() {
+  const executablePath = findBrowserExecutable();
+  console.log(`[WhatsApp] Browser executable: ${executablePath || "Default Puppeteer"}`);
 
-const authStrategy = new LocalAuth({
-  dataPath: path.join(__dirname, ".wwebjs_auth"),
-});
+  const authStrategy = new LocalAuth({
+    dataPath: path.join(__dirname, ".wwebjs_auth"),
+  });
 
-// Hook into browser launch for diagnostics and timeout configuration
-const origAfterBrowserInit = authStrategy.afterBrowserInitialized.bind(authStrategy);
-authStrategy.afterBrowserInitialized = async function () {
-  await origAfterBrowserInit();
-  if (client && client.pupPage) {
-    client.pupPage.setDefaultTimeout(120000);
-    client.pupPage.setDefaultNavigationTimeout(120000);
-    client.pupPage.on("pageerror", (err) => {
-      console.warn("⚠️ [Browser Page Error]", err.message);
-    });
-    client.pupPage.on("error", (err) => {
-      console.warn("⚠️ [Browser Process Error]", err.message);
-    });
-  }
-};
+  return new Client({
+    authTimeoutMs: 120000,
+    qrMaxRetries: 0,
+    authStrategy,
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    puppeteer: {
+      headless: true,
+      executablePath,
+      timeout: 120000,
+      protocolTimeout: 180000,
+      defaultViewport: { width: 800, height: 600 },
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-accelerated-2d-canvas",
+        "--no-first-run",
+        "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-extensions",
+        "--disable-default-apps",
+        "--disable-breakpad",
+        "--disable-sync",
+        "--disable-notifications",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--mute-audio",
+        "--hide-scrollbars",
+        "--window-size=800,600",
+      ],
+    },
+  });
+}
 
-const client = new Client({
-  authTimeoutMs: 120000,
-  qrMaxRetries: 0,
-  authStrategy,
-  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-  puppeteer: {
-    headless: true,
-    executablePath,
-    timeout: 120000,
-    protocolTimeout: 180000,
-    defaultViewport: { width: 800, height: 600 },
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--no-first-run",
-      "--no-zygote",
-      "--disable-gpu",
-      "--disable-software-rasterizer",
-      "--disable-extensions",
-      "--disable-default-apps",
-      "--disable-breakpad",
-      "--disable-sync",
-      "--disable-notifications",
-      "--disable-background-timer-throttling",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-renderer-backgrounding",
-      "--mute-audio",
-      "--hide-scrollbars",
-      "--window-size=800,600",
-      "--js-flags=--max-old-space-size=192",
-    ],
-  },
-});
-
+function attachClientEvents(client) {
 // Event: QR Code Received
 client.on("qr", async (qr) => {
   botState.status = "QR_READY";
@@ -795,7 +765,11 @@ Send expenses in natural text:
   } catch (err) {
     console.error("[Message Handler Error]", err);
   }
-});
+  });
+}
+
+let client = createClientInstance();
+attachClientEvents(client);
 
 // --- Local HTTP Server for Dashboard Tab & Controls ---
 const server = http.createServer(async (req, res) => {
@@ -923,9 +897,10 @@ const server = http.createServer(async (req, res) => {
         botState.userName = null;
         botState.qrDataUrl = null;
         syncToCloud();
-        setTimeout(() => {
+        setTimeout(async () => {
           console.log("[WhatsApp] Re-initializing client for new QR code...");
-          client.initialize().catch((e) => console.error("Re-init error:", e.message));
+          await cleanupBeforeRetry();
+          initializeWithRetry();
         }, 1500);
       }
       return sendJson(200, { message: "Disconnected successfully", success: true });
@@ -985,22 +960,20 @@ server.listen(PORT, () => {
   // Heartbeat sync every 15 seconds
   setInterval(syncToCloud, 15000);
 
-  // Proactive Memory Guard Watchdog: Strictly enforces 30%+ headroom below 512MB limit (< 350MB ceiling)
+  // Proactive Memory Guard Watchdog: Strictly enforces 30%+ headroom below 512MB limit (< 358MB ceiling)
   setInterval(async () => {
     const currentRam = getContainerMemoryMb();
-    if (currentRam >= 340) {
-      console.error(`🚨 [EMERGENCY] RAM at ${currentRam}MB — approaching 512MB OOM kill zone. Destroying browser and restarting...`);
+    if (currentRam >= 355) {
+      console.error(`🚨 [EMERGENCY] RAM at ${currentRam}MB — approaching 512MB ceiling. Restarting...`);
       try {
         await client.destroy().catch(() => {});
       } catch (e) {}
       if (global.gc) { try { global.gc(); } catch (e) {} }
       setTimeout(() => initializeWithRetry(), 5000);
-    } else if (currentRam >= 220) {
-      triggerDeepGarbageCollection(`Proactive threshold: ${currentRam}MB >= 220MB`);
     } else if (global.gc) {
       try { global.gc(); } catch (e) {}
     }
-  }, 15000);
+  }, 20000);
 
   // Keep Render Web Service awake if RENDER_EXTERNAL_URL is present
   const externalUrl = process.env.RENDER_EXTERNAL_URL;
@@ -1018,9 +991,12 @@ let initRetryCount = 0;
 const MAX_INIT_RETRIES = 5;
 
 async function cleanupBeforeRetry() {
-  try {
-    await client.destroy().catch(() => {});
-  } catch (e) {}
+  if (client) {
+    try {
+      await client.destroy().catch(() => {});
+    } catch (e) {}
+    client = null;
+  }
 
   // Remove Chromium singleton lock files that prevent re-launch
   const sessionDir = path.join(__dirname, ".wwebjs_auth", "session");
@@ -1039,6 +1015,9 @@ async function cleanupBeforeRetry() {
   }
 
   if (global.gc) { try { global.gc(); } catch (e) {} }
+
+  client = createClientInstance();
+  attachClientEvents(client);
 }
 
 async function initializeWithRetry() {

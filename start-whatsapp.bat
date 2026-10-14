@@ -1,12 +1,13 @@
 @echo off
-title King's Tracker - WhatsApp Bot & Device Linker
+title King's Tracker - WhatsApp Bot ^& Device Linker
 color 0A
 cls
+cd /d "%~dp0"
 echo ========================================================
 echo   👑 King's Tracker - WhatsApp Device Linker
 echo ========================================================
 echo.
-echo Starting WhatsApp Bot & Dashboard Bridge...
+echo Starting WhatsApp Bot ^& Dashboard Bridge...
 echo.
 set PATH=C:\Users\anmolh\AppData\Local\Programs\nodejs;%PATH%
 node whatsapp-bot.js
