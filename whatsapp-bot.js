@@ -868,6 +868,38 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (pathname === "/api/whatsapp/debug") {
+    try {
+      const page = client?.pupPage;
+      if (!page) return sendJson(200, { hasPage: false, status: botState.status });
+      const url = page.url();
+      const title = await page.title().catch((e) => e.message);
+      const content = await page.content().catch((e) => e.message);
+      return sendJson(200, {
+        hasPage: true,
+        url,
+        title,
+        status: botState.status,
+        lastError: botState.lastError,
+        htmlPreview: (content || "").substring(0, 1500),
+      });
+    } catch (e) {
+      return sendJson(500, { error: e.message });
+    }
+  }
+
+  if (pathname === "/api/whatsapp/screenshot") {
+    try {
+      const page = client?.pupPage;
+      if (!page) return sendJson(404, { error: "No active page" });
+      const buf = await page.screenshot({ type: "jpeg", quality: 60 });
+      res.writeHead(200, { "Content-Type": "image/jpeg" });
+      return res.end(buf);
+    } catch (e) {
+      return sendJson(500, { error: e.message });
+    }
+  }
+
   if (pathname === "/api/whatsapp/logs") {
     return sendJson(200, {
       logs: botState.logs,
