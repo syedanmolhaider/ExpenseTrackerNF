@@ -994,16 +994,25 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/whatsapp/disconnect" && req.method === "POST") {
     try {
+      console.log("Disconnect requested via API");
       if (sock) {
-        await sock.logout().catch(() => {});
-        if (authManager) await authManager.clearSession();
-        botState.status = "DISCONNECTED";
-        botState.userNumber = null;
-        botState.userName = null;
-        botState.qrDataUrl = null;
-        syncToCloud();
-        setTimeout(startWhatsApp, 2000);
+        try { await sock.logout(); } catch (e) {}
+        try { sock.end(undefined); } catch (e) {}
+        sock = null;
       }
+      if (authManager) {
+        try { await authManager.clearSession(); } catch (e) {}
+      }
+      botState.status = "DISCONNECTED";
+      botState.userNumber = null;
+      botState.userName = null;
+      botState.qrDataUrl = null;
+      botState.qrString = null;
+      syncToCloud();
+      setTimeout(() => {
+        isStarting = false;
+        startWhatsApp();
+      }, 1500);
       return sendJson(200, { message: "Disconnected successfully", success: true });
     } catch (e) {
       return sendJson(500, { error: e.message });

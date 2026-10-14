@@ -202,9 +202,26 @@ exports.handler = async (event) => {
              WHERE id = $1`,
             [targetUserId]
           );
+          await query("DELETE FROM whatsapp_auth_state WHERE session_key LIKE 'main_whatsapp_session:%'").catch(() => {});
         } catch (e) {
           console.error("Disconnect update error:", e.message);
         }
+
+        const https = require("https");
+        try {
+          const rReq = https.request({
+            hostname: "expensetracker-whatsapp-bot.onrender.com",
+            path: "/api/whatsapp/disconnect",
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-User-Email": WA_AUTHORIZED_EMAIL
+            },
+            timeout: 5000
+          });
+          rReq.on("error", () => {});
+          rReq.end();
+        } catch (e) {}
 
         return {
           statusCode: 200,

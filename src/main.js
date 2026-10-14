@@ -5372,7 +5372,7 @@ function applyUserPermissions() {
 function getWhatsAppBridgeUrl() {
   const custom = localStorage.getItem("wa_render_bridge");
   if (custom && custom.trim()) return custom.trim().replace(/\/$/, "");
-  return "http://localhost:3001";
+  return "https://expensetracker-whatsapp-bot.onrender.com";
 }
 
 async function fetchWhatsAppState() {
@@ -5712,36 +5712,50 @@ async function disconnectWhatsApp() {
   if (!confirm("Are you sure you want to unlink your WhatsApp device?")) return;
   isWhatsAppConnected = false;
   lastRenderedLogsJson = "";
+  toast("Unlinking WhatsApp device...", "info");
+
+  const headers = {
+    "Content-Type": "application/json",
+    "X-User-Email": (currentUser && currentUser.email) ? currentUser.email : "zsfoodvlogs@gmail.com",
+  };
+
+  const bridgeUrl = getWhatsAppBridgeUrl();
   try {
-    await fetch(`${getWhatsAppBridgeUrl()}/api/whatsapp/disconnect`, { method: "POST" });
-    toast("WhatsApp unlinked", "info");
-    loadWhatsAppStatus(true);
+    await fetch(`${bridgeUrl}/api/whatsapp/disconnect`, {
+      method: "POST",
+      headers,
+    });
   } catch (e) {
-    try {
-      await fetch(WA_CLOUD_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "disconnect" }),
-      });
-      toast("WhatsApp unlinked", "info");
-      loadWhatsAppStatus(true);
-    } catch (err2) {
-      toast("Could not contact bot service", "error");
-    }
+    console.warn("Direct bridge disconnect failed, syncing to cloud:", e.message);
   }
+
+  try {
+    await fetch(WA_CLOUD_ENDPOINT, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ action: "disconnect" }),
+    });
+  } catch (err2) {}
+
+  toast("WhatsApp unlinked! Generating new QR code...", "success");
+  setTimeout(() => loadWhatsAppStatus(true), 1500);
 }
 
 async function clearWhatsAppLogs() {
   if (!isWhatsAppAllowed()) return;
+  const headers = {
+    "Content-Type": "application/json",
+    "X-User-Email": (currentUser && currentUser.email) ? currentUser.email : "zsfoodvlogs@gmail.com",
+  };
   try {
-    await fetch(`${getWhatsAppBridgeUrl()}/api/whatsapp/clear-logs`, { method: "POST" });
+    await fetch(`${getWhatsAppBridgeUrl()}/api/whatsapp/clear-logs`, { method: "POST", headers });
     toast("Logs cleared", "success");
     loadWhatsAppStatus();
   } catch (e) {
     try {
       await fetch(WA_CLOUD_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ action: "clear-logs" }),
       });
       toast("Logs cleared", "success");
