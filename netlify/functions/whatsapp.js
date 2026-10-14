@@ -103,7 +103,7 @@ exports.handler = async (event) => {
           connectedAt: row.connected_at ? new Date(row.connected_at).toISOString() : null,
           lastActive: row.last_active ? new Date(row.last_active).toISOString() : null,
           stats: row.stats || getDefaultUserState().stats,
-          logs: Array.isArray(row.logs) ? row.logs : [],
+          logs: Array.isArray(row.logs) ? row.logs.filter(l => !(/[\u0600-\u06FF]/.test(l.text || '') || /[\u0600-\u06FF]/.test(l.reply || ''))) : [],
         };
         return {
           statusCode: 200,
@@ -202,6 +202,9 @@ exports.handler = async (event) => {
         };
       }
 
+      const rawLogs = Array.isArray(data.logs) ? data.logs : [];
+      const cleanLogs = rawLogs.filter(l => !(/[\u0600-\u06FF]/.test(l.text || '') || /[\u0600-\u06FF]/.test(l.reply || '')));
+
       // Persist / Upsert bot state strictly for this specific user
       try {
         await query(
@@ -227,7 +230,7 @@ exports.handler = async (event) => {
             data.qrDataUrl || null,
             data.connectedAt ? new Date(data.connectedAt) : null,
             JSON.stringify(data.stats || getDefaultUserState().stats),
-            JSON.stringify(data.logs || []),
+            JSON.stringify(cleanLogs),
           ]
         );
       } catch (dbErr) {
