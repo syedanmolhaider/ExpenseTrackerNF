@@ -925,6 +925,13 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (pathname.startsWith("/api/whatsapp")) {
+    const clientEmail = (req.headers["x-user-email"] || "").trim().toLowerCase();
+    if (clientEmail && clientEmail !== USER_EMAIL.toLowerCase()) {
+      return sendJson(403, { error: "Forbidden: WhatsApp service is restricted to authorized account", status: "DISABLED", allowed: false });
+    }
+  }
+
   if (pathname === "/api/whatsapp/status") {
     return sendJson(200, {
       status: botState.status,

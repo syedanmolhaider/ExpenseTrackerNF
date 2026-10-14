@@ -21,7 +21,11 @@ async function checkAuth() {
       return;
     }
     const data = await res.json();
+    currentUser = data.user;
     document.getElementById("userName").textContent = data.user.name;
+    if (typeof applyUserPermissions === "function") {
+      applyUserPermissions();
+    }
   } catch {
     window.location.href = "/index.html";
   }

@@ -15,4 +15,6 @@ let editSelectedExpenseTags = []; // Tags selected for editing expense
 let inHandAmount = 0; // Actual in-hand cash amount (base)
 let inHandBaseSpent = 0; // Total spent at the time in-hand was saved
 let cardLogs = []; // Card-specific past/external logs (bank app adjustments)
+let currentUser = null;
+const WA_AUTHORIZED_EMAIL = "zsfoodvlogs@gmail.com";
 

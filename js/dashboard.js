@@ -60,6 +60,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     initTheme();
     initMask();
     await checkAuth();
+    if (typeof applyUserPermissions === "function") applyUserPermissions();
     await loadSettings();
     renderMonthLabel();
     renderNextMonthLabel();
@@ -723,15 +724,20 @@ async function handleSaveSettings() {
 
 // ------ Tab Switching ------
 function switchTab(tabName) {
+  if (tabName === "whatsapp" && typeof isWhatsAppAllowed === "function" && !isWhatsAppAllowed()) {
+    tabName = "budget";
+  }
   document
     .querySelectorAll(".tab")
     .forEach((t) => t.classList.remove("active"));
   document
     .querySelectorAll(".tab-panel")
     .forEach((p) => p.classList.remove("active"));
-  document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add("active");
-  document.getElementById(`panel-${tabName}`).classList.add("active");
-  if (tabName === "whatsapp" && typeof loadWhatsAppStatus === "function") {
+  const tabEl = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (tabEl) tabEl.classList.add("active");
+  const panelEl = document.getElementById(`panel-${tabName}`);
+  if (panelEl) panelEl.classList.add("active");
+  if (tabName === "whatsapp" && typeof loadWhatsAppStatus === "function" && typeof isWhatsAppAllowed === "function" && isWhatsAppAllowed()) {
     loadWhatsAppStatus(true);
   }
 }
@@ -5325,7 +5331,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize WhatsApp Tab Listeners
-  if (typeof initWhatsAppListeners === 'function') {
+  if (typeof initWhatsAppListeners === 'function' && typeof isWhatsAppAllowed === 'function' && isWhatsAppAllowed()) {
     initWhatsAppListeners();
   }
 });
@@ -5335,6 +5341,34 @@ document.addEventListener("DOMContentLoaded", () => {
 // =============================================
 const WA_CLOUD_ENDPOINT = "/api/whatsapp";
 
+function isWhatsAppAllowed() {
+  if (!currentUser || !currentUser.email) return false;
+  const authEmail = (typeof WA_AUTHORIZED_EMAIL !== "undefined" ? WA_AUTHORIZED_EMAIL : "zsfoodvlogs@gmail.com").toLowerCase();
+  return currentUser.email.trim().toLowerCase() === authEmail;
+}
+
+function applyUserPermissions() {
+  const allowed = isWhatsAppAllowed();
+  const waTab = document.getElementById("tab-whatsapp");
+  const waPanel = document.getElementById("panel-whatsapp");
+
+  if (!allowed) {
+    if (waTab) waTab.style.display = "none";
+    if (waPanel) {
+      waPanel.style.display = "none";
+      if (waPanel.classList.contains("active")) {
+        switchTab("budget");
+      }
+    }
+  } else {
+    if (waTab) waTab.style.display = "";
+    if (waPanel) waPanel.style.display = "";
+    if (typeof initWhatsAppListeners === "function") {
+      initWhatsAppListeners();
+    }
+  }
+}
+
 function getWhatsAppBridgeUrl() {
   const custom = localStorage.getItem("wa_render_bridge");
   if (custom && custom.trim()) return custom.trim().replace(/\/$/, "");
@@ -5342,8 +5376,9 @@ function getWhatsAppBridgeUrl() {
 }
 
 async function fetchWhatsAppState() {
-  // Strategy:
-  // 1. Query Netlify cloud endpoint (/api/whatsapp) with user credentials for strict per-user isolation
+  if (!isWhatsAppAllowed()) {
+    return { status: "DISCONNECTED", connected: false, allowed: false };
+  }
   let cloudState = null;
   try {
     const res = await fetch(WA_CLOUD_ENDPOINT, { credentials: "include" });
@@ -5354,26 +5389,29 @@ async function fetchWhatsAppState() {
       }
     }
   } catch (e) {
-    // Netlify cloud endpoint unreachable
   }
 
-  // 2. Direct bridge fallback (Render URL or localhost) for instant local responsiveness
-  const bridgeUrl = getWhatsAppBridgeUrl();
-  if (bridgeUrl) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      if (res.ok) {
-        const bridgeData = await res.json();
-        if (bridgeData && bridgeData.status) {
-          return bridgeData;
+  if (isWhatsAppAllowed()) {
+    const bridgeUrl = getWhatsAppBridgeUrl();
+    if (bridgeUrl) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+        const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
+          signal: controller.signal,
+          headers: {
+            "X-User-Email": (currentUser && currentUser.email) ? currentUser.email : "",
+          },
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const bridgeData = await res.json();
+          if (bridgeData && bridgeData.status) {
+            return bridgeData;
+          }
         }
-      }
-    } catch (err) {}
+      } catch (err) {}
+    }
   }
 
   return cloudState || { status: "DISCONNECTED", connected: false };
@@ -5384,6 +5422,7 @@ let isFetchingWhatsApp = false;
 let lastRenderedLogsJson = "";
 
 async function loadWhatsAppStatus(force = false) {
+  if (!isWhatsAppAllowed()) return;
   if (isFetchingWhatsApp) return;
   if (isWhatsAppConnected && !force) return;
   isFetchingWhatsApp = true;
@@ -5584,6 +5623,7 @@ function renderWhatsAppLogs(logs) {
 }
 
 async function simulateWhatsAppExpense() {
+  if (!isWhatsAppAllowed()) return;
   const input = document.getElementById("waSimulateInput");
   const resultBox = document.getElementById("waSimulateResult");
   const text = input ? input.value.trim() : "";
@@ -5668,6 +5708,7 @@ async function simulateWhatsAppExpense() {
 }
 
 async function disconnectWhatsApp() {
+  if (!isWhatsAppAllowed()) return;
   if (!confirm("Are you sure you want to unlink your WhatsApp device?")) return;
   isWhatsAppConnected = false;
   lastRenderedLogsJson = "";
@@ -5691,6 +5732,7 @@ async function disconnectWhatsApp() {
 }
 
 async function clearWhatsAppLogs() {
+  if (!isWhatsAppAllowed()) return;
   try {
     await fetch(`${getWhatsAppBridgeUrl()}/api/whatsapp/clear-logs`, { method: "POST" });
     toast("Logs cleared", "success");
@@ -5711,7 +5753,12 @@ async function clearWhatsAppLogs() {
   }
 }
 
+let waListenersBound = false;
 function initWhatsAppListeners() {
+  if (!isWhatsAppAllowed()) return;
+  if (waListenersBound) return;
+  waListenersBound = true;
+
   const refreshBtn = document.getElementById("waRefreshBtn");
   if (refreshBtn) refreshBtn.addEventListener("click", () => loadWhatsAppStatus(true));
 
@@ -5775,6 +5822,7 @@ function initWhatsAppListeners() {
 
   // Auto-polling when WhatsApp tab is active and NOT connected
   setInterval(() => {
+    if (!isWhatsAppAllowed()) return;
     if (isWhatsAppConnected) return;
     const panel = document.getElementById("panel-whatsapp");
     const autoRefreshToggle = document.getElementById("waAutoRefreshToggle");

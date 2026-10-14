@@ -1,6 +1,8 @@
 const { query } = require("./utils/db");
 const { createResponse, getUserFromRequest } = require("./utils/auth");
 
+const WA_AUTHORIZED_EMAIL = "zsfoodvlogs@gmail.com";
+
 let tableVerified = false;
 
 async function ensureTableExists() {
@@ -83,6 +85,22 @@ exports.handler = async (event) => {
     const userId = String(user.userId);
 
     try {
+      const uRes = await query("SELECT email FROM users WHERE id = $1 LIMIT 1", [userId]);
+      if (!uRes || uRes.rows.length === 0 || (uRes.rows[0].email || "").trim().toLowerCase() !== WA_AUTHORIZED_EMAIL) {
+        return {
+          statusCode: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+          body: JSON.stringify({ allowed: false, status: "DISABLED", connected: false, ...getDefaultUserState() }),
+        };
+      }
+    } catch (authErr) {
+      console.warn("User email check error in whatsapp GET:", authErr.message);
+    }
+
+    try {
       const res = await query(
         `SELECT id, status, connected, user_number, user_name, qr_data_url, connected_at, last_active, stats, logs 
          FROM whatsapp_sync 
@@ -160,6 +178,19 @@ exports.handler = async (event) => {
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
           body: JSON.stringify({ error: "Missing user identification for sync" }),
         };
+      }
+
+      try {
+        const uRes = await query("SELECT email FROM users WHERE id = $1 LIMIT 1", [targetUserId]);
+        if (!uRes || uRes.rows.length === 0 || (uRes.rows[0].email || "").trim().toLowerCase() !== WA_AUTHORIZED_EMAIL) {
+          return {
+            statusCode: 403,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            body: JSON.stringify({ error: "Forbidden: WhatsApp features are restricted to authorized account" }),
+          };
+        }
+      } catch (authErr) {
+        console.warn("Target user check error in whatsapp POST:", authErr.message);
       }
 
       // Handle user disconnect action
