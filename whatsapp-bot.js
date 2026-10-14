@@ -632,7 +632,7 @@ function createClientInstance() {
       clientId: "king-tracker",
       dataPath: path.join(__dirname, ".wwebjs_auth"),
       store: neonStore,
-      backupSyncIntervalMs: 3600000,
+      backupSyncIntervalMs: 300000,
     });
   } else {
     authStrategy = new LocalAuth({
@@ -658,6 +658,7 @@ function createClientInstance() {
         "--disable-accelerated-2d-canvas",
         "--no-first-run",
         "--no-zygote",
+        "--single-process",
         "--disable-gpu",
         "--disable-software-rasterizer",
         "--disable-extensions",
@@ -673,6 +674,7 @@ function createClientInstance() {
         "--window-size=800,600",
         "--disk-cache-size=1",
         "--media-cache-size=1",
+        "--js-flags=--max-old-space-size=64",
       ],
     },
   });
@@ -708,18 +710,23 @@ function attachClientEvents(client) {
     syncToCloud();
   });
 
+  let syncStartedAt = null;
+
   client.on("loading_screen", (percent, message) => {
     botState.status = "SYNCING";
     botState.syncPercent = percent;
     botState.qrString = null;
     botState.qrDataUrl = null;
-    addLog({
-      type: "SYSTEM",
-      direction: "SYSTEM",
-      text: `QR code scanned! Syncing chats (${percent}%)...`,
-      status: "SYNCING",
-    });
-    syncToCloud();
+    if (!syncStartedAt) syncStartedAt = Date.now();
+    if (percent % 10 === 0 || percent >= 90) {
+      addLog({
+        type: "SYSTEM",
+        direction: "SYSTEM",
+        text: `Syncing chats (${percent}%)...`,
+        status: "SYNCING",
+      });
+    }
+    if (percent >= 90) syncToCloud();
   });
 
   client.on("authenticated", () => {
@@ -1159,12 +1166,14 @@ server.listen(PORT, () => {
   setInterval(syncToCloud, 15000);
 
   setInterval(async () => {
-    if (botState.status === "STARTING" || botState.status === "SYNCING") {
+    const skipStates = ["STARTING", "SYNCING", "AUTHENTICATED", "QR_READY"];
+    if (skipStates.includes(botState.status)) {
       if (global.gc) { try { global.gc(); } catch (e) {} }
       return;
     }
     const currentRam = getContainerMemoryMb();
-    if (currentRam >= 450) {
+    if (currentRam >= 480) {
+      console.log(`memory ${currentRam}MB - restarting`);
       try {
         await client.destroy().catch(() => {});
       } catch (e) {}
@@ -1173,7 +1182,7 @@ server.listen(PORT, () => {
     } else if (global.gc) {
       try { global.gc(); } catch (e) {}
     }
-  }, 20000);
+  }, 30000);
 
   const externalUrl = process.env.RENDER_EXTERNAL_URL;
   if (externalUrl) {
@@ -1206,7 +1215,8 @@ async function cleanupBeforeRetry() {
           for (const lock of lockFiles) {
             try { fs.unlinkSync(path.join(fullPath, lock)); } catch (e) {}
           }
-          if (initRetryCount >= 2 && !entry.endsWith(".zip")) {
+          const wasAuthFailure = botState.lastError && /auth/i.test(botState.lastError);
+          if (initRetryCount >= 3 && wasAuthFailure && !entry.endsWith(".zip")) {
             try { fs.rmSync(fullPath, { recursive: true, force: true }); } catch (e) {}
           }
         }

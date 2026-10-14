@@ -30,4 +30,4 @@ COPY . .
 # Expose Render default port and local bridge port
 EXPOSE 10000 3001
 
-CMD ["node", "--max-old-space-size=128", "--expose-gc", "whatsapp-bot.js"]
+CMD ["node", "--max-old-space-size=256", "--expose-gc", "whatsapp-bot.js"]
