@@ -528,8 +528,6 @@ function createClientInstance() {
         "--window-size=800,600",
         "--disk-cache-size=1",
         "--media-cache-size=1",
-        "--renderer-process-limit=2",
-        "--js-flags=--max-old-space-size=160",
       ],
     },
   });
