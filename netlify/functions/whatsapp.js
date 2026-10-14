@@ -99,6 +99,7 @@ exports.handler = async (event) => {
           userNumber: row.user_number || null,
           userName: row.user_name || null,
           qrDataUrl: row.qr_data_url || null,
+          syncPercent: (row.stats && row.stats.syncPercent !== undefined) ? row.stats.syncPercent : null,
           connectedAt: row.connected_at ? new Date(row.connected_at).toISOString() : null,
           lastActive: row.last_active ? new Date(row.last_active).toISOString() : null,
           stats: row.stats || getDefaultUserState().stats,

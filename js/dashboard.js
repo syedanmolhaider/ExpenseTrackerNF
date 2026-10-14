@@ -5343,33 +5343,40 @@ function getWhatsAppBridgeUrl() {
 
 async function fetchWhatsAppState() {
   // Strategy:
-  // 1. Always query Netlify cloud endpoint (/api/whatsapp) with user credentials to guarantee strict per-user isolation
+  // 1. Query Netlify cloud endpoint (/api/whatsapp) with user credentials for strict per-user isolation
+  let cloudState = null;
   try {
     const res = await fetch(WA_CLOUD_ENDPOINT, { credentials: "include" });
     if (res.ok) {
-      return await res.json();
+      cloudState = await res.json();
+      if (cloudState && (cloudState.connected || cloudState.status === "SYNCING" || (cloudState.status === "QR_READY" && cloudState.qrDataUrl))) {
+        return cloudState;
+      }
     }
   } catch (e) {
     // Netlify cloud endpoint unreachable
   }
 
-  // 2. Direct local bridge fallback only for local debugging
+  // 2. Direct bridge fallback (Render URL or localhost) for instant local responsiveness
   const bridgeUrl = getWhatsAppBridgeUrl();
-  if (bridgeUrl && bridgeUrl.includes("localhost")) {
+  if (bridgeUrl) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 1200);
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
       const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
       if (res.ok) {
-        return await res.json();
+        const bridgeData = await res.json();
+        if (bridgeData && bridgeData.status) {
+          return bridgeData;
+        }
       }
     } catch (err) {}
   }
 
-  return { status: "DISCONNECTED", connected: false };
+  return cloudState || { status: "DISCONNECTED", connected: false };
 }
 
 async function loadWhatsAppStatus() {
@@ -5424,6 +5431,29 @@ function updateWhatsAppUI(data) {
     if (qrBox) qrBox.style.display = "none";
     if (offlineBox) offlineBox.style.display = "none";
     if (connectedBox) connectedBox.style.display = "block";
+  } else if (data.status === "SYNCING" || data.status === "AUTHENTICATED" || data.status === "AUTHENTICATING") {
+    if (statusDot) statusDot.className = "wa-status-dot dot-orange";
+    const percentStr = (data.syncPercent !== undefined && data.syncPercent !== null) ? ` (${data.syncPercent}%)` : "";
+    statusLabel.textContent = `Syncing Chats${percentStr}...`;
+    statusLabel.style.color = "var(--orange)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-orange";
+      statusBadge.textContent = "🔄 SYNCING";
+    }
+    if (linkedNumber) linkedNumber.textContent = "Pairing in progress...";
+
+    if (qrBox) qrBox.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "none";
+    if (qrLoading) {
+      qrLoading.style.display = "block";
+      const icon = qrLoading.querySelector("div");
+      if (icon) icon.textContent = "🔄";
+      const p = qrLoading.querySelector("p");
+      if (p) p.textContent = `Scan detected! Syncing WhatsApp messages${percentStr}...`;
+      const sm = qrLoading.querySelector("small");
+      if (sm) sm.textContent = "Please wait a moment while your chats are safely linked...";
+    }
   } else if (data.status === "QR_READY" && data.qrDataUrl) {
     if (statusDot) statusDot.className = "wa-status-dot dot-orange";
     statusLabel.textContent = "Scan QR Code";
@@ -5466,7 +5496,15 @@ function updateWhatsAppUI(data) {
     if (qrBox) qrBox.style.display = "none";
     if (connectedBox) connectedBox.style.display = "none";
     if (offlineBox) offlineBox.style.display = "none";
-    if (qrLoading) qrLoading.style.display = "block";
+    if (qrLoading) {
+      qrLoading.style.display = "block";
+      const icon = qrLoading.querySelector("div");
+      if (icon) icon.textContent = "⏳";
+      const p = qrLoading.querySelector("p");
+      if (p) p.textContent = "Connecting to WhatsApp Bot...";
+      const sm = qrLoading.querySelector("small");
+      if (sm) sm.textContent = "Initializing cloud instance & generating QR...";
+    }
   }
 
   // Update logs table

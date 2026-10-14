@@ -49,9 +49,10 @@ function findBrowserExecutable() {
 
 // Bot In-Memory State
 const botState = {
-  status: "STARTING", // STARTING, QR_READY, AUTHENTICATING, CONNECTED, DISCONNECTED, ERROR
+  status: "STARTING", // STARTING, QR_READY, SYNCING, AUTHENTICATED, CONNECTED, DISCONNECTED, ERROR
   qrString: null,
   qrDataUrl: null,
+  syncPercent: null,
   userNumber: null,
   userName: null,
   connectedAt: null,
@@ -170,8 +171,12 @@ async function syncToCloud() {
       userNumber: botState.userNumber,
       userName: botState.userName,
       qrDataUrl: botState.qrDataUrl,
+      syncPercent: botState.syncPercent,
       connectedAt: botState.connectedAt,
-      stats: botState.stats,
+      stats: {
+        ...botState.stats,
+        syncPercent: botState.syncPercent,
+      },
       logs: botState.logs.slice(0, 30),
     };
     await apiRequest("/api/whatsapp", "POST", payload).catch(() => {});
@@ -460,34 +465,8 @@ const authStrategy = new LocalAuth({
   dataPath: path.join(__dirname, ".wwebjs_auth"),
 });
 
-// Proactive Memory Guard: Hook into browser launch to block heavy media & set long navigation timeouts
-const origAfterBrowserInit = authStrategy.afterBrowserInitialized.bind(authStrategy);
-authStrategy.afterBrowserInitialized = async function () {
-  await origAfterBrowserInit();
-  if (client && client.pupPage) {
-    try {
-      // Allow 180s timeout on cloud containers so slow vCPU never triggers "Timed out after waiting" errors
-      client.pupPage.setDefaultTimeout(180000);
-      client.pupPage.setDefaultNavigationTimeout(180000);
-
-      const cdp = await client.pupPage.target().createCDPSession();
-      await cdp.send("Network.enable");
-      // Block heavy video/audio streams and trackers; keep web fonts unblocked so document.fonts resolves instantly
-      await cdp.send("Network.setBlockedURLs", {
-        urls: [
-          "*.mp4", "*.mp3", "*.ogg", "*.wav", "*.webm",
-          "*google-analytics.com*", "*crashpad*", "*doubleclick.net*"
-        ],
-      });
-      console.log("🛡️ [Memory Optimizer] CDP Network blocking active (Audio/Video blocked, fonts unblocked)");
-    } catch (e) {
-      console.warn("[Memory Optimizer] CDP setup warning:", e.message);
-    }
-  }
-};
-
 const client = new Client({
-  authTimeoutMs: 180000,
+  authTimeoutMs: 120000,
   qrMaxRetries: 0,
   authStrategy,
   puppeteer: {
@@ -502,51 +481,16 @@ const client = new Client({
       "--no-first-run",
       "--no-zygote",
       "--disable-gpu",
-      "--in-process-gpu",
-      "--renderer-process-limit=1",
       "--disable-software-rasterizer",
       "--disable-extensions",
-      "--force-device-scale-factor=1",
-      "--disable-site-isolation-trials",
-      "--disable-threaded-scrolling",
-      "--disable-threaded-animation",
-      "--disable-accelerated-video-decode",
-      "--disable-accelerated-video-encode",
-      "--disable-gpu-rasterization",
-      "--disable-background-networking",
-      "--disable-background-timer-throttling",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-breakpad",
-      "--disable-client-side-phishing-detection",
-      "--disable-component-update",
       "--disable-default-apps",
-      "--disable-domain-reliability",
-      "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BackForwardCache,BlinkGenPropertyTrees",
-      "--disable-hang-monitor",
-      "--disable-ipc-flooding-protection",
-      "--disable-notifications",
-      "--disable-offer-store-unmasked-wallet-cards",
-      "--disable-popup-blocking",
-      "--disable-print-preview",
-      "--disable-prompt-on-repost",
-      "--disable-renderer-backgrounding",
-      "--disable-speech-api",
+      "--disable-breakpad",
       "--disable-sync",
-      "--hide-scrollbars",
-      "--ignore-gpu-blacklist",
-      "--metrics-recording-only",
+      "--disable-notifications",
       "--mute-audio",
-      "--no-default-browser-check",
-      "--no-pings",
-      "--password-store=basic",
-      "--use-mock-keychain",
-      "--disk-cache-size=1",
-      "--media-cache-size=1",
-      "--aggressive-cache-discard",
-      "--v8-cache-options=none",
-      "--disable-gpu-shader-disk-cache",
+      "--hide-scrollbars",
       "--window-size=800,600",
-      "--js-flags=--max-old-space-size=64 --max-semi-space-size=1",
+      "--js-flags=--max-old-space-size=256",
     ],
   },
 });
@@ -586,9 +530,27 @@ client.on("qr", async (qr) => {
   setTimeout(() => triggerDeepGarbageCollection("post-qr"), 1500);
 });
 
+// Event: Loading screen (syncing progress)
+client.on("loading_screen", (percent, message) => {
+  botState.status = "SYNCING";
+  botState.syncPercent = percent;
+  botState.qrString = null;
+  botState.qrDataUrl = null;
+  console.log(`⏳ [WhatsApp] Scan detected! Syncing messages: ${percent}% (${message || "Loading"})`);
+  addLog({
+    type: "SYSTEM",
+    direction: "SYSTEM",
+    text: `QR code scanned! Syncing chats (${percent}%)...`,
+    status: "SYNCING",
+  });
+  syncToCloud();
+});
+
 // Event: Authenticated
 client.on("authenticated", () => {
   botState.status = "AUTHENTICATED";
+  botState.qrString = null;
+  botState.qrDataUrl = null;
   console.log("🔒 [WhatsApp] Authentication verified! Loading chats...");
   addLog({
     type: "SYSTEM",
@@ -596,6 +558,7 @@ client.on("authenticated", () => {
     text: "Authentication verified. Initializing WhatsApp session...",
     status: "AUTHENTICATED",
   });
+  syncToCloud();
 });
 
 // Event: Client Ready
@@ -603,9 +566,10 @@ client.on("ready", async () => {
   botState.status = "CONNECTED";
   botState.qrString = null;
   botState.qrDataUrl = null;
+  botState.syncPercent = 100;
   botState.connectedAt = new Date().toISOString();
 
-  const info = client.info;
+  const info = client.info || {};
   botState.userNumber = info.wid?.user || "Unknown";
   botState.userName = info.pushname || "Owner";
 
@@ -622,6 +586,7 @@ client.on("ready", async () => {
     status: "CONNECTED",
   });
 
+  syncToCloud();
   loginToTracker();
   setTimeout(() => triggerDeepGarbageCollection("post-ready"), 3000);
 });
@@ -872,6 +837,7 @@ const server = http.createServer(async (req, res) => {
       userNumber: botState.userNumber,
       userName: botState.userName,
       qrDataUrl: botState.qrDataUrl,
+      syncPercent: botState.syncPercent,
       connectedAt: botState.connectedAt,
       lastActive: botState.lastActive,
       lastError: botState.lastError,
