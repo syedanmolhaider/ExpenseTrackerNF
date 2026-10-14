@@ -80,6 +80,9 @@ function saveLogs() {
 }
 
 function addLog(entry) {
+  if (/[\u0600-\u06FF]/.test(entry.text || "") || /[\u0600-\u06FF]/.test(entry.reply || "")) {
+    return null;
+  }
   const logItem = {
     id: Date.now() + "-" + Math.random().toString(36).substr(2, 5),
     timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
@@ -304,6 +307,18 @@ function detectPaymentMethod(text) {
 function parseExpenseMessage(text) {
   if (!text || typeof text !== "string") return null;
   const raw = text.trim();
+
+  if (raw.length > 80 || raw.split("\n").filter((l) => l.trim()).length > 2) {
+    return null;
+  }
+
+  if (/https?:\/\/|www\.|youtu\.?be/i.test(raw)) {
+    return null;
+  }
+
+  if (/[\u0600-\u06FF]/.test(raw)) {
+    return null;
+  }
 
   if (["✅", "📊", "🤖", "⚠️", "👑", "💡", "●"].some((p) => raw.startsWith(p))) {
     return null;
@@ -653,6 +668,7 @@ function attachClientEvents(client) {
   client.on("message_create", async (msg) => {
     try {
       if (!msg.body || typeof msg.body !== "string") return;
+      if (msg.isForwarded || msg.broadcast || msg.isStatus) return;
 
       const text = msg.body.trim();
       if (!text) return;

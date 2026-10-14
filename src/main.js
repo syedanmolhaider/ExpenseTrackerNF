@@ -5517,7 +5517,13 @@ function renderWhatsAppLogs(logs) {
   const tbody = document.getElementById("waLogsTableBody");
   if (!tbody) return;
 
-  if (logs.length === 0) {
+  const validLogs = (logs || []).filter((log) => {
+    const text = log.text || "";
+    const reply = log.reply || "";
+    return !(/[\u0600-\u06FF]/.test(text) || /[\u0600-\u06FF]/.test(reply));
+  });
+
+  if (validLogs.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="6" style="text-align: center; padding: 30px; color: var(--text-muted);">
@@ -5530,7 +5536,7 @@ function renderWhatsAppLogs(logs) {
 
   const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
 
-  tbody.innerHTML = logs.map((log) => {
+  tbody.innerHTML = validLogs.map((log) => {
     const isSuccess = log.status === "SUCCESS" || log.status === "CONNECTED";
     const statusColor = isSuccess ? "var(--green)" : log.status === "ERROR" ? "var(--red)" : "var(--orange)";
     const typeBadge = log.type === "EXPENSE"
