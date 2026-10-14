@@ -64,8 +64,10 @@ ExpenseTrackerNF/
 1. **Budget Plan** — Set budget limits per category, grouped by category
 2. **Next Month** — Clone/plan budget for next cycle
 3. **Daily Tracker** — Add/view/filter/search expenses, import CSV/JSON, export
-4. **Income** — Add/view income entries
-5. **Trends** — Full analytics: KPIs, charts, visualizations
+4. **Credit Cards** — Track Platinum & Flexi card expenditures and bills
+5. **Income** — Add/view income entries
+6. **Trends** — Full analytics: KPIs, charts, visualizations
+7. **WhatsApp** — Linked device bot, real-time QR scanner, message syntax guide, live simulator & logs stream
 
 ---
 
