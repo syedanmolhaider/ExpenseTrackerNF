@@ -526,6 +526,10 @@ function createClientInstance() {
         "--mute-audio",
         "--hide-scrollbars",
         "--window-size=800,600",
+        "--disk-cache-size=1",
+        "--media-cache-size=1",
+        "--renderer-process-limit=2",
+        "--js-flags=--max-old-space-size=160",
       ],
     },
   });
@@ -966,7 +970,7 @@ server.listen(PORT, () => {
 
   setInterval(async () => {
     const currentRam = getContainerMemoryMb();
-    if (currentRam >= 355) {
+    if (currentRam >= 450) {
       try {
         await client.destroy().catch(() => {});
       } catch (e) {}
