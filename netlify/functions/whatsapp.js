@@ -1,5 +1,5 @@
 const { query } = require("./utils/db");
-const { createResponse } = require("./utils/auth");
+const { createResponse, getUserFromRequest } = require("./utils/auth");
 
 let tableVerified = false;
 
@@ -21,29 +21,32 @@ async function ensureTableExists() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    // Remove legacy un-isolated 'default' entry if present
+    await query("DELETE FROM whatsapp_sync WHERE id = 'default'").catch(() => {});
     tableVerified = true;
   } catch (err) {
     console.error("Warning in whatsapp ensureTableExists:", err.message);
   }
 }
 
-// In-memory state cache fallback
-let cachedState = {
-  status: "DISCONNECTED",
-  connected: false,
-  userNumber: null,
-  userName: null,
-  qrDataUrl: null,
-  connectedAt: null,
-  lastActive: null,
-  stats: {
-    totalExpensesLogged: 0,
-    totalAmountLogged: 0,
-    messagesReceived: 0,
-    repliesSent: 0,
-  },
-  logs: [],
-};
+function getDefaultUserState() {
+  return {
+    status: "DISCONNECTED",
+    connected: false,
+    userNumber: null,
+    userName: null,
+    qrDataUrl: null,
+    connectedAt: null,
+    lastActive: null,
+    stats: {
+      totalExpensesLogged: 0,
+      totalAmountLogged: 0,
+      messagesReceived: 0,
+      repliesSent: 0,
+    },
+    logs: [],
+  };
+}
 
 exports.handler = async (event) => {
   // CORS Preflight
@@ -61,24 +64,45 @@ exports.handler = async (event) => {
 
   await ensureTableExists().catch(() => {});
 
-  // GET: Fetch current WhatsApp status & logs
+  // -------------------------------------------------------------
+  // GET: Fetch current user's isolated WhatsApp status & logs
+  // -------------------------------------------------------------
   if (event.httpMethod === "GET") {
+    const user = getUserFromRequest(event);
+    if (!user || !user.userId) {
+      return {
+        statusCode: 401,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: JSON.stringify({ error: "Unauthorized", ...getDefaultUserState() }),
+      };
+    }
+
+    const userId = String(user.userId);
+
     try {
       const res = await query(
-        "SELECT id, status, connected, user_number, user_name, qr_data_url, connected_at, last_active, stats, logs FROM whatsapp_sync WHERE id = 'default' LIMIT 1"
+        `SELECT id, status, connected, user_number, user_name, qr_data_url, connected_at, last_active, stats, logs 
+         FROM whatsapp_sync 
+         WHERE id = $1 
+         LIMIT 1`,
+        [userId]
       );
+
       if (res && res.rows && res.rows.length > 0) {
         const row = res.rows[0];
         const dbState = {
-          status: row.status || cachedState.status,
+          status: row.status || "DISCONNECTED",
           connected: Boolean(row.connected),
           userNumber: row.user_number || null,
           userName: row.user_name || null,
           qrDataUrl: row.qr_data_url || null,
           connectedAt: row.connected_at ? new Date(row.connected_at).toISOString() : null,
           lastActive: row.last_active ? new Date(row.last_active).toISOString() : null,
-          stats: row.stats || cachedState.stats,
-          logs: Array.isArray(row.logs) ? row.logs : cachedState.logs,
+          stats: row.stats || getDefaultUserState().stats,
+          logs: Array.isArray(row.logs) ? row.logs : [],
         };
         return {
           statusCode: 200,
@@ -90,40 +114,65 @@ exports.handler = async (event) => {
         };
       }
     } catch (dbErr) {
-      console.warn("DB read error in whatsapp GET, using in-memory fallback:", dbErr.message);
+      console.warn("DB read error in whatsapp GET:", dbErr.message);
     }
 
+    // Return clean disconnected state for users with no linked device
     return {
       statusCode: 200,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
       },
-      body: JSON.stringify(cachedState),
+      body: JSON.stringify(getDefaultUserState()),
     };
   }
 
-  // POST: Sync status or logs from the local WhatsApp background bot or dashboard commands
+  // -------------------------------------------------------------
+  // POST: Sync status or handle actions for a specific user
+  // -------------------------------------------------------------
   if (event.httpMethod === "POST") {
     try {
       const data = event.body ? JSON.parse(event.body) : {};
+      let targetUserId = null;
 
-      // Handle action commands (disconnect, clear-logs)
+      // 1. Identify target user from request authentication cookie / Bearer token
+      const user = getUserFromRequest(event);
+      if (user && user.userId) {
+        targetUserId = String(user.userId);
+      } else if (data.userId) {
+        targetUserId = String(data.userId);
+      } else if (data.userEmail) {
+        try {
+          const uRes = await query("SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1", [data.userEmail.trim()]);
+          if (uRes && uRes.rows && uRes.rows.length > 0) {
+            targetUserId = String(uRes.rows[0].id);
+          }
+        } catch (e) {
+          console.error("User lookup by email failed:", e.message);
+        }
+      }
+
+      if (!targetUserId) {
+        return {
+          statusCode: 400,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          body: JSON.stringify({ error: "Missing user identification for sync" }),
+        };
+      }
+
+      // Handle user disconnect action
       if (data.action === "disconnect") {
-        cachedState.status = "DISCONNECTED";
-        cachedState.connected = false;
-        cachedState.userNumber = null;
-        cachedState.userName = null;
-        cachedState.qrDataUrl = null;
-        cachedState.lastActive = new Date().toISOString();
-
         try {
           await query(
             `UPDATE whatsapp_sync 
              SET status = 'DISCONNECTED', connected = FALSE, user_number = NULL, user_name = NULL, qr_data_url = NULL, last_active = NOW(), updated_at = NOW() 
-             WHERE id = 'default'`
+             WHERE id = $1`,
+            [targetUserId]
           );
-        } catch (e) {}
+        } catch (e) {
+          console.error("Disconnect update error:", e.message);
+        }
 
         return {
           statusCode: 200,
@@ -132,15 +181,18 @@ exports.handler = async (event) => {
         };
       }
 
+      // Handle user clear-logs action
       if (data.action === "clear-logs") {
-        cachedState.logs = [];
         try {
           await query(
             `UPDATE whatsapp_sync 
              SET logs = '[]'::jsonb, updated_at = NOW() 
-             WHERE id = 'default'`
+             WHERE id = $1`,
+            [targetUserId]
           );
-        } catch (e) {}
+        } catch (e) {
+          console.error("Clear logs update error:", e.message);
+        }
 
         return {
           statusCode: 200,
@@ -149,18 +201,11 @@ exports.handler = async (event) => {
         };
       }
 
-      // Merge data into cached state
-      cachedState = {
-        ...cachedState,
-        ...data,
-        lastActive: new Date().toISOString(),
-      };
-
-      // Persist to DB
+      // Persist / Upsert bot state strictly for this specific user
       try {
         await query(
           `INSERT INTO whatsapp_sync (id, status, connected, user_number, user_name, qr_data_url, connected_at, last_active, stats, logs, updated_at)
-           VALUES ('default', $1, $2, $3, $4, $5, $6, NOW(), $7, $8, NOW())
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9, NOW())
            ON CONFLICT (id) DO UPDATE SET
              status = EXCLUDED.status,
              connected = EXCLUDED.connected,
@@ -173,18 +218,24 @@ exports.handler = async (event) => {
              logs = EXCLUDED.logs,
              updated_at = NOW()`,
           [
-            data.status || cachedState.status,
+            targetUserId,
+            data.status || "DISCONNECTED",
             Boolean(data.connected),
             data.userNumber || null,
             data.userName || null,
             data.qrDataUrl || null,
             data.connectedAt ? new Date(data.connectedAt) : null,
-            JSON.stringify(data.stats || cachedState.stats),
-            JSON.stringify(data.logs || cachedState.logs),
+            JSON.stringify(data.stats || getDefaultUserState().stats),
+            JSON.stringify(data.logs || []),
           ]
         );
       } catch (dbErr) {
-        console.warn("DB save error in whatsapp POST, cached in-memory only:", dbErr.message);
+        console.error("DB save error in whatsapp POST:", dbErr.message);
+        return {
+          statusCode: 500,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+          body: JSON.stringify({ error: dbErr.message }),
+        };
       }
 
       return {
@@ -193,7 +244,7 @@ exports.handler = async (event) => {
           "Content-Type": "application/json",
           "Access-Control-Allow-Origin": "*",
         },
-        body: JSON.stringify({ success: true, message: "Synced successfully" }),
+        body: JSON.stringify({ success: true, message: "Synced successfully for user", userId: targetUserId }),
       };
     } catch (err) {
       return {

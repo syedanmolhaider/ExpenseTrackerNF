@@ -5343,33 +5343,33 @@ function getWhatsAppBridgeUrl() {
 
 async function fetchWhatsAppState() {
   // Strategy:
-  // 1. Try configured bridge (Render Cloud URL or localhost:3001)
-  // 2. Fallback to Netlify cloud endpoint (/api/whatsapp) synced via Neon DB
-  const bridgeUrl = getWhatsAppBridgeUrl();
+  // 1. Always query Netlify cloud endpoint (/api/whatsapp) with user credentials to guarantee strict per-user isolation
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2200);
-    const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    // Bridge unreachable or blocked, fallback to cloud endpoint
-  }
-
-  try {
-    const res = await fetch(WA_CLOUD_ENDPOINT);
+    const res = await fetch(WA_CLOUD_ENDPOINT, { credentials: "include" });
     if (res.ok) {
       return await res.json();
     }
   } catch (e) {
-    // Both unreachable
+    // Netlify cloud endpoint unreachable
   }
 
-  return { status: "OFFLINE", connected: false };
+  // 2. Direct local bridge fallback only for local debugging
+  const bridgeUrl = getWhatsAppBridgeUrl();
+  if (bridgeUrl && bridgeUrl.includes("localhost")) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1200);
+      const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {}
+  }
+
+  return { status: "DISCONNECTED", connected: false };
 }
 
 async function loadWhatsAppStatus() {

@@ -115,10 +115,12 @@ function addLog(entry) {
   return logItem;
 }
 
-// Sync current bot state to Netlify cloud endpoint
+// Sync current bot state to Netlify cloud endpoint (strictly scoped to user)
 async function syncToCloud() {
   try {
     const payload = {
+      userEmail: USER_EMAIL,
+      userId: sessionUser?.id,
       status: botState.status,
       connected: botState.status === "CONNECTED",
       userNumber: botState.userNumber,
@@ -827,6 +829,10 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`[Bridge Server] WhatsApp Dashboard Bridge listening on port ${PORT}`);
+  
+  // Initial login to tracker immediately so user ID and session cookies are available
+  loginToTracker().then(() => syncToCloud()).catch((e) => console.warn("Initial tracker login warning:", e.message));
+
   // Heartbeat sync every 15 seconds
   setInterval(syncToCloud, 15000);
 
