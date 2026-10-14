@@ -658,7 +658,6 @@ function createClientInstance() {
         "--disable-accelerated-2d-canvas",
         "--no-first-run",
         "--no-zygote",
-        "--single-process",
         "--disable-gpu",
         "--disable-software-rasterizer",
         "--disable-extensions",
@@ -669,12 +668,13 @@ function createClientInstance() {
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
+        "--disable-features=Translate,OptimizationHints,MediaRouter",
+        "--no-default-browser-check",
         "--mute-audio",
         "--hide-scrollbars",
         "--window-size=800,600",
         "--disk-cache-size=1",
         "--media-cache-size=1",
-        "--js-flags=--max-old-space-size=64",
       ],
     },
   });
@@ -711,6 +711,7 @@ function attachClientEvents(client) {
   });
 
   let syncStartedAt = null;
+  let syncWatchdogTimer = null;
 
   client.on("loading_screen", (percent, message) => {
     botState.status = "SYNCING";
@@ -726,7 +727,39 @@ function attachClientEvents(client) {
         status: "SYNCING",
       });
     }
-    if (percent >= 90) syncToCloud();
+    if (percent >= 90) {
+      syncToCloud();
+
+      if (!syncWatchdogTimer) {
+        syncWatchdogTimer = setTimeout(async () => {
+          if (botState.status === "SYNCING" && client?.pupPage) {
+            try {
+              const res = await client.pupPage.evaluate(() => {
+                const chatList = document.querySelector("#pane-side, [data-testid='chat-list'], div[role='navigation']");
+                const state = window.require?.("WAWebSocketModel")?.Socket?.state;
+                if (chatList || state === "CONNECTED") {
+                  if (typeof window.onAppStateHasSyncedEvent === "function") {
+                    window.onAppStateHasSyncedEvent();
+                    return "SYNC_TRIGGERED";
+                  }
+                }
+                return state || "WAITING";
+              }).catch(() => null);
+
+              if (res === "SYNC_TRIGGERED") {
+                addLog({
+                  type: "SYSTEM",
+                  direction: "SYSTEM",
+                  text: "Chat list detected, finalizing connection...",
+                  status: "SYNCING",
+                });
+              }
+            } catch (e) {}
+          }
+          syncWatchdogTimer = null;
+        }, 10000);
+      }
+    }
   });
 
   client.on("authenticated", () => {
@@ -744,6 +777,11 @@ function attachClientEvents(client) {
   });
 
   client.on("ready", async () => {
+    if (syncWatchdogTimer) {
+      clearTimeout(syncWatchdogTimer);
+      syncWatchdogTimer = null;
+    }
+    syncStartedAt = null;
     botState.status = "CONNECTED";
     botState.qrString = null;
     botState.qrDataUrl = null;
@@ -1118,6 +1156,22 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (pathname === "/api/whatsapp/restart" || pathname === "/restart") {
+    try {
+      initRetryCount = 0;
+      botState.status = "STARTING";
+      botState.lastError = null;
+      syncToCloud();
+      setTimeout(async () => {
+        await cleanupBeforeRetry();
+        initializeWithRetry();
+      }, 500);
+      return sendJson(200, { message: "Bot restarting...", success: true });
+    } catch (e) {
+      return sendJson(500, { error: e.message });
+    }
+  }
+
   if (pathname === "/api/whatsapp/simulate" && req.method === "POST") {
     const body = await readBody();
     const budgetItems = await getCachedBudgetItems();
@@ -1258,9 +1312,11 @@ async function initializeWithRetry() {
       addLog({
         type: "ERROR",
         direction: "SYSTEM",
-        text: `All ${MAX_INIT_RETRIES} init attempts exhausted. Restart required.`,
+        text: `Init attempts exhausted (${MAX_INIT_RETRIES}). Retrying in 60s...`,
         status: "ERROR",
       });
+      initRetryCount = 1;
+      setTimeout(() => initializeWithRetry(), 60000);
     }
   });
 }
