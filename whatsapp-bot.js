@@ -460,22 +460,26 @@ const authStrategy = new LocalAuth({
   dataPath: path.join(__dirname, ".wwebjs_auth"),
 });
 
-// Proactive Memory Guard: Hook into browser launch to block heavy media & web fonts at the native C++ network layer
+// Proactive Memory Guard: Hook into browser launch to block heavy media & set long navigation timeouts
 const origAfterBrowserInit = authStrategy.afterBrowserInitialized.bind(authStrategy);
 authStrategy.afterBrowserInitialized = async function () {
   await origAfterBrowserInit();
   if (client && client.pupPage) {
     try {
+      // Allow 120s timeout on cloud containers so slow vCPU never triggers "Timed out after waiting 30000ms"
+      client.pupPage.setDefaultTimeout(120000);
+      client.pupPage.setDefaultNavigationTimeout(120000);
+
       const cdp = await client.pupPage.target().createCDPSession();
       await cdp.send("Network.enable");
+      // Block heavy video/audio streams and trackers; keep web fonts unblocked so document.fonts resolves instantly
       await cdp.send("Network.setBlockedURLs", {
         urls: [
           "*.mp4", "*.mp3", "*.ogg", "*.wav", "*.webm",
-          "*.woff2", "*.woff", "*.ttf", "*.otf",
-          "*google-analytics.com*", "*crashpad*"
+          "*google-analytics.com*", "*crashpad*", "*doubleclick.net*"
         ],
       });
-      console.log("🛡️ [Memory Optimizer] CDP Network blocking active (Audio/Video/Fonts blocked)");
+      console.log("🛡️ [Memory Optimizer] CDP Network blocking active (Audio/Video blocked, fonts unblocked)");
     } catch (e) {
       console.warn("[Memory Optimizer] CDP setup warning:", e.message);
     }
@@ -483,6 +487,8 @@ authStrategy.afterBrowserInitialized = async function () {
 };
 
 const client = new Client({
+  authTimeoutMs: 120000,
+  qrMaxRetries: 0,
   authStrategy,
   puppeteer: {
     headless: true,
@@ -500,7 +506,6 @@ const client = new Client({
       "--renderer-process-limit=1",
       "--disable-software-rasterizer",
       "--disable-extensions",
-      "--blink-settings=imagesEnabled=false",
       "--force-device-scale-factor=1",
       "--disable-site-isolation-trials",
       "--disable-threaded-scrolling",
@@ -541,7 +546,7 @@ const client = new Client({
       "--v8-cache-options=none",
       "--disable-gpu-shader-disk-cache",
       "--window-size=800,600",
-      "--js-flags=--lite-mode --max-old-space-size=64 --max-semi-space-size=1",
+      "--js-flags=--max-old-space-size=64 --max-semi-space-size=1",
     ],
   },
 });
@@ -961,9 +966,16 @@ server.listen(PORT, () => {
   setInterval(syncToCloud, 15000);
 
   // Proactive Memory Guard Watchdog: Strictly enforces 30%+ headroom below 512MB limit (< 350MB ceiling)
-  setInterval(() => {
+  setInterval(async () => {
     const currentRam = getContainerMemoryMb();
-    if (currentRam >= 220) {
+    if (currentRam >= 340) {
+      console.error(`🚨 [EMERGENCY] RAM at ${currentRam}MB — approaching 512MB OOM kill zone. Destroying browser and restarting...`);
+      try {
+        await client.destroy().catch(() => {});
+      } catch (e) {}
+      if (global.gc) { try { global.gc(); } catch (e) {} }
+      setTimeout(() => initializeWithRetry(), 5000);
+    } else if (currentRam >= 220) {
       triggerDeepGarbageCollection(`Proactive threshold: ${currentRam}MB >= 220MB`);
     } else if (global.gc) {
       try { global.gc(); } catch (e) {}
@@ -977,14 +989,48 @@ server.listen(PORT, () => {
     setInterval(() => {
       const pingClient = externalUrl.startsWith("https") ? https : http;
       pingClient.get(`${externalUrl}/health`, () => {}).on("error", () => {});
-    }, 10 * 60 * 1000); // Ping every 10 minutes
+    }, 10 * 60 * 1000);
   }
 });
 
+// Auto-retry initialization with exponential backoff
+let initRetryCount = 0;
+const MAX_INIT_RETRIES = 5;
+
+function initializeWithRetry() {
+  console.log(`[WhatsApp] Starting WhatsApp Web client... (attempt ${initRetryCount + 1})`);
+  botState.status = "STARTING";
+  botState.lastError = null;
+  syncToCloud();
+
+  client.initialize().catch((err) => {
+    const errMsg = typeof err === "string" ? err : (err.message || String(err));
+    botState.status = "ERROR";
+    botState.lastError = errMsg;
+    console.error(`❌ Failed to initialize WhatsApp client: ${errMsg}`);
+
+    initRetryCount++;
+    if (initRetryCount < MAX_INIT_RETRIES) {
+      const delay = Math.min(10000 * initRetryCount, 60000);
+      console.log(`[WhatsApp] Retrying initialization in ${delay / 1000}s (attempt ${initRetryCount + 1}/${MAX_INIT_RETRIES})...`);
+      addLog({
+        type: "SYSTEM",
+        direction: "SYSTEM",
+        text: `Init failed: ${errMsg}. Retrying in ${delay / 1000}s...`,
+        status: "ERROR",
+      });
+      setTimeout(() => initializeWithRetry(), delay);
+    } else {
+      console.error(`❌ [WhatsApp] All ${MAX_INIT_RETRIES} initialization attempts exhausted. Service requires manual restart.`);
+      addLog({
+        type: "ERROR",
+        direction: "SYSTEM",
+        text: `All ${MAX_INIT_RETRIES} init attempts exhausted. Restart required.`,
+        status: "ERROR",
+      });
+    }
+  });
+}
+
 // Launch WhatsApp Client
-console.log("[WhatsApp] Starting WhatsApp Web client...");
-client.initialize().catch((err) => {
-  botState.status = "ERROR";
-  botState.lastError = err.message;
-  console.error("❌ Failed to initialize WhatsApp client:", err);
-});
+initializeWithRetry();
