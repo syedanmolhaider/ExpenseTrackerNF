@@ -207,7 +207,19 @@ exports.handler = async (event) => {
       console.log("✓ whatsapp_sync table already exists");
     }
 
-    // Create indexes for better performance
+    if (!(await tableExists('whatsapp_remote_sessions'))) {
+      await query(`
+        CREATE TABLE whatsapp_remote_sessions (
+          session_id VARCHAR(100) PRIMARY KEY,
+          session_zip BYTEA NOT NULL,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log("✓ whatsapp_remote_sessions table created");
+    } else {
+      console.log("✓ whatsapp_remote_sessions table already exists");
+    }
+
     await query(
       `CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id)`,
     );

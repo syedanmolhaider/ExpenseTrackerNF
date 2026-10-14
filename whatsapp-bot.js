@@ -1,18 +1,5 @@
-/**
- * ===============================================================
- * King's Tracker — WhatsApp Linked Device Bot & Local Bridge
- * ===============================================================
- * Features:
- * - Uses whatsapp-web.js with LocalAuth (persistent QR scan)
- * - Emits QR code in terminal & provides live base64 QR for Dashboard
- * - Smart parsing for messages like "Lunch 300", "Petrol 1500 card", etc.
- * - Logs expenses directly into King's Tracker (Netlify API / Neon DB)
- * - Auto-replies with confirmation + category + today's spending
- * - Built-in HTTP server on port 3001 with CORS for Dashboard tab
- * - Syncs status and logs with Netlify cloud endpoint
- */
-
-const { Client, LocalAuth } = require("whatsapp-web.js");
+const { Client, RemoteAuth, LocalAuth } = require("whatsapp-web.js");
+const { Pool } = require("pg");
 const qrcode = require("qrcode");
 const qrcodeTerminal = require("qrcode-terminal");
 const http = require("http");
@@ -20,7 +7,6 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
-// --- Configuration ---
 const PORT = process.env.PORT || process.env.WHATSAPP_PORT || 3001;
 const TRACKER_API_URL = process.env.TRACKER_API_URL || "https://expensetrackernf.netlify.app";
 const USER_EMAIL = process.env.USER_EMAIL || "zsfoodvlogs@gmail.com";
@@ -28,7 +14,6 @@ const USER_PASSWORD = process.env.USER_PASSWORD || "ZainiBhai@007";
 const CURRENCY = process.env.CURRENCY || "Rs";
 const LOGS_FILE = path.join(__dirname, "whatsapp_logs.json");
 
-// Find Chrome or Chromium executable on Windows, Linux, or Docker
 function findBrowserExecutable() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
     return process.env.PUPPETEER_EXECUTABLE_PATH;
@@ -47,9 +32,8 @@ function findBrowserExecutable() {
   return undefined;
 }
 
-// Bot In-Memory State
 const botState = {
-  status: "STARTING", // STARTING, QR_READY, SYNCING, AUTHENTICATED, CONNECTED, DISCONNECTED, ERROR
+  status: "STARTING",
   qrString: null,
   qrDataUrl: null,
   syncPercent: null,
@@ -67,19 +51,15 @@ const botState = {
   logs: [],
 };
 
-// Track sent messages by bot to avoid self-response loops
 const sentMessageIds = new Set();
 
-// Load existing logs if available (keep small to avoid RAM bloat)
 if (fs.existsSync(LOGS_FILE)) {
   try {
     const raw = fs.readFileSync(LOGS_FILE, "utf-8");
     const data = JSON.parse(raw);
     if (Array.isArray(data.logs)) botState.logs = data.logs.slice(-30);
     if (data.stats) botState.stats = { ...botState.stats, ...data.stats };
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 }
 
 function saveLogs() {
@@ -96,9 +76,7 @@ function saveLogs() {
         2
       )
     );
-  } catch (e) {
-    console.error("Failed to persist logs:", e.message);
-  }
+  } catch (e) {}
 }
 
 function addLog(entry) {
@@ -116,7 +94,6 @@ function addLog(entry) {
   return logItem;
 }
 
-// --- Container & System Memory Monitor ---
 function getContainerMemoryMb() {
   try {
     if (fs.existsSync("/sys/fs/cgroup/memory.current")) {
@@ -132,20 +109,6 @@ function getContainerMemoryMb() {
   return Math.round(mem.rss / 1024 / 1024);
 }
 
-async function triggerDeepGarbageCollection(reason = "routine") {
-  if (global.gc) {
-    try {
-      global.gc();
-    } catch (e) {}
-  }
-
-  const used = getContainerMemoryMb();
-  const headroom = Math.max(0, 512 - used);
-  const headroomPercent = Math.round((headroom / 512) * 100);
-  console.log(`[Memory Monitor] GC executed (${reason}). Active RAM: ${used}MB / 512MB (${headroomPercent}% free headroom)`);
-}
-
-// Sync current bot state to Netlify cloud endpoint (strictly scoped to user)
 async function syncToCloud() {
   try {
     const payload = {
@@ -165,12 +128,104 @@ async function syncToCloud() {
       logs: botState.logs.slice(0, 30),
     };
     await apiRequest("/api/whatsapp", "POST", payload).catch(() => {});
-  } catch (e) {
-    // ignore cloud sync error if offline
+  } catch (e) {}
+}
+
+class NeonPostgresStore {
+  constructor(pool) {
+    this.pool = pool;
+    this.cache = new Map();
+    this.loaded = false;
+  }
+
+  async init() {
+    if (!this.pool || this.loaded) return;
+    try {
+      await this.pool.query(
+        "CREATE TABLE IF NOT EXISTS whatsapp_remote_sessions (session_id VARCHAR(100) PRIMARY KEY, session_zip BYTEA NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+      );
+      const res = await this.pool.query("SELECT session_id FROM whatsapp_remote_sessions");
+      for (const row of res.rows) {
+        this.cache.set(row.session_id, true);
+      }
+      this.loaded = true;
+      console.log("db auth loaded");
+    } catch (e) {
+      console.log("source not found");
+    }
+  }
+
+  async sessionExists(options) {
+    await this.init();
+    return !!this.cache.get(options.session);
+  }
+
+  async save(options) {
+    if (!this.pool) return;
+    const zipPath = path.resolve("./.wwebjs_auth", `${options.session}.zip`);
+    if (!fs.existsSync(zipPath)) return;
+    try {
+      const zipBuffer = fs.readFileSync(zipPath);
+      await this.pool.query(
+        "INSERT INTO whatsapp_remote_sessions (session_id, session_zip, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT (session_id) DO UPDATE SET session_zip = EXCLUDED.session_zip, updated_at = CURRENT_TIMESTAMP",
+        [options.session, zipBuffer]
+      );
+      this.cache.set(options.session, true);
+      console.log("db auth saved");
+    } catch (e) {
+      console.log("source not found");
+    }
+  }
+
+  async extract(options) {
+    if (!this.pool) return;
+    try {
+      const res = await this.pool.query(
+        "SELECT session_zip FROM whatsapp_remote_sessions WHERE session_id = $1",
+        [options.session]
+      );
+      if (res.rows.length > 0 && res.rows[0].session_zip) {
+        fs.mkdirSync(path.dirname(options.path), { recursive: true });
+        fs.writeFileSync(options.path, res.rows[0].session_zip);
+        this.cache.set(options.session, true);
+        console.log("db auth loaded");
+      }
+    } catch (e) {
+      console.log("source not found");
+    }
+  }
+
+  async delete(options) {
+    if (!this.pool) return;
+    try {
+      await this.pool.query("DELETE FROM whatsapp_remote_sessions WHERE session_id = $1", [options.session]);
+      this.cache.delete(options.session);
+      console.log("db auth saved");
+    } catch (e) {
+      console.log("source not found");
+    }
   }
 }
 
-// --- Category Keyword Matching ---
+let dbPool = null;
+if (process.env.DATABASE_URL) {
+  try {
+    dbPool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 2,
+      idleTimeoutMillis: 10000,
+      connectionTimeoutMillis: 10000,
+    });
+  } catch (e) {
+    console.log("source not found");
+  }
+} else {
+  console.log("source not found");
+}
+
+const neonStore = new NeonPostgresStore(dbPool);
+
 const CATEGORY_KEYWORDS = {
   "Food": [
     "food", "lunch", "dinner", "breakfast", "burger", "pizza", "biryani", "chai", "tea", "coffee",
@@ -241,17 +296,14 @@ function detectPaymentMethod(text) {
   return "cash";
 }
 
-// --- Smart Message Parser ---
 function parseExpenseMessage(text) {
   if (!text || typeof text !== "string") return null;
   const raw = text.trim();
 
-  // Ignore bot output messages or indicators
   if (["✅", "📊", "🤖", "⚠️", "👑", "💡", "●"].some((p) => raw.startsWith(p))) {
     return null;
   }
 
-  // Check bot commands
   const cleanCmd = raw.toLowerCase().replace(/^[!/#.]/, "").trim();
   if (["help", "info", "commands", "start"].includes(cleanCmd)) {
     return { isCommand: true, command: "help" };
@@ -266,7 +318,6 @@ function parseExpenseMessage(text) {
     return { isCommand: true, command: "last" };
   }
 
-  // Regex to extract amount (handles "300", "1500", "Rs 300", "250/-", "450.50", "250rs", etc.)
   const amountRegex = /(?:rs\.?|pkr\.?|\$)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:\/\-|\/=|\/|rs\.?|pkr\.?)?/i;
   const match = raw.match(amountRegex);
 
@@ -277,22 +328,15 @@ function parseExpenseMessage(text) {
 
   if (isNaN(amount) || amount <= 0) return null;
 
-  // Remove the matched amount and currency from text to get remainder
   let remainingText = raw.replace(match[0], " ").replace(/\s+/g, " ").trim();
-
-  // Detect payment method
   const paymentMethod = detectPaymentMethod(raw);
 
-  // Clean out payment method keywords from title
   remainingText = remainingText
     .replace(/\b(platinum|plat|silver|flexi|flex|creditcard|credit|card|cc|debit|cash)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
 
-  // Category detection
   const category = matchCategory(raw);
-
-  // If title equals or ends with matched category name, clean it
   const catRegex = new RegExp(`\\b${category}\\b`, "i");
   if (remainingText.toLowerCase() === category.toLowerCase()) {
     remainingText = category;
@@ -300,13 +344,11 @@ function parseExpenseMessage(text) {
     remainingText = remainingText.replace(catRegex, "").replace(/\s+/g, " ").trim();
   }
 
-  // Title fallback
   let title = remainingText;
   if (!title || title.length < 2) {
     title = category !== "Other" ? category : "Expense";
   }
 
-  // Capitalize title and limit length to avoid DB payload limit errors on long forwarded text
   title = title.charAt(0).toUpperCase() + title.slice(1);
   if (title.length > 90) {
     title = title.substring(0, 87) + "...";
@@ -322,7 +364,6 @@ function parseExpenseMessage(text) {
   };
 }
 
-// --- Netlify API Integration ---
 let sessionCookie = null;
 let sessionUser = null;
 
@@ -353,7 +394,6 @@ async function apiRequest(endpoint, method = "GET", data = null) {
         headers,
       },
       (res) => {
-        // Collect Set-Cookie
         if (res.headers["set-cookie"]) {
           sessionCookie = res.headers["set-cookie"]
             .map((c) => c.split(";")[0])
@@ -387,16 +427,13 @@ async function apiRequest(endpoint, method = "GET", data = null) {
 
 async function loginToTracker() {
   try {
-    console.log(`[API] Logging into tracker as ${USER_EMAIL}...`);
     const res = await apiRequest("/api/login", "POST", {
       email: USER_EMAIL,
       password: USER_PASSWORD,
     });
     sessionUser = res.user;
-    console.log(`[API] Logged in successfully: ${sessionUser?.name || USER_EMAIL}`);
     return true;
   } catch (err) {
-    console.error("[API] Login failed:", err.message);
     return false;
   }
 }
@@ -421,7 +458,6 @@ async function logExpenseToTracker(expense) {
     return res;
   } catch (err) {
     if (err.message.includes("401") || err.message.includes("unauthorized") || err.message.includes("token")) {
-      console.log("[API] Session expired. Re-authenticating...");
       await loginToTracker();
       return await apiRequest("/api/expenses", "POST", payload);
     }
@@ -437,19 +473,28 @@ async function getTodayExpenses() {
     const expenses = Array.isArray(res) ? res : res.expenses || [];
     return expenses;
   } catch (err) {
-    console.error("[API] Failed to fetch today's expenses:", err.message);
     return [];
   }
 }
 
-// --- WhatsApp Client Initialization ---
+let client = null;
+
 function createClientInstance() {
   const executablePath = findBrowserExecutable();
-  console.log(`[WhatsApp] Browser executable: ${executablePath || "Default Puppeteer"}`);
 
-  const authStrategy = new LocalAuth({
-    dataPath: path.join(__dirname, ".wwebjs_auth"),
-  });
+  let authStrategy;
+  if (dbPool) {
+    authStrategy = new RemoteAuth({
+      clientId: "king-tracker",
+      dataPath: path.join(__dirname, ".wwebjs_auth"),
+      store: neonStore,
+      backupSyncIntervalMs: 3600000,
+    });
+  } else {
+    authStrategy = new LocalAuth({
+      dataPath: path.join(__dirname, ".wwebjs_auth"),
+    });
+  }
 
   return new Client({
     authTimeoutMs: 120000,
@@ -487,172 +532,151 @@ function createClientInstance() {
 }
 
 function attachClientEvents(client) {
-// Event: QR Code Received
-client.on("qr", async (qr) => {
-  botState.status = "QR_READY";
-  botState.qrString = qr;
+  client.on("qr", async (qr) => {
+    botState.status = "QR_READY";
+    botState.qrString = qr;
+    console.log("qr updated");
 
-  try {
-    botState.qrDataUrl = await qrcode.toDataURL(qr, {
-      width: 320,
-      margin: 2,
-      color: {
-        dark: "#000000",
-        light: "#ffffff",
-      },
+    try {
+      botState.qrDataUrl = await qrcode.toDataURL(qr, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: "#000000",
+          light: "#ffffff",
+        },
+      });
+    } catch (e) {
+      console.log("source not found");
+    }
+
+    qrcodeTerminal.generate(qr, { small: true });
+
+    addLog({
+      type: "SYSTEM",
+      direction: "SYSTEM",
+      text: "New QR Code generated. Scan with WhatsApp on your phone.",
+      status: "QR_READY",
     });
-  } catch (e) {
-    console.error("[QR] Error generating QR Data URL:", e.message);
-  }
-
-  console.log("\n=======================================================");
-  console.log("📲 SCAN QR CODE WITH WHATSAPP (Linked Devices):");
-  console.log("=======================================================");
-  qrcodeTerminal.generate(qr, { small: true });
-  console.log("=======================================================");
-  console.log(`👉 Or open Dashboard > WhatsApp tab: http://localhost:${PORT}/api/whatsapp/status\n`);
-
-  addLog({
-    type: "SYSTEM",
-    direction: "SYSTEM",
-    text: "New QR Code generated. Scan with WhatsApp on your phone.",
-    status: "QR_READY",
-  });
-  syncToCloud();
-  setTimeout(() => triggerDeepGarbageCollection("post-qr"), 1500);
-});
-
-// Event: Loading screen (syncing progress)
-client.on("loading_screen", (percent, message) => {
-  botState.status = "SYNCING";
-  botState.syncPercent = percent;
-  botState.qrString = null;
-  botState.qrDataUrl = null;
-  console.log(`⏳ [WhatsApp] Scan detected! Syncing messages: ${percent}% (${message || "Loading"})`);
-  addLog({
-    type: "SYSTEM",
-    direction: "SYSTEM",
-    text: `QR code scanned! Syncing chats (${percent}%)...`,
-    status: "SYNCING",
-  });
-  syncToCloud();
-});
-
-// Event: Authenticated
-client.on("authenticated", () => {
-  botState.status = "AUTHENTICATED";
-  botState.qrString = null;
-  botState.qrDataUrl = null;
-  console.log("🔒 [WhatsApp] Authentication verified! Loading chats...");
-  addLog({
-    type: "SYSTEM",
-    direction: "SYSTEM",
-    text: "Authentication verified. Initializing WhatsApp session...",
-    status: "AUTHENTICATED",
-  });
-  syncToCloud();
-});
-
-// Event: Client Ready
-client.on("ready", async () => {
-  botState.status = "CONNECTED";
-  botState.qrString = null;
-  botState.qrDataUrl = null;
-  botState.syncPercent = 100;
-  botState.connectedAt = new Date().toISOString();
-
-  const info = client.info || {};
-  botState.userNumber = info.wid?.user || "Unknown";
-  botState.userName = info.pushname || "Owner";
-
-  console.log("\n🎉 =====================================================");
-  console.log(`✅ WHATSAPP CONNECTED AS: ${botState.userName} (+${botState.userNumber})`);
-  console.log("📱 You can now message yourself on WhatsApp to log expenses!");
-  console.log("   Example: 'Lunch 300' or 'Petrol 1500 card'");
-  console.log("=====================================================\n");
-
-  addLog({
-    type: "SYSTEM",
-    direction: "SYSTEM",
-    text: `WhatsApp successfully connected as ${botState.userName} (+${botState.userNumber})`,
-    status: "CONNECTED",
+    syncToCloud();
   });
 
-  syncToCloud();
-  loginToTracker();
-  setTimeout(() => triggerDeepGarbageCollection("post-ready"), 3000);
-});
-
-// Event: Disconnected / Auth Failure
-client.on("auth_failure", (msg) => {
-  botState.status = "ERROR";
-  botState.lastError = msg;
-  console.error("❌ [WhatsApp] Auth failure:", msg);
-  addLog({
-    type: "ERROR",
-    direction: "SYSTEM",
-    text: `Auth failure: ${msg}`,
-    status: "ERROR",
+  client.on("loading_screen", (percent, message) => {
+    botState.status = "SYNCING";
+    botState.syncPercent = percent;
+    botState.qrString = null;
+    botState.qrDataUrl = null;
+    addLog({
+      type: "SYSTEM",
+      direction: "SYSTEM",
+      text: `QR code scanned! Syncing chats (${percent}%)...`,
+      status: "SYNCING",
+    });
+    syncToCloud();
   });
-});
 
-client.on("disconnected", (reason) => {
-  botState.status = "DISCONNECTED";
-  botState.lastError = reason;
-  console.warn("⚠️ [WhatsApp] Disconnected:", reason);
-  addLog({
-    type: "SYSTEM",
-    direction: "SYSTEM",
-    text: `WhatsApp disconnected: ${reason}`,
-    status: "DISCONNECTED",
+  client.on("authenticated", () => {
+    botState.status = "AUTHENTICATED";
+    botState.qrString = null;
+    botState.qrDataUrl = null;
+    console.log("db auth loaded");
+    addLog({
+      type: "SYSTEM",
+      direction: "SYSTEM",
+      text: "Authentication verified. Initializing WhatsApp session...",
+      status: "AUTHENTICATED",
+    });
+    syncToCloud();
   });
-});
 
-// --- Incoming Message Handler ---
-client.on("message_create", async (msg) => {
-  try {
-    if (!msg.body || typeof msg.body !== "string") return;
+  client.on("ready", async () => {
+    botState.status = "CONNECTED";
+    botState.qrString = null;
+    botState.qrDataUrl = null;
+    botState.syncPercent = 100;
+    botState.connectedAt = new Date().toISOString();
 
-    // Check if this was a bot-sent message
-    if (msg.id && sentMessageIds.has(msg.id._serialized)) {
-      sentMessageIds.delete(msg.id._serialized);
-      return;
-    }
+    const info = client.info || {};
+    botState.userNumber = info.wid?.user || "Unknown";
+    botState.userName = info.pushname || "Owner";
+    console.log("db auth loaded");
 
-    const text = msg.body.trim();
+    addLog({
+      type: "SYSTEM",
+      direction: "SYSTEM",
+      text: `WhatsApp successfully connected as ${botState.userName} (+${botState.userNumber})`,
+      status: "CONNECTED",
+    });
 
-    // Prevent replying to output messages
-    if (["✅", "📊", "🤖", "⚠️", "👑", "💡", "●"].some((p) => text.startsWith(p))) {
-      return;
-    }
+    syncToCloud();
+    loginToTracker();
 
-    // Determine if message is from user to themselves or direct chat
-    const myNumber = client.info?.wid?.user;
-    const isFromMe = msg.fromMe;
-    const isSelfChat = msg.to === msg.from || (msg.to && msg.to.includes(myNumber) && msg.from && msg.from.includes(myNumber));
-
-    if (!isSelfChat && !isFromMe) {
-      if (msg.isGroupMsg) return;
-    }
-
-    // Parse the message
-    const parsed = parseExpenseMessage(text);
-    if (!parsed) return;
-
-    botState.stats.messagesReceived++;
-
-    // Helper to send reply and register ID
-    async function sendBotReply(replyText) {
-      const sent = await msg.reply(replyText);
-      if (sent && sent.id && sent.id._serialized) {
-        sentMessageIds.add(sent.id._serialized);
+    setTimeout(() => {
+      if (client?.authStrategy && typeof client.authStrategy.storeRemoteSession === "function") {
+        client.authStrategy.storeRemoteSession({ emit: true }).catch(() => {});
       }
-      return sent;
-    }
+    }, 30000);
+  });
 
-    // 1. Handle Help Command
-    if (parsed.isCommand && parsed.command === "help") {
-      const reply = `👑 *King's Tracker WhatsApp Assistant*
+  client.on("auth_failure", (msg) => {
+    botState.status = "ERROR";
+    botState.lastError = msg;
+    console.log("source not found");
+    addLog({
+      type: "ERROR",
+      direction: "SYSTEM",
+      text: `Auth failure: ${msg}`,
+      status: "ERROR",
+    });
+  });
+
+  client.on("disconnected", (reason) => {
+    botState.status = "DISCONNECTED";
+    botState.lastError = reason;
+    console.log("source not found");
+    addLog({
+      type: "SYSTEM",
+      direction: "SYSTEM",
+      text: `WhatsApp disconnected: ${reason}`,
+      status: "DISCONNECTED",
+    });
+  });
+
+  client.on("message_create", async (msg) => {
+    try {
+      if (!msg.body || typeof msg.body !== "string") return;
+
+      const text = msg.body.trim();
+      if (!text) return;
+
+      if (msg.id && msg.id._serialized && sentMessageIds.has(msg.id._serialized)) {
+        sentMessageIds.delete(msg.id._serialized);
+        return;
+      }
+
+      const myNumber = client.info?.wid?.user;
+      const isFromMe = msg.fromMe;
+      const isSelfChat = msg.to === msg.from || (msg.to && msg.to.includes(myNumber) && msg.from && msg.from.includes(myNumber));
+
+      if (!isSelfChat && !isFromMe) {
+        if (msg.isGroupMsg) return;
+      }
+
+      const parsed = parseExpenseMessage(text);
+      if (!parsed) return;
+
+      botState.stats.messagesReceived++;
+
+      async function sendBotReply(replyText) {
+        const sent = await msg.reply(replyText);
+        if (sent && sent.id && sent.id._serialized) {
+          sentMessageIds.add(sent.id._serialized);
+        }
+        return sent;
+      }
+
+      if (parsed.isCommand && parsed.command === "help") {
+        const reply = `👑 *King's Tracker WhatsApp Assistant*
 
 Send expenses in natural text:
 • *Lunch 300* ➔ Log Rs 300 (Food)
@@ -666,114 +690,101 @@ Send expenses in natural text:
 • *balance* — Check available budget
 • *help* — Show this guide`;
 
-      await sendBotReply(reply);
-      botState.stats.repliesSent++;
-      addLog({
-        type: "COMMAND",
-        direction: "IN_OUT",
-        text,
-        reply,
-        status: "SUCCESS",
-      });
-      return;
-    }
-
-    // 2. Handle Today's Summary Command
-    if (parsed.isCommand && parsed.command === "today") {
-      const expenses = await getTodayExpenses();
-      const total = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
-      let reply = `📊 *Today's Spending Summary*\n\n💰 *Total Spent Today:* ${CURRENCY} ${total.toLocaleString()} (${expenses.length} expenses)\n`;
-
-      if (expenses.length > 0) {
-        reply += "\n*Recent items:*\n";
-        expenses.slice(-5).reverse().forEach((e) => {
-          reply += `• ${e.title}: ${CURRENCY} ${parseFloat(e.amount).toLocaleString()} (${e.category || "Other"})\n`;
+        await sendBotReply(reply);
+        botState.stats.repliesSent++;
+        addLog({
+          type: "COMMAND",
+          direction: "IN_OUT",
+          text,
+          reply,
+          status: "SUCCESS",
         });
-      } else {
-        reply += "\nNo expenses logged yet today.";
+        return;
       }
 
-      await sendBotReply(reply);
-      botState.stats.repliesSent++;
-      addLog({
-        type: "COMMAND",
-        direction: "IN_OUT",
-        text,
-        reply,
-        status: "SUCCESS",
-      });
-      return;
-    }
+      if (parsed.isCommand && parsed.command === "today") {
+        const expenses = await getTodayExpenses();
+        const total = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+        let reply = `📊 *Today's Spending Summary*\n\n💰 *Total Spent Today:* ${CURRENCY} ${total.toLocaleString()} (${expenses.length} expenses)\n`;
 
-    // 3. Handle Balance Command
-    if (parsed.isCommand && parsed.command === "balance") {
-      const reply = `💡 *Budget Check*\nOpen your dashboard to view complete balance, daily room & category caps:\n${TRACKER_API_URL}`;
-      await sendBotReply(reply);
-      botState.stats.repliesSent++;
-      return;
-    }
+        if (expenses.length > 0) {
+          reply += "\n*Recent items:*\n";
+          expenses.slice(-5).reverse().forEach((e) => {
+            reply += `• ${e.title}: ${CURRENCY} ${parseFloat(e.amount).toLocaleString()} (${e.category || "Other"})\n`;
+          });
+        } else {
+          reply += "\nNo expenses logged yet today.";
+        }
 
-    // 4. Handle Expense Logging
-    if (parsed.isExpense) {
-      console.log(`[Expense Detected] "${parsed.title}" -> ${CURRENCY} ${parsed.amount} [${parsed.category}] via ${parsed.paymentMethod}`);
+        await sendBotReply(reply);
+        botState.stats.repliesSent++;
+        addLog({
+          type: "COMMAND",
+          direction: "IN_OUT",
+          text,
+          reply,
+          status: "SUCCESS",
+        });
+        return;
+      }
 
-      try {
-        await logExpenseToTracker(parsed);
+      if (parsed.isCommand && parsed.command === "balance") {
+        const reply = `💡 *Budget Check*\nOpen your dashboard to view complete balance, daily room & category caps:\n${TRACKER_API_URL}`;
+        await sendBotReply(reply);
+        botState.stats.repliesSent++;
+        return;
+      }
 
-        // Fetch today's new total
-        const todayItems = await getTodayExpenses();
-        const todayTotal = todayItems.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+      if (parsed.isExpense) {
+        try {
+          await logExpenseToTracker(parsed);
 
-        botState.stats.totalExpensesLogged++;
-        botState.stats.totalAmountLogged += parsed.amount;
+          const todayItems = await getTodayExpenses();
+          const todayTotal = todayItems.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
 
-        const cardBadge = parsed.paymentMethod === "platinum" ? "🥈 Platinum Card" : parsed.paymentMethod === "flexi" ? "💳 Flexi Card" : "💵 Cash";
-        const reply = `✅ *Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}
+          botState.stats.totalExpensesLogged++;
+          botState.stats.totalAmountLogged += parsed.amount;
+
+          const cardBadge = parsed.paymentMethod === "platinum" ? "🥈 Platinum Card" : parsed.paymentMethod === "flexi" ? "💳 Flexi Card" : "💵 Cash";
+          const reply = `✅ *Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}
 📂 *Category:* ${parsed.category}
 💳 *Method:* ${cardBadge}
 💰 *Today's Spent:* ${CURRENCY} ${todayTotal.toLocaleString()}`;
 
-        await sendBotReply(reply);
-        botState.stats.repliesSent++;
+          await sendBotReply(reply);
+          botState.stats.repliesSent++;
 
-        addLog({
-          type: "EXPENSE",
-          direction: "IN_OUT",
-          text,
-          parsed,
-          reply,
-          status: "SUCCESS",
-        });
+          addLog({
+            type: "EXPENSE",
+            direction: "IN_OUT",
+            text,
+            parsed,
+            reply,
+            status: "SUCCESS",
+          });
+        } catch (err) {
+          const reply = `⚠️ *Could not save expense:* ${err.message}\nPlease check your tracker connection.`;
+          await sendBotReply(reply);
 
-        console.log(`[Expense Saved] Replied with confirmation.`);
-      } catch (err) {
-        console.error("[Expense Error]", err.message);
-        const reply = `⚠️ *Could not save expense:* ${err.message}\nPlease check your tracker connection.`;
-        await sendBotReply(reply);
-
-        addLog({
-          type: "EXPENSE",
-          direction: "IN_OUT",
-          text,
-          parsed,
-          error: err.message,
-          reply,
-          status: "ERROR",
-        });
+          addLog({
+            type: "EXPENSE",
+            direction: "IN_OUT",
+            text,
+            parsed,
+            error: err.message,
+            reply,
+            status: "ERROR",
+          });
+        }
       }
-    }
-  } catch (err) {
-    console.error("[Message Handler Error]", err);
-  }
+    } catch (err) {}
   });
 }
 
-let client = createClientInstance();
+client = createClientInstance();
 attachClientEvents(client);
 
-// --- Local HTTP Server for Dashboard Tab & Controls ---
 const server = http.createServer(async (req, res) => {
-  // CORS Headers for Dashboard
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -805,7 +816,6 @@ const server = http.createServer(async (req, res) => {
       });
     });
 
-  // Endpoints:
   if (pathname === "/" || pathname === "/health") {
     const memMb = getContainerMemoryMb();
     return sendJson(200, {
@@ -838,7 +848,7 @@ const server = http.createServer(async (req, res) => {
       lastActive: botState.lastActive,
       lastError: botState.lastError,
       stats: botState.stats,
-      logs: botState.logs.slice(0, 30),
+      logs: botState.logs.slice(0, 10),
     });
   }
 
@@ -898,7 +908,6 @@ const server = http.createServer(async (req, res) => {
         botState.qrDataUrl = null;
         syncToCloud();
         setTimeout(async () => {
-          console.log("[WhatsApp] Re-initializing client for new QR code...");
           await cleanupBeforeRetry();
           initializeWithRetry();
         }, 1500);
@@ -909,7 +918,6 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // Simulate endpoint for testing expense parsing from dashboard
   if (pathname === "/api/whatsapp/simulate" && req.method === "POST") {
     const body = await readBody();
     const text = body.text || "";
@@ -952,19 +960,13 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Bridge Server] WhatsApp Dashboard Bridge listening on port ${PORT}`);
-  
-  // Initial login to tracker immediately so user ID and session cookies are available
-  loginToTracker().then(() => syncToCloud()).catch((e) => console.warn("Initial tracker login warning:", e.message));
+  loginToTracker().then(() => syncToCloud()).catch(() => {});
 
-  // Heartbeat sync every 15 seconds
   setInterval(syncToCloud, 15000);
 
-  // Proactive Memory Guard Watchdog: Strictly enforces 30%+ headroom below 512MB limit (< 358MB ceiling)
   setInterval(async () => {
     const currentRam = getContainerMemoryMb();
     if (currentRam >= 355) {
-      console.error(`🚨 [EMERGENCY] RAM at ${currentRam}MB — approaching 512MB ceiling. Restarting...`);
       try {
         await client.destroy().catch(() => {});
       } catch (e) {}
@@ -975,10 +977,8 @@ server.listen(PORT, () => {
     }
   }, 20000);
 
-  // Keep Render Web Service awake if RENDER_EXTERNAL_URL is present
   const externalUrl = process.env.RENDER_EXTERNAL_URL;
   if (externalUrl) {
-    console.log(`[Keep-Alive] Configured self-ping for Render: ${externalUrl}`);
     setInterval(() => {
       const pingClient = externalUrl.startsWith("https") ? https : http;
       pingClient.get(`${externalUrl}/health`, () => {}).on("error", () => {});
@@ -986,7 +986,6 @@ server.listen(PORT, () => {
   }
 });
 
-// Auto-retry initialization with exponential backoff
 let initRetryCount = 0;
 const MAX_INIT_RETRIES = 5;
 
@@ -998,7 +997,6 @@ async function cleanupBeforeRetry() {
     client = null;
   }
 
-  // Remove Chromium singleton lock files that prevent re-launch
   const sessionDir = path.join(__dirname, ".wwebjs_auth", "session");
   const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
   for (const lockFile of lockFiles) {
@@ -1006,9 +1004,7 @@ async function cleanupBeforeRetry() {
     try { fs.unlinkSync(lockPath); } catch (e) {}
   }
 
-  // If retrying multiple times, clean corrupt auth session state to guarantee fresh QR
   if (initRetryCount >= 2 && fs.existsSync(sessionDir)) {
-    console.log("[WhatsApp] Clearing session folder to reset any corrupt auth state...");
     try {
       fs.rmSync(sessionDir, { recursive: true, force: true });
     } catch (e) {}
@@ -1022,11 +1018,9 @@ async function cleanupBeforeRetry() {
 
 async function initializeWithRetry() {
   if (initRetryCount > 0) {
-    console.log(`[WhatsApp] Cleaning up previous browser instance before retry...`);
     await cleanupBeforeRetry();
   }
 
-  console.log(`[WhatsApp] Starting WhatsApp Web client... (attempt ${initRetryCount + 1})`);
   botState.status = "STARTING";
   botState.lastError = null;
   syncToCloud();
@@ -1035,12 +1029,10 @@ async function initializeWithRetry() {
     const errMsg = typeof err === "string" ? err : (err.message || String(err));
     botState.status = "ERROR";
     botState.lastError = errMsg;
-    console.error(`❌ Failed to initialize WhatsApp client: ${errMsg}`);
 
     initRetryCount++;
     if (initRetryCount < MAX_INIT_RETRIES) {
       const delay = Math.min(15000 * initRetryCount, 60000);
-      console.log(`[WhatsApp] Retrying initialization in ${delay / 1000}s (attempt ${initRetryCount + 1}/${MAX_INIT_RETRIES})...`);
       addLog({
         type: "SYSTEM",
         direction: "SYSTEM",
@@ -1049,7 +1041,6 @@ async function initializeWithRetry() {
       });
       setTimeout(() => initializeWithRetry(), delay);
     } else {
-      console.error(`❌ [WhatsApp] All ${MAX_INIT_RETRIES} initialization attempts exhausted. Service requires manual restart.`);
       addLog({
         type: "ERROR",
         direction: "SYSTEM",
@@ -1060,6 +1051,4 @@ async function initializeWithRetry() {
   });
 }
 
-// Launch WhatsApp Client
 initializeWithRetry();
-
