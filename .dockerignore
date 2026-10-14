@@ -1,0 +1,10 @@
+node_modules
+.wwebjs_auth
+.wwebjs_cache
+.git
+.github
+.agents
+npm-debug.log
+whatsapp_logs.json
+*.bat
+deploy_to_github.py

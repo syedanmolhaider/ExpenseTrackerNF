@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: expensetracker-whatsapp-bot
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: TRACKER_API_URL
+        value: https://expensetrackernf.netlify.app
+      - key: USER_EMAIL
+        value: zsfoodvlogs@gmail.com
+      - key: USER_PASSWORD
+        value: ZainiBhai@007
+      - key: CURRENCY
+        value: Rs

@@ -5333,17 +5333,23 @@ document.addEventListener("DOMContentLoaded", () => {
 // =============================================
 // WHATSAPP LINKING & ACTIVITY LOGS CONTROLLER
 // =============================================
-const WA_LOCAL_BRIDGE = "http://localhost:3001";
 const WA_CLOUD_ENDPOINT = "/api/whatsapp";
+
+function getWhatsAppBridgeUrl() {
+  const custom = localStorage.getItem("wa_render_bridge");
+  if (custom && custom.trim()) return custom.trim().replace(/\/$/, "");
+  return "http://localhost:3001";
+}
 
 async function fetchWhatsAppState() {
   // Strategy:
-  // 1. Try local bridge (http://localhost:3001) for instant real-time data
-  // 2. If it fails or blocked by browser mixed content, fallback to cloud Netlify endpoint (/api/whatsapp)
+  // 1. Try configured bridge (Render Cloud URL or localhost:3001)
+  // 2. Fallback to Netlify cloud endpoint (/api/whatsapp) synced via Neon DB
+  const bridgeUrl = getWhatsAppBridgeUrl();
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 1800);
-    const res = await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/status`, {
+    const timeoutId = setTimeout(() => controller.abort(), 2200);
+    const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
@@ -5351,7 +5357,7 @@ async function fetchWhatsAppState() {
       return await res.json();
     }
   } catch (err) {
-    // Local bridge unreachable or blocked, try cloud endpoint
+    // Bridge unreachable or blocked, fallback to cloud endpoint
   }
 
   try {
@@ -5534,15 +5540,15 @@ async function simulateWhatsAppExpense() {
 
   try {
     let res;
-    // Try local bridge simulation first
+    // Try bridge simulation first (Render Cloud URL or localhost)
     try {
-      res = await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/simulate`, {
+      res = await fetch(`${getWhatsAppBridgeUrl()}/api/whatsapp/simulate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, execute: true }),
       });
     } catch (e) {
-      // Local bridge failed or offline
+      // Bridge failed or offline
     }
 
     if (res && res.ok) {
@@ -5602,7 +5608,7 @@ async function simulateWhatsAppExpense() {
 async function disconnectWhatsApp() {
   if (!confirm("Are you sure you want to unlink your WhatsApp device?")) return;
   try {
-    await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/disconnect`, { method: "POST" });
+    await fetch(`${getWhatsAppBridgeUrl()}/api/whatsapp/disconnect`, { method: "POST" });
     toast("WhatsApp unlinked", "info");
     loadWhatsAppStatus();
   } catch (e) {
@@ -5622,7 +5628,7 @@ async function disconnectWhatsApp() {
 
 async function clearWhatsAppLogs() {
   try {
-    await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/clear-logs`, { method: "POST" });
+    await fetch(`${getWhatsAppBridgeUrl()}/api/whatsapp/clear-logs`, { method: "POST" });
     toast("Logs cleared", "success");
     loadWhatsAppStatus();
   } catch (e) {
@@ -5661,6 +5667,45 @@ function initWhatsAppListeners() {
   if (simulateInput) {
     simulateInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") simulateWhatsAppExpense();
+    });
+  }
+
+  // Cloud Bridge URL configuration (Render / custom host)
+  const bridgeInput = document.getElementById("waBridgeUrlInput");
+  const saveBridgeBtn = document.getElementById("waSaveBridgeUrlBtn");
+  const bridgeTag = document.getElementById("waBridgeTypeTag");
+
+  const savedBridge = localStorage.getItem("wa_render_bridge");
+  if (bridgeInput && savedBridge) {
+    bridgeInput.value = savedBridge;
+    if (bridgeTag) {
+      bridgeTag.textContent = "Direct Cloud Bridge";
+      bridgeTag.style.background = "var(--green-dim)";
+      bridgeTag.style.color = "var(--green)";
+    }
+  }
+
+  if (saveBridgeBtn) {
+    saveBridgeBtn.addEventListener("click", () => {
+      const val = (bridgeInput?.value || "").trim().replace(/\/$/, "");
+      if (val) {
+        localStorage.setItem("wa_render_bridge", val);
+        toast("Cloud Bot URL saved!", "success");
+        if (bridgeTag) {
+          bridgeTag.textContent = "Direct Cloud Bridge";
+          bridgeTag.style.background = "var(--green-dim)";
+          bridgeTag.style.color = "var(--green)";
+        }
+      } else {
+        localStorage.removeItem("wa_render_bridge");
+        toast("Switched to Netlify Cloud Sync mode", "info");
+        if (bridgeTag) {
+          bridgeTag.textContent = "Netlify Sync Mode";
+          bridgeTag.style.background = "var(--accent-dim)";
+          bridgeTag.style.color = "var(--accent)";
+        }
+      }
+      loadWhatsAppStatus();
     });
   }
 

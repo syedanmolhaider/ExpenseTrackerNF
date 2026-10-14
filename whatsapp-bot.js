@@ -21,19 +21,29 @@ const fs = require("fs");
 const path = require("path");
 
 // --- Configuration ---
-const PORT = process.env.WHATSAPP_PORT || 3001;
+const PORT = process.env.PORT || process.env.WHATSAPP_PORT || 3001;
 const TRACKER_API_URL = process.env.TRACKER_API_URL || "https://expensetrackernf.netlify.app";
 const USER_EMAIL = process.env.USER_EMAIL || "zsfoodvlogs@gmail.com";
 const USER_PASSWORD = process.env.USER_PASSWORD || "ZainiBhai@007";
 const CURRENCY = process.env.CURRENCY || "Rs";
 const LOGS_FILE = path.join(__dirname, "whatsapp_logs.json");
 
-// Find Chrome or Edge executable on Windows
+// Find Chrome or Chromium executable on Windows, Linux, or Docker
 function findBrowserExecutable() {
-  const chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-  const edgePath = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
-  if (fs.existsSync(chromePath)) return chromePath;
-  if (fs.existsSync(edgePath)) return edgePath;
+  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
+    return process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  const candidatePaths = [
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return p;
+  }
   return undefined;
 }
 
@@ -708,6 +718,19 @@ const server = http.createServer(async (req, res) => {
     });
 
   // Endpoints:
+  if (pathname === "/" || pathname === "/health") {
+    return sendJson(200, {
+      status: "OK",
+      service: "King's Tracker WhatsApp Bot",
+      botStatus: botState.status,
+      connected: botState.status === "CONNECTED",
+      userNumber: botState.userNumber,
+      userName: botState.userName,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   if (pathname === "/api/whatsapp/status") {
     return sendJson(200, {
       status: botState.status,
@@ -800,9 +823,19 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Bridge Server] WhatsApp Dashboard Bridge listening on http://localhost:${PORT}`);
+  console.log(`[Bridge Server] WhatsApp Dashboard Bridge listening on port ${PORT}`);
   // Heartbeat sync every 15 seconds
   setInterval(syncToCloud, 15000);
+
+  // Keep Render Web Service awake if RENDER_EXTERNAL_URL is present
+  const externalUrl = process.env.RENDER_EXTERNAL_URL;
+  if (externalUrl) {
+    console.log(`[Keep-Alive] Configured self-ping for Render: ${externalUrl}`);
+    setInterval(() => {
+      const pingClient = externalUrl.startsWith("https") ? https : http;
+      pingClient.get(`${externalUrl}/health`, () => {}).on("error", () => {});
+    }, 10 * 60 * 1000); // Ping every 10 minutes
+  }
 });
 
 // Launch WhatsApp Client
