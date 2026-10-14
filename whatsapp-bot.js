@@ -96,6 +96,11 @@ function addLog(entry) {
 
 function getContainerMemoryMb() {
   try {
+    if (fs.existsSync("/sys/fs/cgroup/memory.stat")) {
+      const stat = fs.readFileSync("/sys/fs/cgroup/memory.stat", "utf-8");
+      const match = stat.match(/\banon\s+(\d+)/);
+      if (match) return Math.round(parseInt(match[1], 10) / 1024 / 1024);
+    }
     if (fs.existsSync("/sys/fs/cgroup/memory.current")) {
       const bytes = parseInt(fs.readFileSync("/sys/fs/cgroup/memory.current", "utf-8").trim(), 10);
       if (!isNaN(bytes) && bytes > 0) return Math.round(bytes / 1024 / 1024);
@@ -162,7 +167,7 @@ class NeonPostgresStore {
 
   async save(options) {
     if (!this.pool) return;
-    const zipPath = path.resolve("./.wwebjs_auth", `${options.session}.zip`);
+    const zipPath = path.join(__dirname, ".wwebjs_auth", `${options.session}.zip`);
     if (!fs.existsSync(zipPath)) return;
     try {
       const zipBuffer = fs.readFileSync(zipPath);
@@ -513,6 +518,7 @@ function createClientInstance() {
         "--disable-dev-shm-usage",
         "--disable-accelerated-2d-canvas",
         "--no-first-run",
+        "--no-zygote",
         "--disable-gpu",
         "--disable-software-rasterizer",
         "--disable-extensions",
@@ -967,6 +973,10 @@ server.listen(PORT, () => {
   setInterval(syncToCloud, 15000);
 
   setInterval(async () => {
+    if (botState.status === "STARTING" || botState.status === "SYNCING") {
+      if (global.gc) { try { global.gc(); } catch (e) {} }
+      return;
+    }
     const currentRam = getContainerMemoryMb();
     if (currentRam >= 450) {
       try {
@@ -999,16 +1009,22 @@ async function cleanupBeforeRetry() {
     client = null;
   }
 
-  const sessionDir = path.join(__dirname, ".wwebjs_auth", "session");
-  const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
-  for (const lockFile of lockFiles) {
-    const lockPath = path.join(sessionDir, lockFile);
-    try { fs.unlinkSync(lockPath); } catch (e) {}
-  }
-
-  if (initRetryCount >= 2 && fs.existsSync(sessionDir)) {
+  const authBase = path.join(__dirname, ".wwebjs_auth");
+  if (fs.existsSync(authBase)) {
     try {
-      fs.rmSync(sessionDir, { recursive: true, force: true });
+      const entries = fs.readdirSync(authBase);
+      for (const entry of entries) {
+        const fullPath = path.join(authBase, entry);
+        if (fs.statSync(fullPath).isDirectory()) {
+          const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
+          for (const lock of lockFiles) {
+            try { fs.unlinkSync(path.join(fullPath, lock)); } catch (e) {}
+          }
+          if (initRetryCount >= 2 && !entry.endsWith(".zip")) {
+            try { fs.rmSync(fullPath, { recursive: true, force: true }); } catch (e) {}
+          }
+        }
+      }
     } catch (e) {}
   }
 
