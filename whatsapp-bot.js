@@ -466,12 +466,18 @@ const authStrategy = new LocalAuth({
 });
 
 const client = new Client({
-  authTimeoutMs: 120000,
+  authTimeoutMs: 60000,
   qrMaxRetries: 0,
   authStrategy,
+  userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+  webVersionCache: {
+    type: "remote",
+    remotePath: "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1050248546-alpha.html",
+  },
   puppeteer: {
     headless: true,
     executablePath,
+    timeout: 60000,
     defaultViewport: { width: 800, height: 600 },
     args: [
       "--no-sandbox",
