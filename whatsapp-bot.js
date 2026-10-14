@@ -465,6 +465,20 @@ const authStrategy = new LocalAuth({
   dataPath: path.join(__dirname, ".wwebjs_auth"),
 });
 
+// Hook into browser launch for diagnostics
+const origAfterBrowserInit = authStrategy.afterBrowserInitialized.bind(authStrategy);
+authStrategy.afterBrowserInitialized = async function () {
+  await origAfterBrowserInit();
+  if (client && client.pupPage) {
+    client.pupPage.on("pageerror", (err) => {
+      console.warn("⚠️ [Browser Page Error]", err.message);
+    });
+    client.pupPage.on("error", (err) => {
+      console.warn("⚠️ [Browser Process Error]", err.message);
+    });
+  }
+};
+
 const client = new Client({
   authTimeoutMs: 120000,
   qrMaxRetries: 0,
@@ -474,6 +488,7 @@ const client = new Client({
     headless: true,
     executablePath,
     timeout: 120000,
+    protocolTimeout: 180000,
     defaultViewport: { width: 800, height: 600 },
     args: [
       "--no-sandbox",
@@ -976,6 +991,14 @@ async function cleanupBeforeRetry() {
   for (const lockFile of lockFiles) {
     const lockPath = path.join(sessionDir, lockFile);
     try { fs.unlinkSync(lockPath); } catch (e) {}
+  }
+
+  // If retrying multiple times, clean corrupt auth session state to guarantee fresh QR
+  if (initRetryCount >= 2 && fs.existsSync(sessionDir)) {
+    console.log("[WhatsApp] Clearing session folder to reset any corrupt auth state...");
+    try {
+      fs.rmSync(sessionDir, { recursive: true, force: true });
+    } catch (e) {}
   }
 
   if (global.gc) { try { global.gc(); } catch (e) {} }
