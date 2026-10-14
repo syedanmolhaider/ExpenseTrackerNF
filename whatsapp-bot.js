@@ -270,8 +270,11 @@ function parseExpenseMessage(text) {
     title = category !== "Other" ? category : "Expense";
   }
 
-  // Capitalize title
+  // Capitalize title and limit length to avoid DB payload limit errors on long forwarded text
   title = title.charAt(0).toUpperCase() + title.slice(1);
+  if (title.length > 90) {
+    title = title.substring(0, 87) + "...";
+  }
 
   return {
     isExpense: true,
@@ -369,11 +372,11 @@ async function logExpenseToTracker(expense) {
 
   const todayStr = new Date().toISOString().split("T")[0];
   const payload = {
-    title: expense.title,
+    title: (expense.title || "Expense").substring(0, 100),
     amount: expense.amount,
-    category: expense.category,
+    category: (expense.category || "Other").substring(0, 50),
     date: todayStr,
-    payment_method: expense.paymentMethod,
+    payment_method: expense.paymentMethod || "cash",
     notes: "Logged via WhatsApp",
   };
 
