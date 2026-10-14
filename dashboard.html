@@ -249,6 +249,7 @@
         </button>
         <button class="tab" data-tab="income" id="tab-income">💵 Income</button>
         <button class="tab" data-tab="trends" id="tab-trends">📈 Trends</button>
+        <button class="tab" data-tab="whatsapp" id="tab-whatsapp">💬 WhatsApp</button>
       </nav>
 
       <!-- Main Content -->
@@ -1049,6 +1050,229 @@
           <div class="card">
             <h2 class="card-title">📉 vs Last Month</h2>
             <div id="monthComparison" class="chart-area"></div>
+          </div>
+        </section>
+
+        <!-- ========== WHATSAPP LINKING SECTION ========== -->
+        <section class="tab-panel" id="panel-whatsapp">
+          <!-- WhatsApp Multi-Summary Strip -->
+          <div class="card summary-strip">
+            <div class="summary-cell">
+              <span class="summary-label">Connection Status</span>
+              <span class="summary-num" id="waStatusNum" style="color: var(--orange); display: flex; align-items: center; gap: 6px;">
+                <span class="wa-status-dot dot-orange" id="waStatusDot"></span>
+                <span id="waStatusLabel">Checking Bot...</span>
+              </span>
+            </div>
+            <div class="summary-cell">
+              <span class="summary-label">Linked Number</span>
+              <span class="summary-num text-blue" id="waLinkedNumber">Not Linked</span>
+            </div>
+            <div class="summary-cell">
+              <span class="summary-label">WhatsApp Expenses Logged</span>
+              <span class="summary-num text-green" id="waLoggedCount">0 (Rs 0)</span>
+            </div>
+            <div class="summary-cell">
+              <span class="summary-label">Last Activity</span>
+              <span class="summary-num" id="waLastActiveTime" style="font-size: 1rem;">Never</span>
+            </div>
+          </div>
+
+          <!-- Main Dual Cards Grid -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; margin-bottom: 24px;">
+            <!-- Left Card: Device Linkage & QR Code -->
+            <div class="card" style="padding: 24px; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+                  <div>
+                    <h2 class="card-title" style="margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                      📲 WhatsApp Device Link
+                    </h2>
+                    <p class="card-subtitle-sm" style="margin: 4px 0 0 0; color: var(--text-muted);">
+                      Link your WhatsApp via QR code without Meta business approval.
+                    </p>
+                  </div>
+                  <span id="waStatusBadge" class="badge badge-orange" style="font-weight: 700; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem;">
+                    🟡 SCAN QR
+                  </span>
+                </div>
+
+                <!-- QR Code Display Box -->
+                <div class="wa-qr-container" id="waQrContainer" style="text-align: center; padding: 24px 16px; background: rgba(255,255,255,0.02); border: 1px dashed var(--border); border-radius: 18px; margin: 16px 0; position: relative;">
+                  <!-- Loading / Placeholder -->
+                  <div id="waQrLoading" style="padding: 40px 0;">
+                    <div style="font-size: 2.2rem; margin-bottom: 12px; animation: spin-refresh 2s linear infinite; display: inline-block;">⏳</div>
+                    <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Connecting to WhatsApp Background Bot...</p>
+                    <small style="color: var(--text-muted); display: block; margin-top: 6px;">Make sure the background script is running via <code>start-whatsapp.bat</code></small>
+                  </div>
+
+                  <!-- QR Code Image -->
+                  <div id="waQrBox" style="display: none;">
+                    <img id="waQrImage" src="" alt="WhatsApp QR Code" style="max-width: 250px; width: 100%; height: auto; border-radius: 12px; background: white; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); margin-bottom: 12px;" />
+                    <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary);">
+                      Point your phone's camera at this QR code to connect.
+                    </p>
+                  </div>
+
+                  <!-- Connected State -->
+                  <div id="waConnectedBox" style="display: none; padding: 30px 10px;">
+                    <div style="font-size: 3.5rem; margin-bottom: 10px;">✅</div>
+                    <h3 style="color: var(--green); margin: 0 0 6px 0; font-size: 1.2rem;">Linked & Active!</h3>
+                    <p id="waConnectedAccountInfo" style="color: var(--text-secondary); font-size: 0.9rem; margin: 0 0 16px 0;">
+                      Connected as +92 3...
+                    </p>
+                    <span style="display: inline-block; background: var(--green-dim); color: var(--green); padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
+                      🟢 Listening for expense messages
+                    </span>
+                  </div>
+
+                  <!-- Service Offline State -->
+                  <div id="waOfflineBox" style="display: none; padding: 30px 10px;">
+                    <div style="font-size: 3rem; margin-bottom: 10px;">🔌</div>
+                    <h3 style="color: var(--orange); margin: 0 0 6px 0; font-size: 1.1rem;">Bot Service Not Running</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 14px 0;">
+                      Start the WhatsApp background process on your PC:
+                    </p>
+                    <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-family: monospace; font-size: 0.8rem; display: inline-block; color: var(--accent-light);">
+                      start-whatsapp.bat &nbsp;or&nbsp; npm run whatsapp
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 4 Simple Steps -->
+                <div style="background: rgba(255,255,255,0.02); border-radius: 14px; padding: 14px 16px; margin-top: 12px;">
+                  <span style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); display: block; margin-bottom: 8px;">
+                    4 Easy Steps to Link:
+                  </span>
+                  <ol style="margin: 0; padding-left: 20px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
+                    <li>Open <strong>WhatsApp</strong> on your phone</li>
+                    <li>Tap <strong>Settings (or 3 dots)</strong> ➔ <strong>Linked Devices</strong></li>
+                    <li>Tap <strong>Link a Device</strong></li>
+                    <li>Scan the QR code shown above</li>
+                  </ol>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                <button id="waRefreshBtn" class="btn btn-sm" style="flex: 1; min-width: 130px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                  🔄 Refresh Status
+                </button>
+                <button id="waDisconnectBtn" class="btn btn-sm btn-ghost" style="color: var(--red); border-color: rgba(255,69,58,0.3);" title="Unlink WhatsApp session">
+                  🔌 Unlink Device
+                </button>
+              </div>
+            </div>
+
+            <!-- Right Card: Message Syntax Guide & Simulator -->
+            <div class="card" style="padding: 24px; display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <div style="margin-bottom: 16px;">
+                  <h2 class="card-title" style="margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                    💬 How to Log from WhatsApp
+                  </h2>
+                  <p class="card-subtitle-sm" style="margin: 4px 0 0 0; color: var(--text-muted);">
+                    Open WhatsApp ➔ <strong>Message yourself</strong> (your own number chat) and type:
+                  </p>
+                </div>
+
+                <!-- Syntax Examples Table -->
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                  <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <strong style="color: var(--text-primary); font-family: monospace; font-size: 0.95rem;">Lunch 300</strong>
+                      <span style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Standard daily food spend</span>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--green); background: var(--green-dim); padding: 3px 8px; border-radius: 6px;">Food (Cash)</span>
+                  </div>
+
+                  <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <strong style="color: var(--text-primary); font-family: monospace; font-size: 0.95rem;">Petrol 1500 card</strong>
+                      <span style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Automatically logs to Platinum Card</span>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--blue); background: rgba(10,132,255,0.12); padding: 3px 8px; border-radius: 6px;">Transport (Platinum)</span>
+                  </div>
+
+                  <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <strong style="color: var(--text-primary); font-family: monospace; font-size: 0.95rem;">Milk 250 Groceries</strong>
+                      <span style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Explicit custom category</span>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--orange); background: var(--orange-dim); padding: 3px 8px; border-radius: 6px;">Groceries</span>
+                  </div>
+
+                  <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                      <strong style="color: var(--text-primary); font-family: monospace; font-size: 0.95rem;">today</strong>
+                      <span style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Returns today's total spending summary</span>
+                    </div>
+                    <span style="font-size: 0.75rem; color: var(--accent); background: var(--accent-dim); padding: 3px 8px; border-radius: 6px;">Status Report</span>
+                  </div>
+                </div>
+
+                <!-- Interactive Test Simulator Box -->
+                <div style="background: rgba(10, 132, 255, 0.05); border: 1px solid rgba(10, 132, 255, 0.2); border-radius: 16px; padding: 16px;">
+                  <label style="font-size: 0.85rem; font-weight: 700; color: var(--accent-light); margin-bottom: 6px; display: block;">
+                    ⚡ Live WhatsApp Message Simulator
+                  </label>
+                  <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 10px;">
+                    Test the parser right here! Enter a message below and simulate WhatsApp logging:
+                  </p>
+                  <div style="display: flex; gap: 8px;">
+                    <input type="text" id="waSimulateInput" placeholder="e.g. Biryani 450 card" style="flex: 1; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); font-size: 0.9rem;" />
+                    <button id="waSimulateBtn" class="btn btn-sm" style="white-space: nowrap;">
+                      Test & Log
+                    </button>
+                  </div>
+                  <div id="waSimulateResult" style="margin-top: 10px; font-size: 0.8rem; display: none; padding: 8px 12px; border-radius: 8px;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Card: Real-Time WhatsApp Activity Logs -->
+          <div class="card" style="padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+              <div>
+                <h2 class="card-title" style="margin: 0; font-size: 1.15rem; display: flex; align-items: center; gap: 8px;">
+                  📋 Live WhatsApp Sending & Activity Logs
+                </h2>
+                <p class="card-subtitle-sm" style="margin: 4px 0 0 0; color: var(--text-muted);">
+                  Live stream of incoming WhatsApp messages, parser results, and outgoing confirmations.
+                </p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label style="font-size: 0.8rem; color: var(--text-muted); display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <input type="checkbox" id="waAutoRefreshToggle" checked /> Auto-sync (3s)
+                </label>
+                <button id="waRefreshLogsBtn" class="btn btn-sm btn-ghost" title="Refresh logs">🔄 Refresh</button>
+                <button id="waClearLogsBtn" class="btn btn-sm btn-ghost" style="color: var(--text-muted);" title="Clear history">🗑️ Clear</button>
+              </div>
+            </div>
+
+            <!-- Logs Feed / Table -->
+            <div id="waLogsContainer" style="overflow-x: auto; max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; background: rgba(0,0,0,0.15);">
+              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02);">
+                    <th style="padding: 10px 14px; font-weight: 600; color: var(--text-muted); width: 90px;">Time</th>
+                    <th style="padding: 10px 14px; font-weight: 600; color: var(--text-muted); width: 100px;">Type</th>
+                    <th style="padding: 10px 14px; font-weight: 600; color: var(--text-muted);">Message Text</th>
+                    <th style="padding: 10px 14px; font-weight: 600; color: var(--text-muted);">Parsed Details</th>
+                    <th style="padding: 10px 14px; font-weight: 600; color: var(--text-muted); width: 90px;">Status</th>
+                    <th style="padding: 10px 14px; font-weight: 600; color: var(--text-muted);">Bot Response</th>
+                  </tr>
+                </thead>
+                <tbody id="waLogsTableBody">
+                  <tr>
+                    <td colspan="6" style="text-align: center; padding: 30px; color: var(--text-muted);">
+                      Waiting for WhatsApp activity... Send a message to see live logs here!
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       </main>

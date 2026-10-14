@@ -3,288 +3,9 @@
 // Budget + Daily Tracker + Income + Charts + Import/Export + Reset + Settings
 // =============================================
 
-// ------ State ------
-let currentMonth = new Date();
-let expenses = [];
-let allExpenses = [];
-let budgetItems = [];
-let nextBudgetItems = [];
-let incomeEntries = [];
-let tags = []; // All user tags
-let currentFilter = "";
-let currentTagFilter = "";
-let searchQuery = "";
-let userSettings = { month_start_day: 1, month_end_day: 0, currency: "Rs" };
-let selectedExpenseTags = []; // Tags selected for new expense
-let editSelectedExpenseTags = []; // Tags selected for editing expense
-let inHandAmount = 0; // Actual in-hand cash amount (base)
-let inHandBaseSpent = 0; // Total spent at the time in-hand was saved
-let cardLogs = []; // Card-specific past/external logs (bank app adjustments)
 
-// ------ Utility Functions ------
-// Escape HTML to prevent XSS
-function esc(str) {
-  if (!str) return "";
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
-}
 
-// Set default date to today in date input fields
-function setDefaultDate() {
-  const today = new Date().toISOString().split("T")[0];
-  const dateInputs = document.querySelectorAll('input[type="date"]');
-  dateInputs.forEach((input) => {
-    if (!input.value) {
-      input.value = today;
-    }
-  });
-}
 
-// Get today's date formatted as YYYY-MM-DD
-function getTodayString() {
-  return new Date().toISOString().split("T")[0];
-}
-
-// Toast notification
-function toast(message, type = "info") {
-  const el = document.getElementById("toast");
-  if (!el) return;
-  el.textContent = message;
-  el.className = `toast show ${type}`;
-  setTimeout(() => {
-    el.className = "toast";
-  }, 3000);
-}
-
-// Format currency
-function fmtCurr(amount) {
-  const num = parseFloat(amount) || 0;
-  return `${userSettings.currency} ${num.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-// Get category icon
-function getCatIcon(category) {
-  const cat = allCategories.find(
-    (c) => c.name.toLowerCase() === (category || "").toLowerCase(),
-  );
-  return cat ? cat.icon : "📦";
-}
-
-// Render selected tags
-function renderSelectedTags(tags, container) {
-  if (!container) return;
-  container.innerHTML = tags
-    .map(
-      (tag) => `
-    <span class="tag-badge">
-      ${esc(tag.name)}
-      <button type="button" class="tag-remove" data-tag-id="${tag.id}">&times;</button>
-    </span>
-  `,
-    )
-    .join("");
-}
-
-// Load recurring expenses
-async function loadRecurring() {
-  try {
-    const res = await fetch("/api/recurring", { credentials: "include" });
-    if (!res.ok) throw new Error();
-    const data = await res.json();
-    return data.recurring || [];
-  } catch (err) {
-    console.error("Failed to load recurring expenses:", err);
-    return [];
-  }
-}
-
-// Add tags to an expense
-async function addTagsToExpense(expenseId, tagList) {
-  if (!expenseId) return;
-  const ids = (tagList || []).map((t) => t.id);
-  console.log(`addTagsToExpense: expenseId=${expenseId}, tag_ids=`, ids);
-  try {
-    const res = await fetch(`/api/expense-tags/${expenseId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ tag_ids: ids }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      console.error(`addTagsToExpense FAILED (${res.status}):`, body);
-      toast("Failed to save tag: " + (body.error || res.status), "error");
-    } else {
-      console.log("addTagsToExpense OK:", body);
-    }
-  } catch (err) {
-    console.error("addTagsToExpense network error:", err);
-    toast("Network error saving tag", "error");
-  }
-}
-
-// Show loading state in a container
-function showLoading(containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  container.innerHTML =
-    '<div class="loading-spinner"><div class="spinner"></div><p>Loading...</p></div>';
-}
-
-// Format date for display
-function fmtDate(dateStr) {
-  if (!dateStr) return "";
-  const d = parseLocalDate(dateStr);
-  return d.toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-// Generate HTML for expense tags
-function getExpenseTagsHTML(expenseTags) {
-  if (!expenseTags || expenseTags.length === 0) return "";
-  return `<div class="expense-tags">${expenseTags
-    .map(
-      (tag) =>
-        `<span class="tag-badge" style="background: ${esc(tag.color || "#6c5ce7")}20; color: ${esc(tag.color || "#6c5ce7")}; border: 1px solid ${esc(tag.color || "#6c5ce7")}40;">${esc(tag.name)}</span>`,
-    )
-    .join("")}</div>`;
-}
-
-async function ensureTagExists(tagName) {
-  const normalized = tagName.toLowerCase().trim();
-  // First check local cache
-  let tag = tags.find(t => t.name.toLowerCase().trim() === normalized);
-  if (tag) {
-    console.log("ensureTagExists: found in local cache:", tag);
-    return tag;
-  }
-  // Try to create the tag
-  try {
-    const res = await fetch("/api/tags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ name: tagName, color: "#6c5ce7" })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      tags.push(data.tag);
-      console.log("ensureTagExists: created new tag:", data.tag);
-      return data.tag;
-    }
-    // If 400 (already exists), refresh the tags list and find it
-    if (res.status === 400) {
-      console.log("ensureTagExists: tag already exists in DB, refreshing tags list...");
-      const tagsRes = await fetch("/api/tags", { credentials: "include" });
-      if (tagsRes.ok) {
-        const tagsData = await tagsRes.json();
-        tags = tagsData.tags || [];
-        tag = tags.find(t => t.name.toLowerCase().trim() === normalized);
-        if (tag) {
-          console.log("ensureTagExists: found after refresh:", tag);
-          return tag;
-        }
-      }
-    }
-    console.error("ensureTagExists: could not find or create tag:", tagName);
-  } catch (err) {
-    console.error("ensureTagExists: network error:", err);
-  }
-  return null;
-}
-
-// Calculate remaining budget for a specific budget item
-function getBudgetItemRemaining(item) {
-  if (!item) return 0;
-  const limit = parseFloat(item.amount || 0);
-  const itemTitle = (item.title || "").toLowerCase().trim();
-  const itemCat = (item.category || "Other").toLowerCase().trim();
-
-  // Sum expenses tagged with this budget item title in this category
-  const spent = (expenses || []).reduce((sum, e) => {
-    const eTag = (e.budget_tag || "").toLowerCase().trim();
-    const eCat = (e.category || "Other").toLowerCase().trim();
-    if (eTag && eTag === itemTitle && eCat === itemCat) {
-      return sum + (parseFloat(e.amount || 0) || 0);
-    }
-    return sum;
-  }, 0);
-
-  return limit - spent;
-}
-
-function populateBudgetTags() {
-  const select = document.getElementById("expenseTag");
-  const editSelect = document.getElementById("editExpenseTag");
-  if (!select && !editSelect) return;
-
-  // Compute remaining for each item
-  const itemsWithStats = (budgetItems || []).map((item) => {
-    const remaining = getBudgetItemRemaining(item);
-    return { item, remaining };
-  });
-
-  // Sort: based on budget amount left (highest remaining first), then alphabetically.
-  // Items whose budget is full (remaining <= 0) naturally move to the bottom.
-  itemsWithStats.sort((a, b) => {
-    if (b.remaining !== a.remaining) {
-      return b.remaining - a.remaining;
-    }
-    return (a.item.title || "").localeCompare(b.item.title || "", undefined, {
-      sensitivity: "base",
-    });
-  });
-
-  const renderOptions = (targetSelect) => {
-    if (!targetSelect) return;
-    const currentVal = targetSelect.value;
-    targetSelect.innerHTML = '<option value="">None</option>';
-
-    itemsWithStats.forEach(({ item, remaining }) => {
-      const opt = document.createElement("option");
-      opt.value = item.title;
-      opt.dataset.category = item.category || "";
-      opt.dataset.title = item.title || "";
-      opt.dataset.remaining = remaining;
-
-      const remainingText =
-        remaining > 0
-          ? `${fmtCurr(remaining)} left`
-          : "Budget Full (0 left)";
-
-      opt.textContent = `${item.title} (${item.category}) — ${remainingText}`;
-      targetSelect.appendChild(opt);
-    });
-
-    if (currentVal) {
-      targetSelect.value = currentVal;
-    }
-  };
-
-  renderOptions(select);
-  renderOptions(editSelect);
-}
-
-// ------ Global Interceptor ------
-const originalFetch = window.fetch;
-window.fetch = async function (...args) {
-  const response = await originalFetch.apply(this, args);
-  if (
-    response.status === 401 &&
-    !args[0].includes("/api/me") &&
-    !args[0].includes("/api/login")
-  ) {
-    window.location.href = "/index.html";
-  }
-  return response;
-};
 
 // ------ Theme Toggle ------
 const getChartTheme = () => document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
@@ -374,39 +95,6 @@ function showError(message) {
   setTimeout(() => {
     errorDiv.remove();
   }, 5000);
-}
-
-// ------ Auth ------
-async function checkAuth() {
-  try {
-    const res = await fetch("/api/me", { credentials: "include" });
-    if (!res.ok) {
-      window.location.href = "/index.html";
-      return;
-    }
-    const data = await res.json();
-    document.getElementById("userName").textContent = data.user.name;
-  } catch {
-    window.location.href = "/index.html";
-  }
-}
-
-// ------ Settings API ------
-async function loadSettings() {
-  try {
-    const res = await fetch("/api/settings", { credentials: "include" });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.settings) {
-        userSettings.month_start_day =
-          parseInt(data.settings.month_start_day) || 1;
-        userSettings.month_end_day = parseInt(data.settings.month_end_day) || 0;
-        userSettings.currency = data.settings.currency || "Rs";
-      }
-    }
-  } catch (err) {
-    console.error("Failed to load settings", err);
-  }
 }
 
 // ------ Month Helpers ------
@@ -1043,6 +731,9 @@ function switchTab(tabName) {
     .forEach((p) => p.classList.remove("active"));
   document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add("active");
   document.getElementById(`panel-${tabName}`).classList.add("active");
+  if (tabName === "whatsapp" && typeof loadWhatsAppStatus === "function") {
+    loadWhatsAppStatus();
+  }
 }
 
 // ------ Load All Data ------
@@ -1108,6 +799,7 @@ async function refreshDashboard(showToastNotification = false) {
     }
   }
 }
+
 
 // =============================================
 // EXPENSES
@@ -1405,6 +1097,18 @@ function displayBudget() {
     return;
   }
 
+  // Preserve which category groups were expanded before re-rendering
+  const toggleAllBudgetBtn = document.getElementById("toggleAllBudgetBtn");
+  const previouslyExpanded = new Set();
+  const existingGroups = list.querySelectorAll(".budget-category-group");
+  existingGroups.forEach((group) => {
+    const sub = group.querySelector(".budget-sub-items");
+    const catGroup = group.dataset.categoryGroup;
+    if (sub && sub.style.display !== "none" && catGroup) {
+      previouslyExpanded.add(catGroup);
+    }
+  });
+
   // Group items by category
   const grouped = {};
   budgetItems.forEach((item) => {
@@ -1461,7 +1165,8 @@ function displayBudget() {
           ? ((categorySpent / categoryLimit) * 100).toFixed(0)
           : 0;
 
-      html += `<div class="budget-category-group">`;
+      const shouldOpen = previouslyExpanded.has(cat);
+      html += `<div class="budget-category-group" data-category-group="${esc(cat)}">`;
       // Category header with totals
       html += `
         <div class="budget-cat-header ${isOver ? "over-budget" : ""}">
@@ -1482,6 +1187,7 @@ function displayBudget() {
         </div>`;
 
       // Allocate expenses to items to prevent double-counting
+      html += `<div class="budget-sub-items" style="display: ${shouldOpen ? "block" : "none"};">`;
       let itemSpends = items.map(() => 0);
       let unallocatedSpent = 0;
 
@@ -1586,7 +1292,7 @@ function displayBudget() {
           </div>
         </div>`;
       }
-
+      html += `</div>`; // Close sub-items
       html += `</div>`;
     }
   );
@@ -1614,8 +1320,9 @@ function displayBudget() {
       0,
     );
 
+    const shouldOpenUnplanned = previouslyExpanded.has("__unplanned__");
     html += `
-    <div class="budget-category-group unplanned-section">
+    <div class="budget-category-group unplanned-section" data-category-group="__unplanned__">
       <div class="budget-cat-header over-budget" style="border-left: 3px solid var(--red); padding-left: 12px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <div style="font-weight: 700; font-size: 1.1rem; color: var(--red);">⚠️ Unplanned Spending <span class="budget-cat-count">${unplannedExpenses.length} expense${unplannedExpenses.length > 1 ? "s" : ""} in ${Object.keys(unplannedGrouped).length} categor${Object.keys(unplannedGrouped).length > 1 ? "ies" : "y"}</span></div>
@@ -1634,6 +1341,7 @@ function displayBudget() {
       </div>`;
 
     // Show each unplanned category with its expenses
+    html += `<div class="budget-sub-items" style="display: ${shouldOpenUnplanned ? "block" : "none"};">`;
     Object.entries(unplannedGrouped).forEach(([cat, catExps]) => {
       const catTotal = catExps.reduce((s, e) => s + parseFloat(e.amount), 0);
       catExps.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -1655,7 +1363,7 @@ function displayBudget() {
       // List each individual expense in this unplanned category
       catExps.forEach((exp) => {
         html += `
-        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0 4px 24px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid rgba(255,255,255,0.04);">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0 4px 24px; font-size: 0.82rem; color: var(--text-secondary); border-bottom: 1px solid var(--border);">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="color: var(--red); font-size: 0.7rem;">●</span>
             <span style="font-weight: 500;">${esc(exp.title)}</span>
@@ -1668,10 +1376,19 @@ function displayBudget() {
       html += `</div>`;
     });
 
+    html += `</div>`; // Close sub-items
     html += `</div>`;
   }
 
   list.innerHTML = html;
+
+  if (toggleAllBudgetBtn) {
+    const subItems = list.querySelectorAll(".budget-sub-items");
+    if (subItems.length > 0) {
+      const anyOpen = Array.from(subItems).some((el) => el.style.display !== "none");
+      toggleAllBudgetBtn.textContent = anyOpen ? "Collapse All ▲" : "Expand All ▼";
+    }
+  }
 }
 
 function updateBudgetSummary() {
@@ -1928,6 +1645,18 @@ function displayNextBudget() {
     return;
   }
 
+  // Preserve which category groups were expanded before re-rendering
+  const toggleAllNextBtn = document.getElementById("toggleAllNextBudgetBtn");
+  const previouslyNextExpanded = new Set();
+  const existingNextGroups = list.querySelectorAll(".budget-category-group");
+  existingNextGroups.forEach((group) => {
+    const sub = group.querySelector(".budget-sub-items");
+    const catGroup = group.dataset.categoryGroup;
+    if (sub && sub.style.display !== "none" && catGroup) {
+      previouslyNextExpanded.add(catGroup);
+    }
+  });
+
   // Group by category
   const grouped = {};
   nextBudgetItems.forEach((item) => {
@@ -1961,7 +1690,8 @@ function displayNextBudget() {
             : "text-blue"
         : "text-accent";
 
-    html += `<div class="budget-category-group next-budget-item">`;
+    const shouldOpenNext = previouslyNextExpanded.has(cat);
+    html += `<div class="budget-category-group next-budget-item" data-category-group="${esc(cat)}">`;
     // Category header
     html += `
       <div class="budget-cat-header">
@@ -1979,6 +1709,7 @@ function displayNextBudget() {
       </div>`;
 
     // Sub-items
+    html += `<div class="budget-sub-items" style="display: ${shouldOpenNext ? "block" : "none"};">`;
     items.forEach((item) => {
       const limit = parseFloat(item.amount);
       const itemPct =
@@ -2001,11 +1732,19 @@ function displayNextBudget() {
         </div>
       </div>`;
     });
-
+    html += `</div>`; // Close sub-items
     html += `</div>`;
   });
 
   list.innerHTML = html;
+
+  if (toggleAllNextBtn) {
+    const subItems = list.querySelectorAll(".budget-sub-items");
+    if (subItems.length > 0) {
+      const anyOpen = Array.from(subItems).some((el) => el.style.display !== "none");
+      toggleAllNextBtn.textContent = anyOpen ? "Collapse All ▲" : "Expand All ▼";
+    }
+  }
 }
 
 function updateNextBudgetSummary() {
@@ -2130,6 +1869,7 @@ async function handleCopyCurrentBudget() {
       "success",
     );
     await loadNextBudget(getNextMonthKey());
+    syncAllViews();
   } else if (skipped > 0) {
     toast(
       `All items already exist in next month's budget (${skipped} skipped)`,
@@ -3011,7 +2751,7 @@ function initInHandEditor() {
     const val = parseFloat(input.value) || 0;
     saveInHandAmount(val);
     editor.style.display = "none";
-    updateBalanceBar();
+    syncAllViews();
     toast("In-hand amount saved", "success");
   });
 
@@ -3201,7 +2941,7 @@ async function handleImport(e) {
     imported > 0 ? "success" : "error",
   );
   await loadExpenses(getMonthKey());
-  updateBalanceBar();
+  syncAllViews();
 }
 
 function parseCSVRow(line) {
@@ -3766,7 +3506,7 @@ function renderDailyRoomGauge() {
         startAngle: -135,
         endAngle: 135,
         hollow: { size: "60%", background: "transparent" },
-        track: { background: "rgba(255,255,255,0.06)", strokeWidth: "100%" },
+        track: { background: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', strokeWidth: '100%' },
         dataLabels: {
           name: {
             fontSize: "13px",
@@ -3904,7 +3644,7 @@ function renderSpendingPace() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.spendPace = new ApexCharts(el, options);
@@ -4049,7 +3789,7 @@ function renderCategoryDailyAllowance() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.catDaily = new ApexCharts(el, options);
@@ -4133,7 +3873,7 @@ function renderIncomeVsExpenseChart() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.incVsExp = new ApexCharts(el, options);
@@ -4182,7 +3922,7 @@ function renderSavingsGauge() {
         startAngle: -135,
         endAngle: 135,
         hollow: { size: "65%", background: "transparent" },
-        track: { background: "rgba(255,255,255,0.06)", strokeWidth: "100%" },
+        track: { background: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', strokeWidth: '100%' },
         dataLabels: {
           name: { fontSize: "14px", color: "#a0aec0", offsetY: 24 },
           value: {
@@ -4323,7 +4063,7 @@ function renderSpendingVelocity() {
       },
     },
     legend: { position: "bottom" },
-    grid: { borderColor: "rgba(255,255,255,0.05)" },
+    grid: { borderColor: getChartTheme() === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
   };
 
   apexInstances.velocity = new ApexCharts(el, options);
@@ -4903,6 +4643,7 @@ async function deleteTag(id) {
       toast("Tag deleted", "success");
       await loadTags();
       await loadExpenses(getMonthKey());
+      syncAllViews();
     } else {
       toast("Failed to delete tag", "error");
     }
@@ -5582,5 +5323,354 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
+
+  // Initialize WhatsApp Tab Listeners
+  if (typeof initWhatsAppListeners === 'function') {
+    initWhatsAppListeners();
+  }
 });
+
+// =============================================
+// WHATSAPP LINKING & ACTIVITY LOGS CONTROLLER
+// =============================================
+const WA_LOCAL_BRIDGE = "http://localhost:3001";
+const WA_CLOUD_ENDPOINT = "/api/whatsapp";
+
+async function fetchWhatsAppState() {
+  // Strategy:
+  // 1. Try local bridge (http://localhost:3001) for instant real-time data
+  // 2. If it fails or blocked by browser mixed content, fallback to cloud Netlify endpoint (/api/whatsapp)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1800);
+    const res = await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/status`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    // Local bridge unreachable or blocked, try cloud endpoint
+  }
+
+  try {
+    const res = await fetch(WA_CLOUD_ENDPOINT);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    // Both unreachable
+  }
+
+  return { status: "OFFLINE", connected: false };
+}
+
+async function loadWhatsAppStatus() {
+  const data = await fetchWhatsAppState();
+  updateWhatsAppUI(data);
+}
+
+function updateWhatsAppUI(data) {
+  const statusNum = document.getElementById("waStatusNum");
+  const statusDot = document.getElementById("waStatusDot");
+  const statusLabel = document.getElementById("waStatusLabel");
+  const statusBadge = document.getElementById("waStatusBadge");
+  const linkedNumber = document.getElementById("waLinkedNumber");
+  const loggedCount = document.getElementById("waLoggedCount");
+  const lastActiveTime = document.getElementById("waLastActiveTime");
+
+  const qrLoading = document.getElementById("waQrLoading");
+  const qrBox = document.getElementById("waQrBox");
+  const qrImage = document.getElementById("waQrImage");
+  const connectedBox = document.getElementById("waConnectedBox");
+  const connectedAccountInfo = document.getElementById("waConnectedAccountInfo");
+  const offlineBox = document.getElementById("waOfflineBox");
+
+  if (!statusLabel) return;
+
+  const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
+
+  // Stats
+  if (data.stats) {
+    loggedCount.textContent = `${data.stats.totalExpensesLogged || 0} (${curr} ${(data.stats.totalAmountLogged || 0).toLocaleString()})`;
+  }
+  if (data.lastActive) {
+    const d = new Date(data.lastActive);
+    lastActiveTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Handle statuses
+  if (data.status === "CONNECTED" || data.connected) {
+    if (statusDot) statusDot.className = "wa-status-dot dot-green";
+    statusLabel.textContent = "Linked & Active";
+    statusLabel.style.color = "var(--green)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-green";
+      statusBadge.textContent = "🟢 CONNECTED";
+    }
+
+    const phoneStr = data.userNumber ? `+${data.userNumber}` : "WhatsApp";
+    if (linkedNumber) linkedNumber.textContent = phoneStr;
+    if (connectedAccountInfo) connectedAccountInfo.textContent = `Connected as ${data.userName || "User"} (${phoneStr})`;
+
+    if (qrLoading) qrLoading.style.display = "none";
+    if (qrBox) qrBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "block";
+  } else if (data.status === "QR_READY" && data.qrDataUrl) {
+    if (statusDot) statusDot.className = "wa-status-dot dot-orange";
+    statusLabel.textContent = "Scan QR Code";
+    statusLabel.style.color = "var(--orange)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-orange";
+      statusBadge.textContent = "🟡 SCAN QR";
+    }
+    if (linkedNumber) linkedNumber.textContent = "Waiting for Scan";
+
+    if (qrImage) qrImage.src = data.qrDataUrl;
+    if (qrLoading) qrLoading.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "none";
+    if (qrBox) qrBox.style.display = "block";
+  } else if (data.status === "OFFLINE" || data.status === "DISCONNECTED") {
+    if (statusDot) statusDot.className = "wa-status-dot dot-red";
+    statusLabel.textContent = data.status === "DISCONNECTED" ? "Disconnected" : "Bot Offline";
+    statusLabel.style.color = "var(--red)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-red";
+      statusBadge.textContent = "🔴 OFFLINE";
+    }
+    if (linkedNumber) linkedNumber.textContent = "Not Connected";
+
+    if (qrLoading) qrLoading.style.display = "none";
+    if (qrBox) qrBox.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "block";
+  } else {
+    // Starting / Loading
+    if (statusDot) statusDot.className = "wa-status-dot dot-orange";
+    statusLabel.textContent = "Starting Bot...";
+    statusLabel.style.color = "var(--orange)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-orange";
+      statusBadge.textContent = "⏳ STARTING";
+    }
+
+    if (qrBox) qrBox.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "none";
+    if (qrLoading) qrLoading.style.display = "block";
+  }
+
+  // Update logs table
+  if (Array.isArray(data.logs)) {
+    renderWhatsAppLogs(data.logs);
+  }
+}
+
+function renderWhatsAppLogs(logs) {
+  const tbody = document.getElementById("waLogsTableBody");
+  if (!tbody) return;
+
+  if (logs.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 30px; color: var(--text-muted);">
+          Waiting for WhatsApp activity... Send a message like "Lunch 300" to see live logs here!
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
+
+  tbody.innerHTML = logs.map((log) => {
+    const isSuccess = log.status === "SUCCESS" || log.status === "CONNECTED";
+    const statusColor = isSuccess ? "var(--green)" : log.status === "ERROR" ? "var(--red)" : "var(--orange)";
+    const typeBadge = log.type === "EXPENSE"
+      ? `<span style="background:var(--green-dim);color:var(--green);padding:2px 6px;border-radius:4px;font-size:0.75rem;">💰 Expense</span>`
+      : log.type === "COMMAND"
+      ? `<span style="background:var(--accent-dim);color:var(--accent-light);padding:2px 6px;border-radius:4px;font-size:0.75rem;">⚡ Command</span>`
+      : `<span style="background:rgba(255,255,255,0.06);color:var(--text-muted);padding:2px 6px;border-radius:4px;font-size:0.75rem;">⚙️ ${log.type || "System"}</span>`;
+
+    let parsedHtml = "-";
+    if (log.parsed) {
+      const p = log.parsed;
+      const cardText = p.paymentMethod && p.paymentMethod !== "cash" ? ` [${p.paymentMethod}]` : "";
+      parsedHtml = `<strong>${esc(p.title)}</strong>: ${curr} ${p.amount} <small style="color:var(--text-muted);">(${esc(p.category)}${cardText})</small>`;
+    }
+
+    return `
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+        <td style="padding: 10px 14px; font-family: monospace; color: var(--text-muted);">${log.timestamp || "-"}</td>
+        <td style="padding: 10px 14px;">${typeBadge}</td>
+        <td style="padding: 10px 14px; font-weight: 500;">${esc(log.text || "")}</td>
+        <td style="padding: 10px 14px;">${parsedHtml}</td>
+        <td style="padding: 10px 14px;"><span style="color:${statusColor};font-weight:600;font-size:0.8rem;">● ${log.status}</span></td>
+        <td style="padding: 10px 14px; color: var(--text-secondary); font-size: 0.8rem;">${esc(log.reply || log.error || "-")}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function simulateWhatsAppExpense() {
+  const input = document.getElementById("waSimulateInput");
+  const resultBox = document.getElementById("waSimulateResult");
+  const text = input ? input.value.trim() : "";
+
+  if (!text) {
+    toast("Please enter a message like 'Lunch 300'", "error");
+    return;
+  }
+
+  const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
+
+  resultBox.style.display = "block";
+  resultBox.style.background = "rgba(255,255,255,0.05)";
+  resultBox.style.color = "var(--text-secondary)";
+  resultBox.textContent = "Processing simulation...";
+
+  try {
+    let res;
+    // Try local bridge simulation first
+    try {
+      res = await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, execute: true }),
+      });
+    } catch (e) {
+      // Local bridge failed or offline
+    }
+
+    if (res && res.ok) {
+      const data = await res.json();
+      resultBox.style.background = "var(--green-dim)";
+      resultBox.style.color = "var(--green)";
+      resultBox.innerHTML = `✅ <strong>Simulated & Logged:</strong> ${esc(data.parsed.title)} — ${curr} ${data.parsed.amount} (${data.parsed.category}, ${data.parsed.paymentMethod})`;
+      input.value = "";
+      toast("Expense logged via WhatsApp simulation!", "success");
+      loadWhatsAppStatus();
+      loadAll();
+      return;
+    }
+
+    // Fallback: parse locally in browser and save directly
+    const amountMatch = text.match(/(?:rs\.?|pkr\.?|\$)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i);
+    if (!amountMatch) {
+      resultBox.style.background = "var(--red-dim)";
+      resultBox.style.color = "var(--red)";
+      resultBox.textContent = "⚠️ Could not detect amount in message.";
+      return;
+    }
+
+    const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
+    let title = text.replace(amountMatch[0], "").trim() || "Expense";
+    let paymentMethod = "cash";
+    if (/\b(plat|platinum|card)\b/i.test(text)) paymentMethod = "platinum";
+    else if (/\b(flex|flexi)\b/i.test(text)) paymentMethod = "flexi";
+
+    let category = "Other";
+    if (/\b(food|lunch|dinner|breakfast|burger|pizza|biryani|chai)\b/i.test(text)) category = "Food";
+    else if (/\b(petrol|fuel|bike|car|ride)\b/i.test(text)) category = "Transport";
+    else if (/\b(grocery|milk|household)\b/i.test(text)) category = "Household";
+
+    await addExpense({
+      title,
+      amount,
+      category,
+      date: getTodayString(),
+      payment_method: paymentMethod,
+      notes: "Simulated WhatsApp Expense",
+    });
+
+    resultBox.style.background = "var(--green-dim)";
+    resultBox.style.color = "var(--green)";
+    resultBox.innerHTML = `✅ <strong>Simulated & Logged:</strong> ${esc(title)} — ${curr} ${amount} (${category}, ${paymentMethod})`;
+    input.value = "";
+    toast("Expense logged via simulation!", "success");
+    loadAll();
+  } catch (err) {
+    resultBox.style.background = "var(--red-dim)";
+    resultBox.style.color = "var(--red)";
+    resultBox.textContent = `Error: ${err.message}`;
+  }
+}
+
+async function disconnectWhatsApp() {
+  if (!confirm("Are you sure you want to unlink your WhatsApp device?")) return;
+  try {
+    await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/disconnect`, { method: "POST" });
+    toast("WhatsApp unlinked", "info");
+    loadWhatsAppStatus();
+  } catch (e) {
+    try {
+      await fetch(WA_CLOUD_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disconnect" }),
+      });
+      toast("WhatsApp unlinked", "info");
+      loadWhatsAppStatus();
+    } catch (err2) {
+      toast("Could not contact bot service", "error");
+    }
+  }
+}
+
+async function clearWhatsAppLogs() {
+  try {
+    await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/clear-logs`, { method: "POST" });
+    toast("Logs cleared", "success");
+    loadWhatsAppStatus();
+  } catch (e) {
+    try {
+      await fetch(WA_CLOUD_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear-logs" }),
+      });
+      toast("Logs cleared", "success");
+      loadWhatsAppStatus();
+    } catch (err2) {
+      const tbody = document.getElementById("waLogsTableBody");
+      if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Logs cleared</td></tr>`;
+    }
+  }
+}
+
+function initWhatsAppListeners() {
+  const refreshBtn = document.getElementById("waRefreshBtn");
+  if (refreshBtn) refreshBtn.addEventListener("click", loadWhatsAppStatus);
+
+  const refreshLogsBtn = document.getElementById("waRefreshLogsBtn");
+  if (refreshLogsBtn) refreshLogsBtn.addEventListener("click", loadWhatsAppStatus);
+
+  const clearLogsBtn = document.getElementById("waClearLogsBtn");
+  if (clearLogsBtn) clearLogsBtn.addEventListener("click", clearWhatsAppLogs);
+
+  const disconnectBtn = document.getElementById("waDisconnectBtn");
+  if (disconnectBtn) disconnectBtn.addEventListener("click", disconnectWhatsApp);
+
+  const simulateBtn = document.getElementById("waSimulateBtn");
+  if (simulateBtn) simulateBtn.addEventListener("click", simulateWhatsAppExpense);
+
+  const simulateInput = document.getElementById("waSimulateInput");
+  if (simulateInput) {
+    simulateInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") simulateWhatsAppExpense();
+    });
+  }
+
+  // Auto-polling when WhatsApp tab is active
+  setInterval(() => {
+    const panel = document.getElementById("panel-whatsapp");
+    const autoRefreshToggle = document.getElementById("waAutoRefreshToggle");
+    if (panel && panel.classList.contains("active") && (!autoRefreshToggle || autoRefreshToggle.checked)) {
+      loadWhatsAppStatus();
+    }
+  }, 3000);
+}
 

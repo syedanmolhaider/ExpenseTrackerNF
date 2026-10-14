@@ -185,6 +185,28 @@ exports.handler = async (event) => {
       console.log("✓ card_logs table already exists");
     }
 
+    // Create whatsapp_sync table
+    if (!(await tableExists('whatsapp_sync'))) {
+      await query(`
+        CREATE TABLE whatsapp_sync (
+          id VARCHAR(50) PRIMARY KEY,
+          status VARCHAR(50) DEFAULT 'DISCONNECTED',
+          connected BOOLEAN DEFAULT FALSE,
+          user_number VARCHAR(100),
+          user_name VARCHAR(100),
+          qr_data_url TEXT,
+          connected_at TIMESTAMP,
+          last_active TIMESTAMP,
+          stats JSONB,
+          logs JSONB,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log("✓ whatsapp_sync table created");
+    } else {
+      console.log("✓ whatsapp_sync table already exists");
+    }
+
     // Create indexes for better performance
     await query(
       `CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id)`,
@@ -219,6 +241,7 @@ exports.handler = async (event) => {
         "expense_tag_map",
         "user_categories",
         "card_logs",
+        "whatsapp_sync",
       ],
     });
   } catch (error) {

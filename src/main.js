@@ -731,6 +731,9 @@ function switchTab(tabName) {
     .forEach((p) => p.classList.remove("active"));
   document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add("active");
   document.getElementById(`panel-${tabName}`).classList.add("active");
+  if (tabName === "whatsapp" && typeof loadWhatsAppStatus === "function") {
+    loadWhatsAppStatus();
+  }
 }
 
 // ------ Load All Data ------
@@ -5320,4 +5323,354 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
   });
+
+  // Initialize WhatsApp Tab Listeners
+  if (typeof initWhatsAppListeners === 'function') {
+    initWhatsAppListeners();
+  }
 });
+
+// =============================================
+// WHATSAPP LINKING & ACTIVITY LOGS CONTROLLER
+// =============================================
+const WA_LOCAL_BRIDGE = "http://localhost:3001";
+const WA_CLOUD_ENDPOINT = "/api/whatsapp";
+
+async function fetchWhatsAppState() {
+  // Strategy:
+  // 1. Try local bridge (http://localhost:3001) for instant real-time data
+  // 2. If it fails or blocked by browser mixed content, fallback to cloud Netlify endpoint (/api/whatsapp)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1800);
+    const res = await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/status`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    // Local bridge unreachable or blocked, try cloud endpoint
+  }
+
+  try {
+    const res = await fetch(WA_CLOUD_ENDPOINT);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    // Both unreachable
+  }
+
+  return { status: "OFFLINE", connected: false };
+}
+
+async function loadWhatsAppStatus() {
+  const data = await fetchWhatsAppState();
+  updateWhatsAppUI(data);
+}
+
+function updateWhatsAppUI(data) {
+  const statusNum = document.getElementById("waStatusNum");
+  const statusDot = document.getElementById("waStatusDot");
+  const statusLabel = document.getElementById("waStatusLabel");
+  const statusBadge = document.getElementById("waStatusBadge");
+  const linkedNumber = document.getElementById("waLinkedNumber");
+  const loggedCount = document.getElementById("waLoggedCount");
+  const lastActiveTime = document.getElementById("waLastActiveTime");
+
+  const qrLoading = document.getElementById("waQrLoading");
+  const qrBox = document.getElementById("waQrBox");
+  const qrImage = document.getElementById("waQrImage");
+  const connectedBox = document.getElementById("waConnectedBox");
+  const connectedAccountInfo = document.getElementById("waConnectedAccountInfo");
+  const offlineBox = document.getElementById("waOfflineBox");
+
+  if (!statusLabel) return;
+
+  const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
+
+  // Stats
+  if (data.stats) {
+    loggedCount.textContent = `${data.stats.totalExpensesLogged || 0} (${curr} ${(data.stats.totalAmountLogged || 0).toLocaleString()})`;
+  }
+  if (data.lastActive) {
+    const d = new Date(data.lastActive);
+    lastActiveTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Handle statuses
+  if (data.status === "CONNECTED" || data.connected) {
+    if (statusDot) statusDot.className = "wa-status-dot dot-green";
+    statusLabel.textContent = "Linked & Active";
+    statusLabel.style.color = "var(--green)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-green";
+      statusBadge.textContent = "🟢 CONNECTED";
+    }
+
+    const phoneStr = data.userNumber ? `+${data.userNumber}` : "WhatsApp";
+    if (linkedNumber) linkedNumber.textContent = phoneStr;
+    if (connectedAccountInfo) connectedAccountInfo.textContent = `Connected as ${data.userName || "User"} (${phoneStr})`;
+
+    if (qrLoading) qrLoading.style.display = "none";
+    if (qrBox) qrBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "block";
+  } else if (data.status === "QR_READY" && data.qrDataUrl) {
+    if (statusDot) statusDot.className = "wa-status-dot dot-orange";
+    statusLabel.textContent = "Scan QR Code";
+    statusLabel.style.color = "var(--orange)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-orange";
+      statusBadge.textContent = "🟡 SCAN QR";
+    }
+    if (linkedNumber) linkedNumber.textContent = "Waiting for Scan";
+
+    if (qrImage) qrImage.src = data.qrDataUrl;
+    if (qrLoading) qrLoading.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "none";
+    if (qrBox) qrBox.style.display = "block";
+  } else if (data.status === "OFFLINE" || data.status === "DISCONNECTED") {
+    if (statusDot) statusDot.className = "wa-status-dot dot-red";
+    statusLabel.textContent = data.status === "DISCONNECTED" ? "Disconnected" : "Bot Offline";
+    statusLabel.style.color = "var(--red)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-red";
+      statusBadge.textContent = "🔴 OFFLINE";
+    }
+    if (linkedNumber) linkedNumber.textContent = "Not Connected";
+
+    if (qrLoading) qrLoading.style.display = "none";
+    if (qrBox) qrBox.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "block";
+  } else {
+    // Starting / Loading
+    if (statusDot) statusDot.className = "wa-status-dot dot-orange";
+    statusLabel.textContent = "Starting Bot...";
+    statusLabel.style.color = "var(--orange)";
+    if (statusBadge) {
+      statusBadge.className = "badge badge-orange";
+      statusBadge.textContent = "⏳ STARTING";
+    }
+
+    if (qrBox) qrBox.style.display = "none";
+    if (connectedBox) connectedBox.style.display = "none";
+    if (offlineBox) offlineBox.style.display = "none";
+    if (qrLoading) qrLoading.style.display = "block";
+  }
+
+  // Update logs table
+  if (Array.isArray(data.logs)) {
+    renderWhatsAppLogs(data.logs);
+  }
+}
+
+function renderWhatsAppLogs(logs) {
+  const tbody = document.getElementById("waLogsTableBody");
+  if (!tbody) return;
+
+  if (logs.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align: center; padding: 30px; color: var(--text-muted);">
+          Waiting for WhatsApp activity... Send a message like "Lunch 300" to see live logs here!
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
+
+  tbody.innerHTML = logs.map((log) => {
+    const isSuccess = log.status === "SUCCESS" || log.status === "CONNECTED";
+    const statusColor = isSuccess ? "var(--green)" : log.status === "ERROR" ? "var(--red)" : "var(--orange)";
+    const typeBadge = log.type === "EXPENSE"
+      ? `<span style="background:var(--green-dim);color:var(--green);padding:2px 6px;border-radius:4px;font-size:0.75rem;">💰 Expense</span>`
+      : log.type === "COMMAND"
+      ? `<span style="background:var(--accent-dim);color:var(--accent-light);padding:2px 6px;border-radius:4px;font-size:0.75rem;">⚡ Command</span>`
+      : `<span style="background:rgba(255,255,255,0.06);color:var(--text-muted);padding:2px 6px;border-radius:4px;font-size:0.75rem;">⚙️ ${log.type || "System"}</span>`;
+
+    let parsedHtml = "-";
+    if (log.parsed) {
+      const p = log.parsed;
+      const cardText = p.paymentMethod && p.paymentMethod !== "cash" ? ` [${p.paymentMethod}]` : "";
+      parsedHtml = `<strong>${esc(p.title)}</strong>: ${curr} ${p.amount} <small style="color:var(--text-muted);">(${esc(p.category)}${cardText})</small>`;
+    }
+
+    return `
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+        <td style="padding: 10px 14px; font-family: monospace; color: var(--text-muted);">${log.timestamp || "-"}</td>
+        <td style="padding: 10px 14px;">${typeBadge}</td>
+        <td style="padding: 10px 14px; font-weight: 500;">${esc(log.text || "")}</td>
+        <td style="padding: 10px 14px;">${parsedHtml}</td>
+        <td style="padding: 10px 14px;"><span style="color:${statusColor};font-weight:600;font-size:0.8rem;">● ${log.status}</span></td>
+        <td style="padding: 10px 14px; color: var(--text-secondary); font-size: 0.8rem;">${esc(log.reply || log.error || "-")}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function simulateWhatsAppExpense() {
+  const input = document.getElementById("waSimulateInput");
+  const resultBox = document.getElementById("waSimulateResult");
+  const text = input ? input.value.trim() : "";
+
+  if (!text) {
+    toast("Please enter a message like 'Lunch 300'", "error");
+    return;
+  }
+
+  const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
+
+  resultBox.style.display = "block";
+  resultBox.style.background = "rgba(255,255,255,0.05)";
+  resultBox.style.color = "var(--text-secondary)";
+  resultBox.textContent = "Processing simulation...";
+
+  try {
+    let res;
+    // Try local bridge simulation first
+    try {
+      res = await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/simulate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, execute: true }),
+      });
+    } catch (e) {
+      // Local bridge failed or offline
+    }
+
+    if (res && res.ok) {
+      const data = await res.json();
+      resultBox.style.background = "var(--green-dim)";
+      resultBox.style.color = "var(--green)";
+      resultBox.innerHTML = `✅ <strong>Simulated & Logged:</strong> ${esc(data.parsed.title)} — ${curr} ${data.parsed.amount} (${data.parsed.category}, ${data.parsed.paymentMethod})`;
+      input.value = "";
+      toast("Expense logged via WhatsApp simulation!", "success");
+      loadWhatsAppStatus();
+      loadAll();
+      return;
+    }
+
+    // Fallback: parse locally in browser and save directly
+    const amountMatch = text.match(/(?:rs\.?|pkr\.?|\$)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)/i);
+    if (!amountMatch) {
+      resultBox.style.background = "var(--red-dim)";
+      resultBox.style.color = "var(--red)";
+      resultBox.textContent = "⚠️ Could not detect amount in message.";
+      return;
+    }
+
+    const amount = parseFloat(amountMatch[1].replace(/,/g, ""));
+    let title = text.replace(amountMatch[0], "").trim() || "Expense";
+    let paymentMethod = "cash";
+    if (/\b(plat|platinum|card)\b/i.test(text)) paymentMethod = "platinum";
+    else if (/\b(flex|flexi)\b/i.test(text)) paymentMethod = "flexi";
+
+    let category = "Other";
+    if (/\b(food|lunch|dinner|breakfast|burger|pizza|biryani|chai)\b/i.test(text)) category = "Food";
+    else if (/\b(petrol|fuel|bike|car|ride)\b/i.test(text)) category = "Transport";
+    else if (/\b(grocery|milk|household)\b/i.test(text)) category = "Household";
+
+    await addExpense({
+      title,
+      amount,
+      category,
+      date: getTodayString(),
+      payment_method: paymentMethod,
+      notes: "Simulated WhatsApp Expense",
+    });
+
+    resultBox.style.background = "var(--green-dim)";
+    resultBox.style.color = "var(--green)";
+    resultBox.innerHTML = `✅ <strong>Simulated & Logged:</strong> ${esc(title)} — ${curr} ${amount} (${category}, ${paymentMethod})`;
+    input.value = "";
+    toast("Expense logged via simulation!", "success");
+    loadAll();
+  } catch (err) {
+    resultBox.style.background = "var(--red-dim)";
+    resultBox.style.color = "var(--red)";
+    resultBox.textContent = `Error: ${err.message}`;
+  }
+}
+
+async function disconnectWhatsApp() {
+  if (!confirm("Are you sure you want to unlink your WhatsApp device?")) return;
+  try {
+    await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/disconnect`, { method: "POST" });
+    toast("WhatsApp unlinked", "info");
+    loadWhatsAppStatus();
+  } catch (e) {
+    try {
+      await fetch(WA_CLOUD_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "disconnect" }),
+      });
+      toast("WhatsApp unlinked", "info");
+      loadWhatsAppStatus();
+    } catch (err2) {
+      toast("Could not contact bot service", "error");
+    }
+  }
+}
+
+async function clearWhatsAppLogs() {
+  try {
+    await fetch(`${WA_LOCAL_BRIDGE}/api/whatsapp/clear-logs`, { method: "POST" });
+    toast("Logs cleared", "success");
+    loadWhatsAppStatus();
+  } catch (e) {
+    try {
+      await fetch(WA_CLOUD_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear-logs" }),
+      });
+      toast("Logs cleared", "success");
+      loadWhatsAppStatus();
+    } catch (err2) {
+      const tbody = document.getElementById("waLogsTableBody");
+      if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);">Logs cleared</td></tr>`;
+    }
+  }
+}
+
+function initWhatsAppListeners() {
+  const refreshBtn = document.getElementById("waRefreshBtn");
+  if (refreshBtn) refreshBtn.addEventListener("click", loadWhatsAppStatus);
+
+  const refreshLogsBtn = document.getElementById("waRefreshLogsBtn");
+  if (refreshLogsBtn) refreshLogsBtn.addEventListener("click", loadWhatsAppStatus);
+
+  const clearLogsBtn = document.getElementById("waClearLogsBtn");
+  if (clearLogsBtn) clearLogsBtn.addEventListener("click", clearWhatsAppLogs);
+
+  const disconnectBtn = document.getElementById("waDisconnectBtn");
+  if (disconnectBtn) disconnectBtn.addEventListener("click", disconnectWhatsApp);
+
+  const simulateBtn = document.getElementById("waSimulateBtn");
+  if (simulateBtn) simulateBtn.addEventListener("click", simulateWhatsAppExpense);
+
+  const simulateInput = document.getElementById("waSimulateInput");
+  if (simulateInput) {
+    simulateInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") simulateWhatsAppExpense();
+    });
+  }
+
+  // Auto-polling when WhatsApp tab is active
+  setInterval(() => {
+    const panel = document.getElementById("panel-whatsapp");
+    const autoRefreshToggle = document.getElementById("waAutoRefreshToggle");
+    if (panel && panel.classList.contains("active") && (!autoRefreshToggle || autoRefreshToggle.checked)) {
+      loadWhatsAppStatus();
+    }
+  }, 3000);
+}
+
