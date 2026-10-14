@@ -466,9 +466,9 @@ authStrategy.afterBrowserInitialized = async function () {
   await origAfterBrowserInit();
   if (client && client.pupPage) {
     try {
-      // Allow 120s timeout on cloud containers so slow vCPU never triggers "Timed out after waiting 30000ms"
-      client.pupPage.setDefaultTimeout(120000);
-      client.pupPage.setDefaultNavigationTimeout(120000);
+      // Allow 180s timeout on cloud containers so slow vCPU never triggers "Timed out after waiting" errors
+      client.pupPage.setDefaultTimeout(180000);
+      client.pupPage.setDefaultNavigationTimeout(180000);
 
       const cdp = await client.pupPage.target().createCDPSession();
       await cdp.send("Network.enable");
@@ -487,7 +487,7 @@ authStrategy.afterBrowserInitialized = async function () {
 };
 
 const client = new Client({
-  authTimeoutMs: 120000,
+  authTimeoutMs: 180000,
   qrMaxRetries: 0,
   authStrategy,
   puppeteer: {
@@ -997,13 +997,34 @@ server.listen(PORT, () => {
 let initRetryCount = 0;
 const MAX_INIT_RETRIES = 5;
 
-function initializeWithRetry() {
+async function cleanupBeforeRetry() {
+  try {
+    await client.destroy().catch(() => {});
+  } catch (e) {}
+
+  // Remove Chromium singleton lock files that prevent re-launch
+  const sessionDir = path.join(__dirname, ".wwebjs_auth", "session");
+  const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
+  for (const lockFile of lockFiles) {
+    const lockPath = path.join(sessionDir, lockFile);
+    try { fs.unlinkSync(lockPath); } catch (e) {}
+  }
+
+  if (global.gc) { try { global.gc(); } catch (e) {} }
+}
+
+async function initializeWithRetry() {
+  if (initRetryCount > 0) {
+    console.log(`[WhatsApp] Cleaning up previous browser instance before retry...`);
+    await cleanupBeforeRetry();
+  }
+
   console.log(`[WhatsApp] Starting WhatsApp Web client... (attempt ${initRetryCount + 1})`);
   botState.status = "STARTING";
   botState.lastError = null;
   syncToCloud();
 
-  client.initialize().catch((err) => {
+  client.initialize().catch(async (err) => {
     const errMsg = typeof err === "string" ? err : (err.message || String(err));
     botState.status = "ERROR";
     botState.lastError = errMsg;
@@ -1011,7 +1032,7 @@ function initializeWithRetry() {
 
     initRetryCount++;
     if (initRetryCount < MAX_INIT_RETRIES) {
-      const delay = Math.min(10000 * initRetryCount, 60000);
+      const delay = Math.min(15000 * initRetryCount, 60000);
       console.log(`[WhatsApp] Retrying initialization in ${delay / 1000}s (attempt ${initRetryCount + 1}/${MAX_INIT_RETRIES})...`);
       addLog({
         type: "SYSTEM",
@@ -1034,3 +1055,4 @@ function initializeWithRetry() {
 
 // Launch WhatsApp Client
 initializeWithRetry();
+
