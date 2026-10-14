@@ -1,4 +1,14 @@
-const { Client, RemoteAuth, LocalAuth } = require("whatsapp-web.js");
+let makeWASocket, DisconnectReason;
+
+async function initBaileysModule() {
+  if (!makeWASocket) {
+    const b = await import("@whiskeysockets/baileys");
+    makeWASocket = b.default?.default || b.default || b.makeWASocket;
+    DisconnectReason = b.DisconnectReason;
+  }
+  return { makeWASocket, DisconnectReason };
+}
+
 const { Pool } = require("pg");
 const qrcode = require("qrcode");
 const qrcodeTerminal = require("qrcode-terminal");
@@ -6,6 +16,8 @@ const http = require("http");
 const https = require("https");
 const fs = require("fs");
 const path = require("path");
+const pino = require("pino");
+const { useNeonPostgresAuthState } = require("./neonAuthState");
 
 const PORT = process.env.PORT || process.env.WHATSAPP_PORT || 3001;
 const TRACKER_API_URL = process.env.TRACKER_API_URL || "https://expensetrackernf.netlify.app";
@@ -13,24 +25,6 @@ const USER_EMAIL = process.env.USER_EMAIL || "zsfoodvlogs@gmail.com";
 const USER_PASSWORD = process.env.USER_PASSWORD || "ZainiBhai@007";
 const CURRENCY = process.env.CURRENCY || "Rs";
 const LOGS_FILE = path.join(__dirname, "whatsapp_logs.json");
-
-function findBrowserExecutable() {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH && fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH)) {
-    return process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-  const candidatePaths = [
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-  ];
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) return p;
-  }
-  return undefined;
-}
 
 const botState = {
   status: "STARTING",
@@ -139,82 +133,6 @@ async function syncToCloud() {
   } catch (e) {}
 }
 
-class NeonPostgresStore {
-  constructor(pool) {
-    this.pool = pool;
-    this.cache = new Map();
-    this.loaded = false;
-  }
-
-  async init() {
-    if (!this.pool || this.loaded) return;
-    try {
-      await this.pool.query(
-        "CREATE TABLE IF NOT EXISTS whatsapp_remote_sessions (session_id VARCHAR(100) PRIMARY KEY, session_zip BYTEA NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
-      );
-      const res = await this.pool.query("SELECT session_id FROM whatsapp_remote_sessions");
-      for (const row of res.rows) {
-        this.cache.set(row.session_id, true);
-      }
-      this.loaded = true;
-      console.log("db auth loaded");
-    } catch (e) {
-      console.log("source not found");
-    }
-  }
-
-  async sessionExists(options) {
-    await this.init();
-    return !!this.cache.get(options.session);
-  }
-
-  async save(options) {
-    if (!this.pool) return;
-    const zipPath = path.join(__dirname, ".wwebjs_auth", `${options.session}.zip`);
-    if (!fs.existsSync(zipPath)) return;
-    try {
-      const zipBuffer = fs.readFileSync(zipPath);
-      await this.pool.query(
-        "INSERT INTO whatsapp_remote_sessions (session_id, session_zip, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT (session_id) DO UPDATE SET session_zip = EXCLUDED.session_zip, updated_at = CURRENT_TIMESTAMP",
-        [options.session, zipBuffer]
-      );
-      this.cache.set(options.session, true);
-      console.log("db auth saved");
-    } catch (e) {
-      console.log("source not found");
-    }
-  }
-
-  async extract(options) {
-    if (!this.pool) return;
-    try {
-      const res = await this.pool.query(
-        "SELECT session_zip FROM whatsapp_remote_sessions WHERE session_id = $1",
-        [options.session]
-      );
-      if (res.rows.length > 0 && res.rows[0].session_zip) {
-        fs.mkdirSync(path.dirname(options.path), { recursive: true });
-        fs.writeFileSync(options.path, res.rows[0].session_zip);
-        this.cache.set(options.session, true);
-        console.log("db auth loaded");
-      }
-    } catch (e) {
-      console.log("source not found");
-    }
-  }
-
-  async delete(options) {
-    if (!this.pool) return;
-    try {
-      await this.pool.query("DELETE FROM whatsapp_remote_sessions WHERE session_id = $1", [options.session]);
-      this.cache.delete(options.session);
-      console.log("db auth saved");
-    } catch (e) {
-      console.log("source not found");
-    }
-  }
-}
-
 let dbPool = null;
 if (process.env.DATABASE_URL) {
   try {
@@ -225,14 +143,11 @@ if (process.env.DATABASE_URL) {
       idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
     });
+    console.log("db auth loaded");
   } catch (e) {
-    console.log("source not found");
+    console.log("db init error:", e.message);
   }
-} else {
-  console.log("source not found");
 }
-
-const neonStore = new NeonPostgresStore(dbPool);
 
 const CATEGORY_KEYWORDS = {
   "Food": [
@@ -248,50 +163,50 @@ const CATEGORY_KEYWORDS = {
   ],
   "Household": [
     "grocery", "groceries", "rashan", "ration", "milk", "eggs", "vegetable", "vegetables", "fruit",
-    "fruits", "atta", "oil", "ghee", "supermarket", "meat", "chicken", "beef", "mutton", "household",
-    "mart", "soap", "detergent", "surf", "tissue", "sauda"
+    "fruits", "meat", "chicken", "beef", "mutton", "fish", "oil", "ghee", "atta", "flour", "rice",
+    "sugar", "daal", "pulse", "spices", "masala", "surf", "detergent", "soap", "shampoo", "tissue",
+    "cleaner", "mop", "sabzi", "gosht", "chawal", "cheeni", "kitchen", "household"
   ],
-  "Bills": [
-    "bill", "bijli", "electricity", "lesco", "kelectric", "iesco", "fesco", "gepco", "gas",
-    "sui gas", "ssgc", "sngpl", "internet", "wifi", "net", "nayatel", "stormfiber", "mobile bill",
-    "ptcl", "water", "pani", "utility", "easyload", "load", "package", "jazz", "zong", "telenor", "ufone"
+  "Medical": [
+    "medicine", "doctor", "hospital", "clinic", "pharmacy", "medical", "checkup", "test", "lab",
+    "blood test", "xray", "panadol", "disprin", "tablet", "syrup", "injection", "dawa", "ilaj"
   ],
-  "Healthcare": [
-    "medicine", "medicines", "dawa", "dawaii", "panadol", "doctor", "hospital", "pharmacy",
-    "clinic", "dentist", "medical", "checkup", "tablet", "syrup", "test", "lab", "blood test"
+  "Utilities": [
+    "electricity", "bijli", "bill", "gas", "water", "paani", "internet", "wifi", "ptcl", "stormfiber",
+    "nayatel", "mobile load", "easyload", "jazzcash", "easypaisa", "maintenance", "utility"
+  ],
+  "Entertainment": [
+    "cinema", "movie", "netflix", "game", "gaming", "outing", "trip", "tour", "amusement", "fun",
+    "concert", "match", "cricket"
+  ],
+  "Personal": [
+    "haircut", "salon", "barber", "grooming", "gym", "fitness", "perfume", "watch", "cosmetics",
+    "cream", "lotion", "spa"
+  ],
+  "Apparel": [
+    "clothes", "shirt", "pant", "shoes", "dress", "kurta", "shalwar", "shopping", "fabric", "tailor",
+    "suit", "chappal", "sandals", "sneakers", "socks", "belt"
   ],
   "Education": [
-    "school", "college", "uni", "university", "fees", "fee", "tuition", "academy", "books",
-    "book", "course", "stationery", "exam"
+    "fee", "school", "college", "university", "tuition", "academy", "books", "stationery", "course",
+    "exam", "admission", "kitab", "copy", "pen"
   ],
-  "Personal Care": [
-    "gym", "fitness", "workout", "protein", "salon", "barber", "haircut", "nayee", "shampoo",
-    "perfume", "skincare", "cream", "facial"
+  "Electronics": [
+    "charger", "cable", "headphones", "airpods", "mobile", "phone", "laptop", "battery", "repair",
+    "screen", "cover", "protector", "mouse", "keyboard"
   ],
-  "Shopping": [
-    "shopping", "clothes", "shirt", "pant", "shoes", "daraz", "mall", "watch", "dress",
-    "suit", "kapray", "jootay"
-  ],
-  "Maintenance": [
-    "maintenance", "repair", "car wash", "plumber", "electrician", "mechanic", "tyre",
-    "puncture", "service", "oil change"
-  ],
-  "Loan": ["loan", "debt", "installment", "instalment", "emi", "qarz", "udhar", "committee", "kameti"],
-  "Rent": ["rent", "kiraya", "house rent", "office rent", "shop rent"],
-  "Parents": ["parents", "abbu", "ammi", "walidain", "mother", "father"],
-  "Investment": ["invest", "investment", "shares", "stocks", "psx", "crypto", "bitcoin", "gold", "fund", "mutual fund"],
-  "Entertainment": ["movie", "cinema", "netflix", "games", "gaming", "steam", "match", "outing"],
-  "Savings": ["saving", "savings", "bisi"],
-  "Unexpected": ["unexpected", "emergency", "fine", "loss"],
-  "Other": ["other", "misc", "miscellaneous"]
+  "Investment": ["committee", "saving", "investment", "gold", "shares", "crypto", "fund"],
+  "Other": ["misc", "other", "cash", "kharcha", "payment", "transfer"]
 };
 
 function matchCategory(text) {
   const lower = text.toLowerCase();
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const kw of keywords) {
-      const regex = new RegExp(`\\b${kw}\\b`, "i");
-      if (regex.test(lower)) return category;
+      const rx = new RegExp(`(^|\\b|\\s)${kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\b|\\s|$)`, "i");
+      if (rx.test(lower)) {
+        return category;
+      }
     }
   }
   return "Other";
@@ -451,7 +366,7 @@ async function apiRequest(endpoint, method = "GET", data = null) {
   return new Promise((resolve, reject) => {
     const headers = {
       "Accept": "application/json",
-      "User-Agent": "KingsTracker-WhatsAppBot/1.0",
+      "User-Agent": "KingsTracker-WhatsAppBot/Baileys",
     };
 
     if (postData) {
@@ -550,7 +465,7 @@ async function getCachedBudgetItems() {
       return cachedBudgetItems;
     }
   } catch (e) {
-    console.log("budget items error");
+    console.log("budget items error:", e.message);
   }
   return cachedBudgetItems;
 }
@@ -621,256 +536,174 @@ async function getTodayExpenses() {
   }
 }
 
-let client = null;
+let sock = null;
+let authManager = null;
+let isStarting = false;
 
-function createClientInstance() {
-  const executablePath = findBrowserExecutable();
+async function startWhatsApp() {
+  if (isStarting) return;
+  isStarting = true;
 
-  let authStrategy;
-  if (dbPool) {
-    authStrategy = new RemoteAuth({
-      clientId: "king-tracker",
-      dataPath: path.join(__dirname, ".wwebjs_auth"),
-      store: neonStore,
-      backupSyncIntervalMs: 300000,
-    });
-  } else {
-    authStrategy = new LocalAuth({
-      dataPath: path.join(__dirname, ".wwebjs_auth"),
-    });
-  }
-
-  return new Client({
-    authTimeoutMs: 120000,
-    qrMaxRetries: 0,
-    authStrategy,
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-    puppeteer: {
-      headless: true,
-      executablePath,
-      timeout: 120000,
-      protocolTimeout: 180000,
-      defaultViewport: { width: 800, height: 600 },
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-accelerated-2d-canvas",
-        "--no-first-run",
-        "--no-zygote",
-        "--disable-gpu",
-        "--disable-software-rasterizer",
-        "--disable-extensions",
-        "--disable-default-apps",
-        "--disable-breakpad",
-        "--disable-sync",
-        "--disable-notifications",
-        "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
-        "--disable-renderer-backgrounding",
-        "--disable-features=Translate,OptimizationHints,MediaRouter",
-        "--no-default-browser-check",
-        "--mute-audio",
-        "--hide-scrollbars",
-        "--window-size=800,600",
-        "--disk-cache-size=1",
-        "--media-cache-size=1",
-      ],
-    },
-  });
-}
-
-function attachClientEvents(client) {
-  client.on("qr", async (qr) => {
-    botState.status = "QR_READY";
-    botState.qrString = qr;
-    console.log("qr updated");
-
-    try {
-      botState.qrDataUrl = await qrcode.toDataURL(qr, {
-        width: 320,
-        margin: 2,
-        color: {
-          dark: "#000000",
-          light: "#ffffff",
-        },
-      });
-    } catch (e) {
-      console.log("source not found");
-    }
-
-    qrcodeTerminal.generate(qr, { small: true });
-
-    addLog({
-      type: "SYSTEM",
-      direction: "SYSTEM",
-      text: "New QR Code generated. Scan with WhatsApp on your phone.",
-      status: "QR_READY",
-    });
+  try {
+    botState.status = "STARTING";
+    botState.lastError = null;
     syncToCloud();
-  });
 
-  let syncStartedAt = null;
-  let syncWatchdogTimer = null;
+    await initBaileysModule();
+    authManager = useNeonPostgresAuthState(dbPool, "main_whatsapp_session");
+    const { state, saveCreds } = await authManager.getAuthState();
 
-  client.on("loading_screen", (percent, message) => {
-    botState.status = "SYNCING";
-    botState.syncPercent = percent;
-    botState.qrString = null;
-    botState.qrDataUrl = null;
-    if (!syncStartedAt) syncStartedAt = Date.now();
-    if (percent % 10 === 0 || percent >= 90) {
-      addLog({
-        type: "SYSTEM",
-        direction: "SYSTEM",
-        text: `Syncing chats (${percent}%)...`,
-        status: "SYNCING",
-      });
-    }
-    if (percent >= 90) {
-      syncToCloud();
-
-      if (!syncWatchdogTimer) {
-        syncWatchdogTimer = setTimeout(async () => {
-          if (botState.status === "SYNCING" && client?.pupPage) {
-            try {
-              const res = await client.pupPage.evaluate(() => {
-                const chatList = document.querySelector("#pane-side, [data-testid='chat-list'], div[role='navigation']");
-                const state = window.require?.("WAWebSocketModel")?.Socket?.state;
-                if (chatList || state === "CONNECTED") {
-                  if (typeof window.onAppStateHasSyncedEvent === "function") {
-                    window.onAppStateHasSyncedEvent();
-                    return "SYNC_TRIGGERED";
-                  }
-                }
-                return state || "WAITING";
-              }).catch(() => null);
-
-              if (res === "SYNC_TRIGGERED") {
-                addLog({
-                  type: "SYSTEM",
-                  direction: "SYSTEM",
-                  text: "Chat list detected, finalizing connection...",
-                  status: "SYNCING",
-                });
-              }
-            } catch (e) {}
-          }
-          syncWatchdogTimer = null;
-        }, 10000);
-      }
-    }
-  });
-
-  client.on("authenticated", () => {
-    botState.status = "AUTHENTICATED";
-    botState.qrString = null;
-    botState.qrDataUrl = null;
-    console.log("db auth loaded");
-    addLog({
-      type: "SYSTEM",
-      direction: "SYSTEM",
-      text: "Authentication verified. Initializing WhatsApp session...",
-      status: "AUTHENTICATED",
-    });
-    syncToCloud();
-  });
-
-  client.on("ready", async () => {
-    if (syncWatchdogTimer) {
-      clearTimeout(syncWatchdogTimer);
-      syncWatchdogTimer = null;
-    }
-    syncStartedAt = null;
-    botState.status = "CONNECTED";
-    botState.qrString = null;
-    botState.qrDataUrl = null;
-    botState.syncPercent = 100;
-    botState.connectedAt = new Date().toISOString();
-
-    const info = client.info || {};
-    botState.userNumber = info.wid?.user || "Unknown";
-    botState.userName = info.pushname || "Owner";
-    console.log("db auth loaded");
-
-    addLog({
-      type: "SYSTEM",
-      direction: "SYSTEM",
-      text: `WhatsApp successfully connected as ${botState.userName} (+${botState.userNumber})`,
-      status: "CONNECTED",
+    sock = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+      logger: pino({ level: "silent" }),
+      browser: ["King's Tracker", "Chrome", "1.0.0"],
+      syncFullHistory: false,
+      generateHighQualityLinkPreview: false,
     });
 
-    syncToCloud();
-    loginToTracker();
+    sock.ev.on("creds.update", saveCreds);
 
-    setTimeout(() => {
-      if (client?.authStrategy && typeof client.authStrategy.storeRemoteSession === "function") {
-        client.authStrategy.storeRemoteSession({ emit: true }).catch(() => {});
-      }
-    }, 30000);
-  });
+    sock.ev.on("connection.update", async (update) => {
+      const { connection, lastDisconnect, qr } = update;
 
-  client.on("auth_failure", (msg) => {
-    botState.status = "ERROR";
-    botState.lastError = msg;
-    console.log("source not found");
-    addLog({
-      type: "ERROR",
-      direction: "SYSTEM",
-      text: `Auth failure: ${msg}`,
-      status: "ERROR",
-    });
-  });
+      if (qr) {
+        botState.status = "QR_READY";
+        botState.qrString = qr;
+        console.log("qr updated");
 
-  client.on("disconnected", (reason) => {
-    botState.status = "DISCONNECTED";
-    botState.lastError = reason;
-    console.log("source not found");
-    addLog({
-      type: "SYSTEM",
-      direction: "SYSTEM",
-      text: `WhatsApp disconnected: ${reason}`,
-      status: "DISCONNECTED",
-    });
-  });
+        try {
+          botState.qrDataUrl = await qrcode.toDataURL(qr, {
+            width: 320,
+            margin: 2,
+            color: { dark: "#000000", light: "#ffffff" },
+          });
+        } catch (e) {}
 
-  client.on("message_create", async (msg) => {
-    try {
-      if (!msg.body || typeof msg.body !== "string") return;
-      if (msg.isForwarded || msg.broadcast || msg.isStatus) return;
+        qrcodeTerminal.generate(qr, { small: true });
 
-      const text = msg.body.trim();
-      if (!text) return;
-
-      if (msg.id && msg.id._serialized && sentMessageIds.has(msg.id._serialized)) {
-        sentMessageIds.delete(msg.id._serialized);
-        return;
+        addLog({
+          type: "SYSTEM",
+          direction: "SYSTEM",
+          text: "New QR Code generated. Scan with WhatsApp on your phone.",
+          status: "QR_READY",
+        });
+        syncToCloud();
       }
 
-      const myNumber = client.info?.wid?.user;
-      const isFromMe = msg.fromMe;
-      const isSelfChat = msg.to === msg.from || (msg.to && msg.to.includes(myNumber) && msg.from && msg.from.includes(myNumber));
+      if (connection === "open") {
+        botState.status = "CONNECTED";
+        botState.qrString = null;
+        botState.qrDataUrl = null;
+        botState.syncPercent = 100;
+        botState.connectedAt = new Date().toISOString();
 
-      if (!isSelfChat && !isFromMe) {
-        if (msg.isGroupMsg) return;
+        const user = sock.user || {};
+        const rawUser = user.id || "";
+        botState.userNumber = rawUser.split(":")[0] || rawUser.split("@")[0] || "Owner";
+        botState.userName = user.name || "Owner";
+        console.log("db auth loaded");
+
+        addLog({
+          type: "SYSTEM",
+          direction: "SYSTEM",
+          text: `WhatsApp successfully connected as ${botState.userName} (+${botState.userNumber})`,
+          status: "CONNECTED",
+        });
+
+        syncToCloud();
+        loginToTracker();
       }
 
-      const budgetItems = await getCachedBudgetItems();
-      const parsed = parseExpenseMessage(text, budgetItems);
-      if (!parsed) return;
+      if (connection === "close") {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-      botState.stats.messagesReceived++;
+        botState.status = "DISCONNECTED";
+        botState.lastError = lastDisconnect?.error?.message || "Connection closed";
+        console.log("connection closed, status:", statusCode);
 
-      async function sendBotReply(replyText) {
-        const sent = await msg.reply(replyText);
-        if (sent && sent.id && sent.id._serialized) {
-          sentMessageIds.add(sent.id._serialized);
+        addLog({
+          type: "SYSTEM",
+          direction: "SYSTEM",
+          text: `WhatsApp disconnected: ${botState.lastError}. ${shouldReconnect ? "Reconnecting..." : "Logged out."}`,
+          status: "DISCONNECTED",
+        });
+        syncToCloud();
+
+        if (statusCode === DisconnectReason.loggedOut) {
+          await authManager.clearSession();
+          botState.userNumber = null;
+          botState.userName = null;
+          botState.qrDataUrl = null;
+          setTimeout(() => {
+            isStarting = false;
+            startWhatsApp();
+          }, 3000);
+        } else if (shouldReconnect) {
+          setTimeout(() => {
+            isStarting = false;
+            startWhatsApp();
+          }, 5000);
         }
-        return sent;
       }
+    });
 
-      if (parsed.isCommand && parsed.command === "help") {
-        const reply = `👑 *King's Tracker WhatsApp Assistant*
+    sock.ev.on("messages.upsert", async ({ messages, type }) => {
+      if (type !== "notify" && type !== "append") return;
+
+      for (const msg of messages) {
+        try {
+          if (!msg.message) continue;
+          const key = msg.key;
+          if (!key || !key.remoteJid) continue;
+          const jid = key.remoteJid;
+          if (jid === "status@broadcast") continue;
+
+          if (key.id && sentMessageIds.has(key.id)) {
+            sentMessageIds.delete(key.id);
+            continue;
+          }
+
+          const rawText =
+            msg.message.conversation ||
+            msg.message.extendedTextMessage?.text ||
+            msg.message.imageMessage?.caption ||
+            "";
+
+          const text = (rawText || "").trim();
+          if (!text) continue;
+
+          const myJid = sock.user?.id;
+          const myNumber = myJid ? (myJid.split(":")[0] || myJid.split("@")[0]) : null;
+          const isFromMe = key.fromMe;
+          const isSelfChat = jid.includes(myNumber) || (key.participant && key.participant.includes(myNumber));
+
+          if (!isSelfChat && !isFromMe && jid.endsWith("@g.us")) {
+            continue;
+          }
+
+          const budgetItems = await getCachedBudgetItems();
+          const parsed = parseExpenseMessage(text, budgetItems);
+          if (!parsed) continue;
+
+          botState.stats.messagesReceived++;
+
+          async function sendBotReply(replyText) {
+            try {
+              const sent = await sock.sendMessage(jid, { text: replyText }, { quoted: msg });
+              if (sent?.key?.id) {
+                sentMessageIds.add(sent.key.id);
+              }
+              return sent;
+            } catch (err) {
+              console.log("send reply error:", err.message);
+              return null;
+            }
+          }
+
+          if (parsed.isCommand && parsed.command === "help") {
+            const reply = `👑 *King's Tracker WhatsApp Assistant*
 
 Send expenses in natural text:
 • *Lunch 300 #Office Lunch* ➔ Link to budget item
@@ -885,142 +718,153 @@ Send expenses in natural text:
 • *budgets* — List active budget items
 • *help* — Show this guide`;
 
-        await sendBotReply(reply);
-        botState.stats.repliesSent++;
-        addLog({
-          type: "COMMAND",
-          direction: "IN_OUT",
-          text,
-          reply,
-          status: "SUCCESS",
-        });
-        return;
-      }
+            await sendBotReply(reply);
+            botState.stats.repliesSent++;
+            addLog({
+              type: "COMMAND",
+              direction: "IN_OUT",
+              text,
+              reply,
+              status: "SUCCESS",
+            });
+            continue;
+          }
 
-      if (parsed.isCommand && parsed.command === "today") {
-        const expenses = await getTodayExpenses();
-        const total = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
-        let reply = `📊 *Today's Spending Summary*\n\n💰 *Total Spent Today:* ${CURRENCY} ${total.toLocaleString()} (${expenses.length} expenses)\n`;
+          if (parsed.isCommand && parsed.command === "today") {
+            const expenses = await getTodayExpenses();
+            const total = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+            let reply = `📊 *Today's Spending Summary*\n\n💰 *Total Spent Today:* ${CURRENCY} ${total.toLocaleString()} (${expenses.length} expenses)\n`;
 
-        if (expenses.length > 0) {
-          reply += "\n*Recent items:*\n";
-          expenses.slice(-5).reverse().forEach((e) => {
-            reply += `• ${e.title}: ${CURRENCY} ${parseFloat(e.amount).toLocaleString()} (${e.category || "Other"})\n`;
-          });
-        } else {
-          reply += "\nNo expenses logged yet today.";
-        }
+            if (expenses.length > 0) {
+              reply += "\n*Recent items:*\n";
+              expenses.slice(-5).reverse().forEach((e) => {
+                reply += `• ${e.title}: ${CURRENCY} ${parseFloat(e.amount).toLocaleString()} (${e.category || "Other"})\n`;
+              });
+            } else {
+              reply += "\nNo expenses logged yet today.";
+            }
 
-        await sendBotReply(reply);
-        botState.stats.repliesSent++;
-        addLog({
-          type: "COMMAND",
-          direction: "IN_OUT",
-          text,
-          reply,
-          status: "SUCCESS",
-        });
-        return;
-      }
+            await sendBotReply(reply);
+            botState.stats.repliesSent++;
+            addLog({
+              type: "COMMAND",
+              direction: "IN_OUT",
+              text,
+              reply,
+              status: "SUCCESS",
+            });
+            continue;
+          }
 
-      if (parsed.isCommand && (parsed.command === "balance" || parsed.command === "budgets")) {
-        const items = await getCachedBudgetItems();
-        let reply = `📋 *Active Budget Items*\n\n`;
-        if (items.length > 0) {
-          items.slice(0, 20).forEach((b) => {
-            reply += `• *${b.title}* (${b.category || "Other"})\n`;
-          });
-          reply += `\n💡 *Tip:* Mention item name (*Milk 250*) or use tag (*Lunch 300 #Office Lunch*) to select!`;
-        } else {
-          reply += `Manage your budget items directly on dashboard:\n${TRACKER_API_URL}`;
-        }
-        await sendBotReply(reply);
-        botState.stats.repliesSent++;
-        return;
-      }
+          if (parsed.isCommand && (parsed.command === "balance" || parsed.command === "budgets")) {
+            const items = await getCachedBudgetItems();
+            let reply = `📋 *Active Budget Items*\n\n`;
+            if (items.length > 0) {
+              items.slice(0, 20).forEach((b) => {
+                reply += `• *${b.title}* (${b.category || "Other"})\n`;
+              });
+              reply += `\n💡 *Tip:* Mention item name (*Milk 250*) or use tag (*Lunch 300 #Office Lunch*) to select!`;
+            } else {
+              reply += `Manage your budget items directly on dashboard:\n${TRACKER_API_URL}`;
+            }
+            await sendBotReply(reply);
+            botState.stats.repliesSent++;
+            continue;
+          }
 
-      if (parsed.isIncome) {
-        try {
-          await logIncomeToTracker(parsed);
-          const reply = `💰 *Income Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}
+          if (parsed.isIncome) {
+            try {
+              await logIncomeToTracker(parsed);
+              const reply = `💰 *Income Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}
 📂 *Source:* ${parsed.source}
 📅 *Date:* Today`;
-          await sendBotReply(reply);
-          botState.stats.repliesSent++;
-          addLog({
-            type: "INCOME",
-            direction: "IN_OUT",
-            text,
-            parsed,
-            reply,
-            status: "SUCCESS",
-          });
-          return;
-        } catch (err) {
-          const reply = `⚠️ *Could not save income:* ${err.message}`;
-          await sendBotReply(reply);
-          addLog({
-            type: "INCOME",
-            direction: "IN_OUT",
-            text,
-            parsed,
-            error: err.message,
-            reply,
-            status: "ERROR",
-          });
-          return;
-        }
-      }
+              await sendBotReply(reply);
+              botState.stats.repliesSent++;
+              addLog({
+                type: "INCOME",
+                direction: "IN_OUT",
+                text,
+                parsed,
+                reply,
+                status: "SUCCESS",
+              });
+              continue;
+            } catch (err) {
+              const reply = `⚠️ *Could not save income:* ${err.message}`;
+              await sendBotReply(reply);
+              addLog({
+                type: "INCOME",
+                direction: "IN_OUT",
+                text,
+                parsed,
+                error: err.message,
+                reply,
+                status: "ERROR",
+              });
+              continue;
+            }
+          }
 
-      if (parsed.isExpense) {
-        try {
-          await logExpenseToTracker(parsed);
+          if (parsed.isExpense) {
+            try {
+              await logExpenseToTracker(parsed);
 
-          const todayItems = await getTodayExpenses();
-          const todayTotal = todayItems.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+              const todayItems = await getTodayExpenses();
+              const todayTotal = todayItems.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
 
-          botState.stats.totalExpensesLogged++;
-          botState.stats.totalAmountLogged += parsed.amount;
+              botState.stats.totalExpensesLogged++;
+              botState.stats.totalAmountLogged += parsed.amount;
 
-          const cardBadge = parsed.paymentMethod === "platinum" ? "🥈 Platinum Card" : parsed.paymentMethod === "flexi" ? "💳 Flexi Card" : "💵 Cash";
-          const budgetBadge = parsed.budgetTag ? `\n📌 *Budget Item:* ${parsed.budgetTag}` : "";
-          const reply = `✅ *Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}${budgetBadge}
+              const cardBadge = parsed.paymentMethod === "platinum" ? "🥈 Platinum Card" : parsed.paymentMethod === "flexi" ? "💳 Flexi Card" : "💵 Cash";
+              const budgetBadge = parsed.budgetTag ? `\n📌 *Budget Item:* ${parsed.budgetTag}` : "";
+              const reply = `✅ *Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}${budgetBadge}
 📂 *Category:* ${parsed.category}
 💳 *Method:* ${cardBadge}
 💰 *Today's Spent:* ${CURRENCY} ${todayTotal.toLocaleString()}`;
 
-          await sendBotReply(reply);
-          botState.stats.repliesSent++;
+              await sendBotReply(reply);
+              botState.stats.repliesSent++;
 
-          addLog({
-            type: "EXPENSE",
-            direction: "IN_OUT",
-            text,
-            parsed,
-            reply,
-            status: "SUCCESS",
-          });
+              addLog({
+                type: "EXPENSE",
+                direction: "IN_OUT",
+                text,
+                parsed,
+                reply,
+                status: "SUCCESS",
+              });
+            } catch (err) {
+              const reply = `⚠️ *Could not save expense:* ${err.message}\nPlease check your tracker connection.`;
+              await sendBotReply(reply);
+
+              addLog({
+                type: "EXPENSE",
+                direction: "IN_OUT",
+                text,
+                parsed,
+                error: err.message,
+                reply,
+                status: "ERROR",
+              });
+            }
+          }
         } catch (err) {
-          const reply = `⚠️ *Could not save expense:* ${err.message}\nPlease check your tracker connection.`;
-          await sendBotReply(reply);
-
-          addLog({
-            type: "EXPENSE",
-            direction: "IN_OUT",
-            text,
-            parsed,
-            error: err.message,
-            reply,
-            status: "ERROR",
-          });
+          console.log("message processing error:", err.message);
         }
       }
-    } catch (err) {}
-  });
+    });
+  } catch (err) {
+    botState.status = "ERROR";
+    botState.lastError = err.message;
+    console.log("Baileys init error:", err.message);
+    setTimeout(() => {
+      isStarting = false;
+      startWhatsApp();
+    }, 10000);
+  } finally {
+    isStarting = false;
+  }
 }
-
-client = createClientInstance();
-attachClientEvents(client);
 
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -1058,7 +902,7 @@ const server = http.createServer(async (req, res) => {
     const memMb = getContainerMemoryMb();
     return sendJson(200, {
       status: "OK",
-      service: "King's Tracker WhatsApp Bot",
+      service: "King's Tracker WhatsApp Bot (Baileys Engine)",
       botStatus: botState.status,
       connected: botState.status === "CONNECTED",
       userNumber: botState.userNumber,
@@ -1080,6 +924,7 @@ const server = http.createServer(async (req, res) => {
       connected: botState.status === "CONNECTED",
       userNumber: botState.userNumber,
       userName: botState.userName,
+      qr: botState.qrString,
       qrDataUrl: botState.qrDataUrl,
       syncPercent: botState.syncPercent,
       connectedAt: botState.connectedAt,
@@ -1088,38 +933,6 @@ const server = http.createServer(async (req, res) => {
       stats: botState.stats,
       logs: botState.logs.slice(0, 10),
     });
-  }
-
-  if (pathname === "/api/whatsapp/debug") {
-    try {
-      const page = client?.pupPage;
-      if (!page) return sendJson(200, { hasPage: false, status: botState.status });
-      const url = page.url();
-      const title = await page.title().catch((e) => e.message);
-      const content = await page.content().catch((e) => e.message);
-      return sendJson(200, {
-        hasPage: true,
-        url,
-        title,
-        status: botState.status,
-        lastError: botState.lastError,
-        htmlPreview: (content || "").substring(0, 1500),
-      });
-    } catch (e) {
-      return sendJson(500, { error: e.message });
-    }
-  }
-
-  if (pathname === "/api/whatsapp/screenshot") {
-    try {
-      const page = client?.pupPage;
-      if (!page) return sendJson(404, { error: "No active page" });
-      const buf = await page.screenshot({ type: "jpeg", quality: 60 });
-      res.writeHead(200, { "Content-Type": "image/jpeg" });
-      return res.end(buf);
-    } catch (e) {
-      return sendJson(500, { error: e.message });
-    }
   }
 
   if (pathname === "/api/whatsapp/logs") {
@@ -1138,17 +951,15 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/whatsapp/disconnect" && req.method === "POST") {
     try {
-      if (client) {
-        await client.logout().catch(() => {});
+      if (sock) {
+        await sock.logout().catch(() => {});
+        if (authManager) await authManager.clearSession();
         botState.status = "DISCONNECTED";
         botState.userNumber = null;
         botState.userName = null;
         botState.qrDataUrl = null;
         syncToCloud();
-        setTimeout(async () => {
-          await cleanupBeforeRetry();
-          initializeWithRetry();
-        }, 1500);
+        setTimeout(startWhatsApp, 2000);
       }
       return sendJson(200, { message: "Disconnected successfully", success: true });
     } catch (e) {
@@ -1158,14 +969,13 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/whatsapp/restart" || pathname === "/restart") {
     try {
-      initRetryCount = 0;
       botState.status = "STARTING";
       botState.lastError = null;
       syncToCloud();
-      setTimeout(async () => {
-        await cleanupBeforeRetry();
-        initializeWithRetry();
-      }, 500);
+      if (sock) {
+        try { sock.end(new Error("Manual restart")); } catch (e) {}
+      }
+      setTimeout(startWhatsApp, 1000);
       return sendJson(200, { message: "Bot restarting...", success: true });
     } catch (e) {
       return sendJson(500, { error: e.message });
@@ -1174,6 +984,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/whatsapp/simulate" && req.method === "POST") {
     const body = await readBody();
+    const text = body.text || "";
     const budgetItems = await getCachedBudgetItems();
     const parsed = parseExpenseMessage(text, budgetItems);
 
@@ -1216,27 +1027,9 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   loginToTracker().then(() => syncToCloud()).catch(() => {});
+  startWhatsApp();
 
   setInterval(syncToCloud, 15000);
-
-  setInterval(async () => {
-    const skipStates = ["STARTING", "SYNCING", "AUTHENTICATED", "QR_READY"];
-    if (skipStates.includes(botState.status)) {
-      if (global.gc) { try { global.gc(); } catch (e) {} }
-      return;
-    }
-    const currentRam = getContainerMemoryMb();
-    if (currentRam >= 480) {
-      console.log(`memory ${currentRam}MB - restarting`);
-      try {
-        await client.destroy().catch(() => {});
-      } catch (e) {}
-      if (global.gc) { try { global.gc(); } catch (e) {} }
-      setTimeout(() => initializeWithRetry(), 5000);
-    } else if (global.gc) {
-      try { global.gc(); } catch (e) {}
-    }
-  }, 30000);
 
   const externalUrl = process.env.RENDER_EXTERNAL_URL;
   if (externalUrl) {
@@ -1246,79 +1039,3 @@ server.listen(PORT, () => {
     }, 10 * 60 * 1000);
   }
 });
-
-let initRetryCount = 0;
-const MAX_INIT_RETRIES = 5;
-
-async function cleanupBeforeRetry() {
-  if (client) {
-    try {
-      await client.destroy().catch(() => {});
-    } catch (e) {}
-    client = null;
-  }
-
-  const authBase = path.join(__dirname, ".wwebjs_auth");
-  if (fs.existsSync(authBase)) {
-    try {
-      const entries = fs.readdirSync(authBase);
-      for (const entry of entries) {
-        const fullPath = path.join(authBase, entry);
-        if (fs.statSync(fullPath).isDirectory()) {
-          const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
-          for (const lock of lockFiles) {
-            try { fs.unlinkSync(path.join(fullPath, lock)); } catch (e) {}
-          }
-          const wasAuthFailure = botState.lastError && /auth/i.test(botState.lastError);
-          if (initRetryCount >= 3 && wasAuthFailure && !entry.endsWith(".zip")) {
-            try { fs.rmSync(fullPath, { recursive: true, force: true }); } catch (e) {}
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
-  if (global.gc) { try { global.gc(); } catch (e) {} }
-
-  client = createClientInstance();
-  attachClientEvents(client);
-}
-
-async function initializeWithRetry() {
-  if (initRetryCount > 0) {
-    await cleanupBeforeRetry();
-  }
-
-  botState.status = "STARTING";
-  botState.lastError = null;
-  syncToCloud();
-
-  client.initialize().catch(async (err) => {
-    const errMsg = typeof err === "string" ? err : (err.message || String(err));
-    botState.status = "ERROR";
-    botState.lastError = errMsg;
-
-    initRetryCount++;
-    if (initRetryCount < MAX_INIT_RETRIES) {
-      const delay = Math.min(15000 * initRetryCount, 60000);
-      addLog({
-        type: "SYSTEM",
-        direction: "SYSTEM",
-        text: `Init failed: ${errMsg}. Retrying in ${delay / 1000}s...`,
-        status: "ERROR",
-      });
-      setTimeout(() => initializeWithRetry(), delay);
-    } else {
-      addLog({
-        type: "ERROR",
-        direction: "SYSTEM",
-        text: `Init attempts exhausted (${MAX_INIT_RETRIES}). Retrying in 60s...`,
-        status: "ERROR",
-      });
-      initRetryCount = 1;
-      setTimeout(() => initializeWithRetry(), 60000);
-    }
-  });
-}
-
-initializeWithRetry();
