@@ -139,11 +139,14 @@ async function triggerDeepGarbageCollection(reason = "routine") {
     } catch (e) {}
   }
 
-  // 2. Force Chromium V8 & DOM Tree GC via Chrome DevTools Protocol
+  // 2. Force Chromium V8 & C++ PartitionAlloc GC via Chrome DevTools Protocol
   if (client && client.pupPage) {
     try {
       const cdp = await client.pupPage.target().createCDPSession();
-      await cdp.send("HeapProfiler.collectGarbage");
+      // Signals Chromium to discard all decoded images, font caches, and return memory to OS via madvise
+      await cdp.send("Memory.simulatePressureNotification", { level: "critical" }).catch(() => {});
+      await cdp.send("Memory.forciblyPurgeJavaScriptMemory").catch(() => {});
+      await cdp.send("HeapProfiler.collectGarbage").catch(() => {});
       await cdp.detach().catch(() => {});
     } catch (e) {
       // Safe to ignore if transitioning
@@ -497,6 +500,14 @@ const client = new Client({
       "--renderer-process-limit=1",
       "--disable-software-rasterizer",
       "--disable-extensions",
+      "--blink-settings=imagesEnabled=false",
+      "--force-device-scale-factor=1",
+      "--disable-site-isolation-trials",
+      "--disable-threaded-scrolling",
+      "--disable-threaded-animation",
+      "--disable-accelerated-video-decode",
+      "--disable-accelerated-video-encode",
+      "--disable-gpu-rasterization",
       "--disable-background-networking",
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
@@ -530,7 +541,7 @@ const client = new Client({
       "--v8-cache-options=none",
       "--disable-gpu-shader-disk-cache",
       "--window-size=800,600",
-      "--js-flags=--max-old-space-size=64 --max-semi-space-size=1",
+      "--js-flags=--lite-mode --max-old-space-size=64 --max-semi-space-size=1",
     ],
   },
 });
@@ -952,12 +963,12 @@ server.listen(PORT, () => {
   // Proactive Memory Guard Watchdog: Strictly enforces 30%+ headroom below 512MB limit (< 350MB ceiling)
   setInterval(() => {
     const currentRam = getContainerMemoryMb();
-    if (currentRam >= 240) {
-      triggerDeepGarbageCollection(`Proactive threshold: ${currentRam}MB >= 240MB`);
+    if (currentRam >= 220) {
+      triggerDeepGarbageCollection(`Proactive threshold: ${currentRam}MB >= 220MB`);
     } else if (global.gc) {
       try { global.gc(); } catch (e) {}
     }
-  }, 25000);
+  }, 15000);
 
   // Keep Render Web Service awake if RENDER_EXTERNAL_URL is present
   const externalUrl = process.env.RENDER_EXTERNAL_URL;
