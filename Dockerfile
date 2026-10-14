@@ -30,5 +30,5 @@ COPY . .
 # Expose Render default port and local bridge port
 EXPOSE 10000 3001
 
-# Start WhatsApp Bot with strict memory limits
-CMD ["node", "--max-old-space-size=128", "whatsapp-bot.js"]
+# Start WhatsApp Bot with memory limits
+CMD ["node", "--max-old-space-size=256", "whatsapp-bot.js"]

@@ -426,7 +426,6 @@ const client = new Client({
       "--disable-accelerated-2d-canvas",
       "--no-first-run",
       "--no-zygote",
-      "--single-process",
       "--disable-gpu",
       "--disable-software-rasterizer",
       "--disable-extensions",
@@ -459,7 +458,7 @@ const client = new Client({
       "--use-mock-keychain",
       "--disk-cache-size=10485760",
       "--media-cache-size=10485760",
-      "--js-flags=--max-old-space-size=128",
+      "--js-flags=--max-old-space-size=256",
     ],
   },
 });
