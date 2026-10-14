@@ -304,7 +304,7 @@ function detectPaymentMethod(text) {
   return "cash";
 }
 
-function parseExpenseMessage(text) {
+function parseExpenseMessage(text, budgetItems = []) {
   if (!text || typeof text !== "string") return null;
   const raw = text.trim();
 
@@ -331,8 +331,8 @@ function parseExpenseMessage(text) {
   if (["today", "status", "summary", "daily"].includes(cleanCmd)) {
     return { isCommand: true, command: "today" };
   }
-  if (["balance", "budget", "room"].includes(cleanCmd)) {
-    return { isCommand: true, command: "balance" };
+  if (["balance", "budget", "budgets", "items", "room"].includes(cleanCmd)) {
+    return { isCommand: true, command: "budgets" };
   }
   if (["last", "recent"].includes(cleanCmd)) {
     return { isCommand: true, command: "last" };
@@ -356,7 +356,40 @@ function parseExpenseMessage(text) {
     .replace(/\s+/g, " ")
     .trim();
 
-  const category = matchCategory(raw);
+  let budgetTag = null;
+  let matchedBudgetItem = null;
+
+  const tagMatch = remainingText.match(/#([a-zA-Z0-9_\s\+\-]+)/i) || remainingText.match(/\[([a-zA-Z0-9_\s\+\-]+)\]/i);
+  if (tagMatch && budgetItems.length > 0) {
+    const candidate = tagMatch[1].trim().toLowerCase();
+    matchedBudgetItem = budgetItems.find((b) => (b.title || "").toLowerCase().trim() === candidate) ||
+      budgetItems.find((b) => (b.title || "").toLowerCase().trim().includes(candidate) || candidate.includes((b.title || "").toLowerCase().trim()));
+    if (matchedBudgetItem) {
+      budgetTag = matchedBudgetItem.title;
+      remainingText = remainingText.replace(tagMatch[0], " ").replace(/\s+/g, " ").trim();
+    }
+  }
+
+  if (!budgetTag && budgetItems.length > 0) {
+    const cleanLower = remainingText.toLowerCase();
+    const sorted = [...budgetItems].sort((a, b) => (b.title || "").length - (a.title || "").length);
+    for (const it of sorted) {
+      const itTitle = (it.title || "").toLowerCase().trim();
+      if (!itTitle || itTitle.length < 3) continue;
+      const rx = new RegExp(`(^|\\b|\\s)${itTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\b|\\s|$)`, "i");
+      if (rx.test(cleanLower)) {
+        matchedBudgetItem = it;
+        budgetTag = it.title;
+        const stripped = remainingText.replace(rx, " ").replace(/\s+/g, " ").trim();
+        if (stripped.length >= 2) {
+          remainingText = stripped;
+        }
+        break;
+      }
+    }
+  }
+
+  const category = matchedBudgetItem ? matchedBudgetItem.category : matchCategory(raw);
   const catRegex = new RegExp(`\\b${category}\\b`, "i");
   if (remainingText.toLowerCase() === category.toLowerCase()) {
     remainingText = category;
@@ -366,7 +399,7 @@ function parseExpenseMessage(text) {
 
   let title = remainingText;
   if (!title || title.length < 2) {
-    title = category !== "Other" ? category : "Expense";
+    title = budgetTag || (category !== "Other" ? category : "Expense");
   }
 
   title = title.charAt(0).toUpperCase() + title.slice(1);
@@ -379,6 +412,7 @@ function parseExpenseMessage(text) {
     title,
     amount,
     category,
+    budgetTag,
     paymentMethod,
     raw,
   };
@@ -458,6 +492,47 @@ async function loginToTracker() {
   }
 }
 
+let cachedBudgetItems = [];
+let lastBudgetFetch = 0;
+
+async function getCachedBudgetItems() {
+  const now = Date.now();
+  if (cachedBudgetItems.length > 0 && now - lastBudgetFetch < 300000) {
+    return cachedBudgetItems;
+  }
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  try {
+    if (!sessionUser && dbPool) {
+      const uRes = await dbPool.query("SELECT id FROM users WHERE email = $1", [USER_EMAIL.toLowerCase()]);
+      if (uRes.rows.length > 0) {
+        sessionUser = { id: uRes.rows[0].id };
+      }
+    }
+    if (sessionUser && sessionUser.id && dbPool) {
+      const res = await dbPool.query(
+        "SELECT id, title, category, amount FROM budget_items WHERE user_id = $1 AND month = $2 ORDER BY title ASC",
+        [sessionUser.id, currentMonth]
+      );
+      if (res && res.rows && res.rows.length > 0) {
+        cachedBudgetItems = res.rows;
+        lastBudgetFetch = now;
+        console.log("db budget items loaded");
+        return cachedBudgetItems;
+      }
+    }
+    const apiRes = await apiRequest(`/api/budget?month=${currentMonth}`, "GET");
+    if (apiRes && apiRes.items && apiRes.items.length > 0) {
+      cachedBudgetItems = apiRes.items;
+      lastBudgetFetch = now;
+      console.log("api budget items loaded");
+      return cachedBudgetItems;
+    }
+  } catch (e) {
+    console.log("budget items error");
+  }
+  return cachedBudgetItems;
+}
+
 async function logExpenseToTracker(expense) {
   if (!sessionCookie) {
     await loginToTracker();
@@ -469,6 +544,7 @@ async function logExpenseToTracker(expense) {
     amount: expense.amount,
     category: (expense.category || "Other").substring(0, 50),
     date: todayStr,
+    budget_tag: expense.budgetTag || null,
     payment_method: expense.paymentMethod || "cash",
     notes: "Logged via WhatsApp",
   };
@@ -686,7 +762,8 @@ function attachClientEvents(client) {
         if (msg.isGroupMsg) return;
       }
 
-      const parsed = parseExpenseMessage(text);
+      const budgetItems = await getCachedBudgetItems();
+      const parsed = parseExpenseMessage(text, budgetItems);
       if (!parsed) return;
 
       botState.stats.messagesReceived++;
@@ -703,15 +780,15 @@ function attachClientEvents(client) {
         const reply = `👑 *King's Tracker WhatsApp Assistant*
 
 Send expenses in natural text:
-• *Lunch 300* ➔ Log Rs 300 (Food)
+• *Lunch 300 #Office Lunch* ➔ Link to budget item
+• *Milk 250* ➔ Auto-links to 'Milk' budget
 • *Petrol 1500 card* ➔ Platinum Card
 • *Flexi 5000* ➔ Flexi Card
-• *Milk 250 Household* ➔ Custom Category
 • *Internet bill 4000* ➔ Bills
 
 *Commands:*
 • *today* — View today's total spending
-• *balance* — Check available budget
+• *budgets* — List active budget items
 • *help* — Show this guide`;
 
         await sendBotReply(reply);
@@ -752,8 +829,17 @@ Send expenses in natural text:
         return;
       }
 
-      if (parsed.isCommand && parsed.command === "balance") {
-        const reply = `💡 *Budget Check*\nOpen your dashboard to view complete balance, daily room & category caps:\n${TRACKER_API_URL}`;
+      if (parsed.isCommand && (parsed.command === "balance" || parsed.command === "budgets")) {
+        const items = await getCachedBudgetItems();
+        let reply = `📋 *Active Budget Items*\n\n`;
+        if (items.length > 0) {
+          items.slice(0, 20).forEach((b) => {
+            reply += `• *${b.title}* (${b.category || "Other"})\n`;
+          });
+          reply += `\n💡 *Tip:* Mention item name (*Milk 250*) or use tag (*Lunch 300 #Office Lunch*) to select!`;
+        } else {
+          reply += `Manage your budget items directly on dashboard:\n${TRACKER_API_URL}`;
+        }
         await sendBotReply(reply);
         botState.stats.repliesSent++;
         return;
@@ -770,7 +856,8 @@ Send expenses in natural text:
           botState.stats.totalAmountLogged += parsed.amount;
 
           const cardBadge = parsed.paymentMethod === "platinum" ? "🥈 Platinum Card" : parsed.paymentMethod === "flexi" ? "💳 Flexi Card" : "💵 Cash";
-          const reply = `✅ *Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}
+          const budgetBadge = parsed.budgetTag ? `\n📌 *Budget Item:* ${parsed.budgetTag}` : "";
+          const reply = `✅ *Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}${budgetBadge}
 📂 *Category:* ${parsed.category}
 💳 *Method:* ${cardBadge}
 💰 *Today's Spent:* ${CURRENCY} ${todayTotal.toLocaleString()}`;
@@ -944,8 +1031,8 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/whatsapp/simulate" && req.method === "POST") {
     const body = await readBody();
-    const text = body.text || "";
-    const parsed = parseExpenseMessage(text);
+    const budgetItems = await getCachedBudgetItems();
+    const parsed = parseExpenseMessage(text, budgetItems);
 
     if (!parsed) {
       return sendJson(400, { error: "Could not parse expense from text", text });
@@ -957,12 +1044,13 @@ const server = http.createServer(async (req, res) => {
         botState.stats.totalExpensesLogged++;
         botState.stats.totalAmountLogged += parsed.amount;
 
+        const budgetBadge = parsed.budgetTag ? ` [${parsed.budgetTag}]` : "";
         const logEntry = addLog({
           type: "SIMULATION",
           direction: "IN_OUT",
           text,
           parsed,
-          reply: `✅ Logged: ${parsed.title} — ${CURRENCY} ${parsed.amount} (${parsed.category})`,
+          reply: `✅ Logged: ${parsed.title} — ${CURRENCY} ${parsed.amount}${budgetBadge} (${parsed.category})`,
           status: "SUCCESS",
         });
 
