@@ -5379,52 +5379,48 @@ async function fetchWhatsAppState() {
   if (!isWhatsAppAllowed()) {
     return { status: "DISCONNECTED", connected: false, allowed: false };
   }
-  let cloudState = null;
+
+  // 1. Direct Live Bridge query (Render Cloud Bot) — gives instantaneous real-time status & QR code
+  const bridgeUrl = getWhatsAppBridgeUrl();
+  if (bridgeUrl) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
+        signal: controller.signal,
+        headers: {
+          "X-User-Email": (currentUser && currentUser.email) ? currentUser.email : "zsfoodvlogs@gmail.com",
+        },
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const bridgeData = await res.json();
+        if (bridgeData && bridgeData.status) {
+          return bridgeData;
+        }
+      }
+    } catch (err) {}
+  }
+
+  // 2. Netlify DB Fallback if Render is momentarily unreachable
   try {
     const res = await fetch(WA_CLOUD_ENDPOINT, { credentials: "include" });
     if (res.ok) {
-      cloudState = await res.json();
-      if (cloudState && (cloudState.connected || cloudState.status === "SYNCING" || (cloudState.status === "QR_READY" && cloudState.qrDataUrl))) {
-        return cloudState;
-      }
+      const cloudState = await res.json();
+      if (cloudState) return cloudState;
     }
-  } catch (e) {
-  }
+  } catch (e) {}
 
-  if (isWhatsAppAllowed()) {
-    const bridgeUrl = getWhatsAppBridgeUrl();
-    if (bridgeUrl) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2500);
-        const res = await fetch(`${bridgeUrl}/api/whatsapp/status`, {
-          signal: controller.signal,
-          headers: {
-            "X-User-Email": (currentUser && currentUser.email) ? currentUser.email : "",
-          },
-        });
-        clearTimeout(timeoutId);
-        if (res.ok) {
-          const bridgeData = await res.json();
-          if (bridgeData && bridgeData.status) {
-            return bridgeData;
-          }
-        }
-      } catch (err) {}
-    }
-  }
-
-  return cloudState || { status: "DISCONNECTED", connected: false };
+  return { status: "DISCONNECTED", connected: false };
 }
 
 let isWhatsAppConnected = false;
 let isFetchingWhatsApp = false;
 let lastRenderedLogsJson = "";
 
-async function loadWhatsAppStatus(force = false) {
+async function loadWhatsAppStatus() {
   if (!isWhatsAppAllowed()) return;
   if (isFetchingWhatsApp) return;
-  if (isWhatsAppConnected && !force) return;
   isFetchingWhatsApp = true;
   try {
     const data = await fetchWhatsAppState();
@@ -5452,20 +5448,22 @@ function updateWhatsAppUI(data) {
 
   if (!statusLabel) return;
 
+  const isConn = Boolean(data.status === "CONNECTED" || data.connected);
+  isWhatsAppConnected = isConn;
+
   const curr = (typeof userSettings !== 'undefined' && userSettings.currency) ? userSettings.currency : "Rs";
 
   // Stats
-  if (data.stats) {
+  if (data.stats && loggedCount) {
     loggedCount.textContent = `${data.stats.totalExpensesLogged || 0} (${curr} ${(data.stats.totalAmountLogged || 0).toLocaleString()})`;
   }
-  if (data.lastActive) {
+  if (data.lastActive && lastActiveTime) {
     const d = new Date(data.lastActive);
     lastActiveTime.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  // Handle statuses
-  if (data.status === "CONNECTED" || data.connected) {
-    isWhatsAppConnected = true;
+  // Handle statuses synchronously across both panels
+  if (isConn) {
     if (statusDot) statusDot.className = "wa-status-dot dot-green";
     statusLabel.textContent = "Linked & Active";
     statusLabel.style.color = "var(--green)";
@@ -5482,7 +5480,7 @@ function updateWhatsAppUI(data) {
     if (qrBox) qrBox.style.display = "none";
     if (offlineBox) offlineBox.style.display = "none";
     if (connectedBox) connectedBox.style.display = "block";
-  } else if (!isWhatsAppConnected && (data.status === "SYNCING" || data.status === "AUTHENTICATED" || data.status === "AUTHENTICATING")) {
+  } else if (data.status === "SYNCING" || data.status === "AUTHENTICATED" || data.status === "AUTHENTICATING") {
     if (statusDot) statusDot.className = "wa-status-dot dot-orange";
     const percentStr = (data.syncPercent !== undefined && data.syncPercent !== null) ? ` (${data.syncPercent}%)` : "";
     statusLabel.textContent = `Syncing Chats${percentStr}...`;
@@ -5505,7 +5503,7 @@ function updateWhatsAppUI(data) {
       const sm = qrLoading.querySelector("small");
       if (sm) sm.textContent = "Please wait a moment while your chats are safely linked...";
     }
-  } else if (!isWhatsAppConnected && data.status === "QR_READY" && data.qrDataUrl) {
+  } else if (data.status === "QR_READY" && data.qrDataUrl) {
     if (statusDot) statusDot.className = "wa-status-dot dot-orange";
     statusLabel.textContent = "Scan QR Code";
     statusLabel.style.color = "var(--orange)";
@@ -5520,7 +5518,7 @@ function updateWhatsAppUI(data) {
     if (connectedBox) connectedBox.style.display = "none";
     if (offlineBox) offlineBox.style.display = "none";
     if (qrBox) qrBox.style.display = "block";
-  } else if (!isWhatsAppConnected && (data.status === "OFFLINE" || data.status === "DISCONNECTED")) {
+  } else if (data.status === "OFFLINE" || data.status === "DISCONNECTED") {
     if (statusDot) statusDot.className = "wa-status-dot dot-red";
     statusLabel.textContent = data.status === "DISCONNECTED" ? "Disconnected" : "Bot Offline";
     statusLabel.style.color = "var(--red)";
@@ -5534,7 +5532,7 @@ function updateWhatsAppUI(data) {
     if (qrBox) qrBox.style.display = "none";
     if (connectedBox) connectedBox.style.display = "none";
     if (offlineBox) offlineBox.style.display = "block";
-  } else if (!isWhatsAppConnected) {
+  } else {
     // Starting / Loading
     if (statusDot) statusDot.className = "wa-status-dot dot-orange";
     statusLabel.textContent = "Starting Bot...";
@@ -5834,10 +5832,9 @@ function initWhatsAppListeners() {
     });
   }
 
-  // Auto-polling when WhatsApp tab is active and NOT connected
+  // Auto-polling when WhatsApp tab is active
   setInterval(() => {
     if (!isWhatsAppAllowed()) return;
-    if (isWhatsAppConnected) return;
     const panel = document.getElementById("panel-whatsapp");
     const autoRefreshToggle = document.getElementById("waAutoRefreshToggle");
     if (panel && panel.classList.contains("active") && (!autoRefreshToggle || autoRefreshToggle.checked)) {
