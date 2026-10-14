@@ -336,6 +336,12 @@ function parseExpenseMessage(text, budgetItems = []) {
     remainingText = remainingText.replace(catRegex, "").replace(/\s+/g, " ").trim();
   }
 
+  const hasCurrencySign = /(?:rs\.?|pkr\.?|\$|\/\-|\/=)/i.test(raw);
+  const hasWord = /[a-zA-Z]{2,}/.test(raw);
+  if (!hasCurrencySign && !hasWord && !budgetTag) {
+    return null;
+  }
+
   let title = remainingText;
   if (!title || title.length < 2) {
     title = budgetTag || (category !== "Other" ? category : "Expense");
@@ -665,8 +671,14 @@ async function startWhatsApp() {
           const key = msg.key;
           if (!key || !key.remoteJid) continue;
           const jid = key.remoteJid;
-          if (jid === "status@broadcast") continue;
 
+          // 1. Immediately ignore all status updates, broadcasts, and newsletters
+          if (jid === "status@broadcast" || jid.endsWith("@broadcast") || jid.endsWith("@newsletter")) continue;
+
+          // 2. Immediately ignore ALL WhatsApp groups — bot must NEVER reply in groups
+          if (jid.endsWith("@g.us")) continue;
+
+          // 3. Skip echoes from our own outgoing messages
           if (key.id && sentMessageIds.has(key.id)) {
             sentMessageIds.delete(key.id);
             continue;
@@ -681,12 +693,29 @@ async function startWhatsApp() {
           const text = (rawText || "").trim();
           if (!text) continue;
 
-          const myJid = sock.user?.id;
-          const myNumber = myJid ? (myJid.split(":")[0] || myJid.split("@")[0]) : null;
-          const isFromMe = key.fromMe;
-          const isSelfChat = jid.includes(myNumber) || (key.participant && key.participant.includes(myNumber));
+          // 4. Skip bot system and confirmation receipts
+          if (["✅", "📊", "🤖", "⚠️", "👑", "💡", "●"].some((p) => text.startsWith(p))) {
+            continue;
+          }
 
-          if (!isSelfChat && !isFromMe && jid.endsWith("@g.us")) {
+          // 5. Strict Self-Chat & Whitelist Verification
+          const myJid = sock.user?.id || botState.userNumber || "";
+          const myCleanNumber = myJid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+          const remoteCleanNumber = jid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+
+          const isSelfChat = Boolean(myCleanNumber && remoteCleanNumber && myCleanNumber === remoteCleanNumber);
+
+          const allowedNumbersEnv = process.env.ALLOWED_NUMBERS || "";
+          const allowedNumbers = allowedNumbersEnv
+            .split(",")
+            .map((n) => n.replace(/[^0-9]/g, ""))
+            .filter(Boolean);
+          const isAllowedRemote = allowedNumbers.includes(remoteCleanNumber);
+
+          // STRICT CHAT FILTER:
+          // The bot MUST ONLY respond in Self-Chat ("Message Yourself") or to explicitly whitelisted numbers.
+          // When chatting with ANY friend, family member, or colleague, remoteCleanNumber !== myCleanNumber, so it is 100% IGNORED.
+          if (!isSelfChat && !isAllowedRemote) {
             continue;
           }
 
