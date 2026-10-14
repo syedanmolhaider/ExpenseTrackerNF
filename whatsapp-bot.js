@@ -1,12 +1,14 @@
-let makeWASocket, DisconnectReason;
+let makeWASocket, DisconnectReason, Browsers, fetchLatestBaileysVersion;
 
 async function initBaileysModule() {
   if (!makeWASocket) {
     const b = await import("@whiskeysockets/baileys");
     makeWASocket = b.default?.default || b.default || b.makeWASocket;
     DisconnectReason = b.DisconnectReason;
+    Browsers = b.Browsers;
+    fetchLatestBaileysVersion = b.fetchLatestBaileysVersion;
   }
-  return { makeWASocket, DisconnectReason };
+  return { makeWASocket, DisconnectReason, Browsers, fetchLatestBaileysVersion };
 }
 
 const { Pool } = require("pg");
@@ -553,13 +555,18 @@ async function startWhatsApp() {
     authManager = useNeonPostgresAuthState(dbPool, "main_whatsapp_session");
     const { state, saveCreds } = await authManager.getAuthState();
 
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1043857760] }));
+
     sock = makeWASocket({
+      version,
       auth: state,
       printQRInTerminal: false,
       logger: pino({ level: "silent" }),
-      browser: ["King's Tracker", "Chrome", "1.0.0"],
+      browser: Browsers.ubuntu("Chrome"),
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
     });
 
     sock.ev.on("creds.update", saveCreds);
