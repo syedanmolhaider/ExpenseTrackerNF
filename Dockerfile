@@ -13,10 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -f google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Point Puppeteer to the installed Google Chrome
+# Point Puppeteer to the installed Google Chrome & limit Node heap
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
-    NODE_ENV=production
+    NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=128"
 
 WORKDIR /app
 
@@ -30,5 +31,5 @@ COPY . .
 # Expose Render default port and local bridge port
 EXPOSE 10000 3001
 
-# Start WhatsApp Bot
-CMD ["node", "whatsapp-bot.js"]
+# Start WhatsApp Bot with strict memory limits
+CMD ["node", "--max-old-space-size=128", "whatsapp-bot.js"]
