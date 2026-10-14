@@ -453,10 +453,34 @@ async function getTodayExpenses() {
 const executablePath = findBrowserExecutable();
 console.log(`[WhatsApp] Browser executable: ${executablePath || "Default Puppeteer"}`);
 
+const authStrategy = new LocalAuth({
+  dataPath: path.join(__dirname, ".wwebjs_auth"),
+});
+
+// Proactive Memory Guard: Hook into browser launch to block heavy media & web fonts at the native C++ network layer
+const origAfterBrowserInit = authStrategy.afterBrowserInitialized.bind(authStrategy);
+authStrategy.afterBrowserInitialized = async function () {
+  await origAfterBrowserInit();
+  if (client && client.pupPage) {
+    try {
+      const cdp = await client.pupPage.target().createCDPSession();
+      await cdp.send("Network.enable");
+      await cdp.send("Network.setBlockedURLs", {
+        urls: [
+          "*.mp4", "*.mp3", "*.ogg", "*.wav", "*.webm",
+          "*.woff2", "*.woff", "*.ttf", "*.otf",
+          "*google-analytics.com*", "*crashpad*"
+        ],
+      });
+      console.log("🛡️ [Memory Optimizer] CDP Network blocking active (Audio/Video/Fonts blocked)");
+    } catch (e) {
+      console.warn("[Memory Optimizer] CDP setup warning:", e.message);
+    }
+  }
+};
+
 const client = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: path.join(__dirname, ".wwebjs_auth"),
-  }),
+  authStrategy,
   puppeteer: {
     headless: true,
     executablePath,
@@ -503,8 +527,10 @@ const client = new Client({
       "--disk-cache-size=1",
       "--media-cache-size=1",
       "--aggressive-cache-discard",
+      "--v8-cache-options=none",
+      "--disable-gpu-shader-disk-cache",
       "--window-size=800,600",
-      "--js-flags=--max-old-space-size=96 --max-semi-space-size=2",
+      "--js-flags=--max-old-space-size=64 --max-semi-space-size=1",
     ],
   },
 });

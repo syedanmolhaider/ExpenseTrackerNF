@@ -31,4 +31,4 @@ COPY . .
 EXPOSE 10000 3001
 
 # Start WhatsApp Bot with strict low-memory profile (< 350MB max ceiling)
-CMD ["node", "--max-old-space-size=96", "--expose-gc", "whatsapp-bot.js"]
+CMD ["node", "--max-old-space-size=64", "--expose-gc", "whatsapp-bot.js"]
