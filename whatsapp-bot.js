@@ -348,6 +348,28 @@ function parseExpenseMessage(text, budgetItems = []) {
 
   if (isNaN(amount) || amount <= 0) return null;
 
+  const isIncome = /\b(income|salary|earning|freelance)\b/i.test(raw);
+  if (isIncome) {
+    let source = "Other";
+    if (/\bflexi?\b/i.test(raw)) source = "Flexi";
+    else if (/\bsalary\b/i.test(raw)) source = "Salary";
+    else if (/\bbusiness\b/i.test(raw)) source = "Business";
+    else if (/\bfreelance\b/i.test(raw)) source = "Freelance";
+    else if (/\bbonus\b/i.test(raw)) source = "Bonus";
+
+    let title = raw.replace(match[0], " ").replace(/\b(income|salary|earning|freelance|rs|pkr|\$)\b/gi, "").replace(/\s+/g, " ").trim();
+    if (!title || title.length < 2) title = `${source} Income`;
+    else title = title.charAt(0).toUpperCase() + title.slice(1);
+
+    return {
+      isIncome: true,
+      title,
+      amount,
+      source,
+      raw,
+    };
+  }
+
   let remainingText = raw.replace(match[0], " ").replace(/\s+/g, " ").trim();
   const paymentMethod = detectPaymentMethod(raw);
 
@@ -556,6 +578,32 @@ async function logExpenseToTracker(expense) {
     if (err.message.includes("401") || err.message.includes("unauthorized") || err.message.includes("token")) {
       await loginToTracker();
       return await apiRequest("/api/expenses", "POST", payload);
+    }
+    throw err;
+  }
+}
+
+async function logIncomeToTracker(income) {
+  if (!sessionCookie) {
+    await loginToTracker();
+  }
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const payload = {
+    title: (income.title || "Income").substring(0, 100),
+    amount: income.amount,
+    source: income.source || "Other",
+    date: todayStr,
+    notes: "Logged via WhatsApp",
+  };
+
+  try {
+    const res = await apiRequest("/api/income", "POST", payload);
+    return res;
+  } catch (err) {
+    if (err.message.includes("401") || err.message.includes("unauthorized") || err.message.includes("token")) {
+      await loginToTracker();
+      return await apiRequest("/api/income", "POST", payload);
     }
     throw err;
   }
@@ -782,8 +830,9 @@ function attachClientEvents(client) {
 Send expenses in natural text:
 • *Lunch 300 #Office Lunch* ➔ Link to budget item
 • *Milk 250* ➔ Auto-links to 'Milk' budget
-• *Petrol 1500 card* ➔ Platinum Card
+• *Petrol 2000 card platinum* ➔ Platinum Card
 • *Flexi 5000* ➔ Flexi Card
+• *Income 2000 Flexi* ➔ Log income
 • *Internet bill 4000* ➔ Bills
 
 *Commands:*
@@ -843,6 +892,39 @@ Send expenses in natural text:
         await sendBotReply(reply);
         botState.stats.repliesSent++;
         return;
+      }
+
+      if (parsed.isIncome) {
+        try {
+          await logIncomeToTracker(parsed);
+          const reply = `💰 *Income Logged:* ${parsed.title} — ${CURRENCY} ${parsed.amount.toLocaleString()}
+📂 *Source:* ${parsed.source}
+📅 *Date:* Today`;
+          await sendBotReply(reply);
+          botState.stats.repliesSent++;
+          addLog({
+            type: "INCOME",
+            direction: "IN_OUT",
+            text,
+            parsed,
+            reply,
+            status: "SUCCESS",
+          });
+          return;
+        } catch (err) {
+          const reply = `⚠️ *Could not save income:* ${err.message}`;
+          await sendBotReply(reply);
+          addLog({
+            type: "INCOME",
+            direction: "IN_OUT",
+            text,
+            parsed,
+            error: err.message,
+            reply,
+            status: "ERROR",
+          });
+          return;
+        }
       }
 
       if (parsed.isExpense) {
