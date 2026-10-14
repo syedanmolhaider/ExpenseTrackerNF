@@ -13,11 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -f google-chrome-stable_current_amd64.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Point Puppeteer to the installed Google Chrome & limit Node heap
+# Point Puppeteer to the installed Google Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable \
-    NODE_ENV=production \
-    NODE_OPTIONS="--max-old-space-size=128"
+    NODE_ENV=production
 
 WORKDIR /app
 
