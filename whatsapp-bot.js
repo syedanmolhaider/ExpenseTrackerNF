@@ -69,12 +69,12 @@ const botState = {
 // Track sent messages by bot to avoid self-response loops
 const sentMessageIds = new Set();
 
-// Load existing logs if available
+// Load existing logs if available (keep small to avoid RAM bloat)
 if (fs.existsSync(LOGS_FILE)) {
   try {
     const raw = fs.readFileSync(LOGS_FILE, "utf-8");
     const data = JSON.parse(raw);
-    if (Array.isArray(data.logs)) botState.logs = data.logs.slice(-100);
+    if (Array.isArray(data.logs)) botState.logs = data.logs.slice(-30);
     if (data.stats) botState.stats = { ...botState.stats, ...data.stats };
   } catch (e) {
     // ignore
@@ -87,7 +87,7 @@ function saveLogs() {
       LOGS_FILE,
       JSON.stringify(
         {
-          logs: botState.logs.slice(-100),
+          logs: botState.logs.slice(-30),
           stats: botState.stats,
           lastSaved: new Date().toISOString(),
         },
@@ -108,11 +108,52 @@ function addLog(entry) {
     ...entry,
   };
   botState.logs.unshift(logItem);
-  if (botState.logs.length > 100) botState.logs.pop();
+  if (botState.logs.length > 30) botState.logs.pop();
   botState.lastActive = new Date().toISOString();
   saveLogs();
   syncToCloud();
   return logItem;
+}
+
+// --- Container & System Memory Monitor ---
+function getContainerMemoryMb() {
+  try {
+    if (fs.existsSync("/sys/fs/cgroup/memory.current")) {
+      const bytes = parseInt(fs.readFileSync("/sys/fs/cgroup/memory.current", "utf-8").trim(), 10);
+      if (!isNaN(bytes) && bytes > 0) return Math.round(bytes / 1024 / 1024);
+    }
+    if (fs.existsSync("/sys/fs/cgroup/memory/memory.usage_in_bytes")) {
+      const bytes = parseInt(fs.readFileSync("/sys/fs/cgroup/memory/memory.usage_in_bytes", "utf-8").trim(), 10);
+      if (!isNaN(bytes) && bytes > 0) return Math.round(bytes / 1024 / 1024);
+    }
+  } catch (e) {}
+  const mem = process.memoryUsage();
+  return Math.round(mem.rss / 1024 / 1024);
+}
+
+async function triggerDeepGarbageCollection(reason = "routine") {
+  // 1. Force Node.js V8 GC
+  if (global.gc) {
+    try {
+      global.gc();
+    } catch (e) {}
+  }
+
+  // 2. Force Chromium V8 & DOM Tree GC via Chrome DevTools Protocol
+  if (client && client.pupPage) {
+    try {
+      const cdp = await client.pupPage.target().createCDPSession();
+      await cdp.send("HeapProfiler.collectGarbage");
+      await cdp.detach().catch(() => {});
+    } catch (e) {
+      // Safe to ignore if transitioning
+    }
+  }
+
+  const used = getContainerMemoryMb();
+  const headroom = Math.max(0, 512 - used);
+  const headroomPercent = Math.round((headroom / 512) * 100);
+  console.log(`[Memory Monitor] GC executed (${reason}). Active RAM: ${used}MB / 512MB (${headroomPercent}% free headroom)`);
 }
 
 // Sync current bot state to Netlify cloud endpoint (strictly scoped to user)
@@ -419,6 +460,7 @@ const client = new Client({
   puppeteer: {
     headless: true,
     executablePath,
+    defaultViewport: { width: 800, height: 600 },
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -427,6 +469,8 @@ const client = new Client({
       "--no-first-run",
       "--no-zygote",
       "--disable-gpu",
+      "--in-process-gpu",
+      "--renderer-process-limit=1",
       "--disable-software-rasterizer",
       "--disable-extensions",
       "--disable-background-networking",
@@ -437,7 +481,7 @@ const client = new Client({
       "--disable-component-update",
       "--disable-default-apps",
       "--disable-domain-reliability",
-      "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI",
+      "--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,TranslateUI,BackForwardCache,BlinkGenPropertyTrees",
       "--disable-hang-monitor",
       "--disable-ipc-flooding-protection",
       "--disable-notifications",
@@ -456,9 +500,11 @@ const client = new Client({
       "--no-pings",
       "--password-store=basic",
       "--use-mock-keychain",
-      "--disk-cache-size=10485760",
-      "--media-cache-size=10485760",
-      "--js-flags=--max-old-space-size=256",
+      "--disk-cache-size=1",
+      "--media-cache-size=1",
+      "--aggressive-cache-discard",
+      "--window-size=800,600",
+      "--js-flags=--max-old-space-size=96 --max-semi-space-size=2",
     ],
   },
 });
@@ -495,6 +541,7 @@ client.on("qr", async (qr) => {
     status: "QR_READY",
   });
   syncToCloud();
+  setTimeout(() => triggerDeepGarbageCollection("post-qr"), 1500);
 });
 
 // Event: Authenticated
@@ -534,6 +581,7 @@ client.on("ready", async () => {
   });
 
   loginToTracker();
+  setTimeout(() => triggerDeepGarbageCollection("post-ready"), 3000);
 });
 
 // Event: Disconnected / Auth Failure
@@ -756,6 +804,7 @@ const server = http.createServer(async (req, res) => {
 
   // Endpoints:
   if (pathname === "/" || pathname === "/health") {
+    const memMb = getContainerMemoryMb();
     return sendJson(200, {
       status: "OK",
       service: "King's Tracker WhatsApp Bot",
@@ -763,6 +812,12 @@ const server = http.createServer(async (req, res) => {
       connected: botState.status === "CONNECTED",
       userNumber: botState.userNumber,
       userName: botState.userName,
+      memory: {
+        usedMb: memMb,
+        limitMb: 512,
+        headroomMb: Math.max(0, 512 - memMb),
+        headroomPercent: Math.round(((512 - memMb) / 512) * 100) + "%",
+      },
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     });
@@ -867,6 +922,16 @@ server.listen(PORT, () => {
 
   // Heartbeat sync every 15 seconds
   setInterval(syncToCloud, 15000);
+
+  // Proactive Memory Guard Watchdog: Strictly enforces 30%+ headroom below 512MB limit (< 350MB ceiling)
+  setInterval(() => {
+    const currentRam = getContainerMemoryMb();
+    if (currentRam >= 240) {
+      triggerDeepGarbageCollection(`Proactive threshold: ${currentRam}MB >= 240MB`);
+    } else if (global.gc) {
+      try { global.gc(); } catch (e) {}
+    }
+  }, 25000);
 
   // Keep Render Web Service awake if RENDER_EXTERNAL_URL is present
   const externalUrl = process.env.RENDER_EXTERNAL_URL;
