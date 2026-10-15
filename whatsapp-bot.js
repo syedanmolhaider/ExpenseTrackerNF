@@ -1,4 +1,4 @@
-let makeWASocket, DisconnectReason, Browsers, fetchLatestBaileysVersion;
+let makeWASocket, DisconnectReason, Browsers, fetchLatestBaileysVersion, areJidsSameUser;
 
 async function initBaileysModule() {
   if (!makeWASocket) {
@@ -7,8 +7,9 @@ async function initBaileysModule() {
     DisconnectReason = b.DisconnectReason;
     Browsers = b.Browsers;
     fetchLatestBaileysVersion = b.fetchLatestBaileysVersion;
+    areJidsSameUser = b.areJidsSameUser;
   }
-  return { makeWASocket, DisconnectReason, Browsers, fetchLatestBaileysVersion };
+  return { makeWASocket, DisconnectReason, Browsers, fetchLatestBaileysVersion, areJidsSameUser };
 }
 
 const { Pool } = require("pg");
@@ -35,6 +36,7 @@ const botState = {
   syncPercent: null,
   userNumber: null,
   userName: null,
+  userLid: null,
   connectedAt: null,
   lastActive: null,
   lastError: null,
@@ -48,6 +50,14 @@ const botState = {
 };
 
 const sentMessageIds = new Set();
+function recordSentMessage(id) {
+  if (!id) return;
+  sentMessageIds.add(id);
+  if (sentMessageIds.size > 200) {
+    const first = sentMessageIds.values().next().value;
+    sentMessageIds.delete(first);
+  }
+}
 
 if (fs.existsSync(LOGS_FILE)) {
   try {
@@ -255,15 +265,23 @@ function parseExpenseMessage(text, budgetItems = []) {
     return { isCommand: true, command: "last" };
   }
 
-  const amountRegex = /(?:rs\.?|pkr\.?|\$)?\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:\/\-|\/=|\/|rs\.?|pkr\.?)?/i;
-  const match = raw.match(amountRegex);
+  const textWithoutPhones = raw.replace(/\b(?:03[0-9]{2}[-\s]?[0-9]{7}|\+?92[0-9]{10})\b/g, "");
+  const textWithoutUnits = textWithoutPhones.replace(
+    /\b[0-9]+(?::[0-9]{2})?\s*(?:am|pm|hrs?|hours?|mins?|minutes?|sec|seconds?|kg|g|gm|ml|ltr|liters?|litres?|km|m|cm|gb|mb|th|st|nd|rd)\b/gi,
+    ""
+  );
+
+  const amountRegex = /(?:rs\.?|pkr\.?|\$)\s*([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)|([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\s*(?:\/\-|\/=|\/|rs\.?|pkr\.?)|\b([0-9]+(?:,[0-9]{3})*(?:\.[0-9]{1,2})?)\b/i;
+  const match = textWithoutUnits.match(amountRegex);
 
   if (!match) return null;
 
-  const rawAmountStr = match[1].replace(/,/g, "");
+  const rawAmountStr = (match[1] || match[2] || match[3] || "").replace(/,/g, "");
   const amount = parseFloat(rawAmountStr);
 
   if (isNaN(amount) || amount <= 0) return null;
+  if (rawAmountStr.startsWith("0") && rawAmountStr.length > 2) return null;
+  if (rawAmountStr.length > 8 && !/(?:rs\.?|pkr\.?|\$)/i.test(raw)) return null;
 
   const isIncome = /\b(income|salary|earning|freelance)\b/i.test(raw);
   if (isIncome) {
@@ -339,7 +357,9 @@ function parseExpenseMessage(text, budgetItems = []) {
   const hasCurrencySign = /(?:rs\.?|pkr\.?|\$|\/\-|\/=)/i.test(raw);
   const hasWord = /[a-zA-Z]{2,}/.test(raw);
   if (!hasCurrencySign && !hasWord && !budgetTag) {
-    return null;
+    if (raw.startsWith("0") || raw.length > 5 || isNaN(amount) || amount <= 0) {
+      return null;
+    }
   }
 
   let title = remainingText;
@@ -561,6 +581,18 @@ async function startWhatsApp() {
     authManager = useNeonPostgresAuthState(dbPool, "main_whatsapp_session");
     const { state, saveCreds } = await authManager.getAuthState();
 
+    if (state?.creds?.me) {
+      if (state.creds.me.id) {
+        botState.userNumber = state.creds.me.id.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+      }
+      if (state.creds.me.lid) {
+        botState.userLid = state.creds.me.lid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+      }
+      if (state.creds.me.name) {
+        botState.userName = state.creds.me.name;
+      }
+    }
+
     const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1043857760] }));
 
     sock = makeWASocket({
@@ -575,7 +607,15 @@ async function startWhatsApp() {
       defaultQueryTimeoutMs: 60000,
     });
 
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", (creds) => {
+      if (creds?.me?.lid) {
+        botState.userLid = creds.me.lid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+      }
+      if (creds?.me?.id) {
+        botState.userNumber = creds.me.id.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+      }
+      saveCreds();
+    });
 
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
@@ -612,9 +652,13 @@ async function startWhatsApp() {
         botState.connectedAt = new Date().toISOString();
 
         const user = sock.user || {};
-        const rawUser = user.id || "";
-        botState.userNumber = rawUser.split(":")[0] || rawUser.split("@")[0] || "Owner";
-        botState.userName = user.name || "Owner";
+        const rawUser = user.id || state?.creds?.me?.id || "";
+        botState.userNumber = rawUser.split(":")[0] || rawUser.split("@")[0] || botState.userNumber || "Owner";
+        botState.userName = user.name || state?.creds?.me?.name || botState.userName || "Owner";
+        const rawLid = user.lid || state?.creds?.me?.lid || "";
+        if (rawLid) {
+          botState.userLid = rawLid.split(":")[0] || rawLid.split("@")[0] || botState.userLid;
+        }
         console.log("db auth loaded");
 
         addLog({
@@ -699,22 +743,51 @@ async function startWhatsApp() {
           }
 
           // 5. Strict Self-Chat & Whitelist Verification
-          const myJid = sock.user?.id || botState.userNumber || "";
-          const myCleanNumber = myJid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+          const FALLBACK_USER_PHONE = "923094249475";
+          const FALLBACK_USER_LID = "238916665913448";
+
+          const myPhoneJid = sock.user?.id || (botState.userNumber ? `${botState.userNumber}@s.whatsapp.net` : `${FALLBACK_USER_PHONE}@s.whatsapp.net`);
+          const myLidJid = sock.user?.lid || (botState.userLid ? `${botState.userLid}@lid` : `${FALLBACK_USER_LID}@lid`);
+
+          const myCleanNumber = myPhoneJid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
+          const myCleanLid = myLidJid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
           const remoteCleanNumber = jid.split(":")[0].split("@")[0].replace(/[^0-9]/g, "");
 
-          const isSelfChat = Boolean(myCleanNumber && remoteCleanNumber && myCleanNumber === remoteCleanNumber);
+          function isPhoneMatch(n1, n2) {
+            if (!n1 || !n2) return false;
+            const a = n1.replace(/[^0-9]/g, "");
+            const b = n2.replace(/[^0-9]/g, "");
+            if (!a || !b) return false;
+            if (a === b) return true;
+            if (a.length >= 9 && b.length >= 9 && a.slice(-9) === b.slice(-9)) return true;
+            return false;
+          }
+
+          const isSelfPhone = isPhoneMatch(myCleanNumber, remoteCleanNumber);
+          const isSelfLid = Boolean(
+            myCleanLid && (
+              myCleanLid === remoteCleanNumber ||
+              (myCleanLid.length >= 10 && remoteCleanNumber.length >= 10 && myCleanLid.slice(-10) === remoteCleanNumber.slice(-10))
+            )
+          );
+          const isSelfJid = Boolean(
+            (areJidsSameUser && areJidsSameUser(jid, myPhoneJid)) ||
+            (areJidsSameUser && areJidsSameUser(jid, myLidJid)) ||
+            jid === sock.user?.id ||
+            jid === sock.user?.lid
+          );
+
+          const isSelfChat = Boolean(isSelfPhone || isSelfLid || isSelfJid);
 
           const allowedNumbersEnv = process.env.ALLOWED_NUMBERS || "";
           const allowedNumbers = allowedNumbersEnv
             .split(",")
             .map((n) => n.replace(/[^0-9]/g, ""))
             .filter(Boolean);
-          const isAllowedRemote = allowedNumbers.includes(remoteCleanNumber);
+          const isAllowedRemote = allowedNumbers.some((n) => isPhoneMatch(n, remoteCleanNumber));
 
-          // STRICT CHAT FILTER:
-          // The bot MUST ONLY respond in Self-Chat ("Message Yourself") or to explicitly whitelisted numbers.
-          // When chatting with ANY friend, family member, or colleague, remoteCleanNumber !== myCleanNumber, so it is 100% IGNORED.
+          console.log(`[WA-MSG] fromMe=${key.fromMe} jid=${jid} remote=${remoteCleanNumber} isSelf=${isSelfChat} text="${text}"`);
+
           if (!isSelfChat && !isAllowedRemote) {
             continue;
           }
@@ -729,12 +802,29 @@ async function startWhatsApp() {
             try {
               const sent = await sock.sendMessage(jid, { text: replyText }, { quoted: msg });
               if (sent?.key?.id) {
-                sentMessageIds.add(sent.key.id);
+                recordSentMessage(sent.key.id);
               }
               return sent;
             } catch (err) {
-              console.log("send reply error:", err.message);
-              return null;
+              console.log("send reply quoted error, trying unquoted:", err.message);
+              try {
+                const sent2 = await sock.sendMessage(jid, { text: replyText });
+                if (sent2?.key?.id) recordSentMessage(sent2.key.id);
+                return sent2;
+              } catch (err2) {
+                console.log("send reply unquoted error:", err2.message);
+                if (isSelfChat && myCleanNumber) {
+                  try {
+                    const fallbackJid = `${myCleanNumber}@s.whatsapp.net`;
+                    const sent3 = await sock.sendMessage(fallbackJid, { text: replyText });
+                    if (sent3?.key?.id) recordSentMessage(sent3.key.id);
+                    return sent3;
+                  } catch (e3) {
+                    console.log("fallback send error:", e3.message);
+                  }
+                }
+                return null;
+              }
             }
           }
 
