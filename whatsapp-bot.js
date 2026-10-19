@@ -601,7 +601,10 @@ async function startWhatsApp() {
       printQRInTerminal: false,
       logger: pino({ level: "silent" }),
       browser: Browsers.ubuntu("Chrome"),
+      markOnlineOnConnect: false,
       syncFullHistory: false,
+      shouldSyncHistoryMessage: () => false,
+      shouldIgnoreJid: (jid) => jid === "status@broadcast" || (typeof jid === "string" && (jid.endsWith("@broadcast") || jid.endsWith("@newsletter"))),
       generateHighQualityLinkPreview: false,
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
@@ -670,6 +673,7 @@ async function startWhatsApp() {
 
         syncToCloud();
         loginToTracker();
+        sock.sendPresenceUpdate("unavailable").catch(() => {});
       }
 
       if (connection === "close") {
@@ -804,12 +808,14 @@ async function startWhatsApp() {
               if (sent?.key?.id) {
                 recordSentMessage(sent.key.id);
               }
+              sock.sendPresenceUpdate("unavailable").catch(() => {});
               return sent;
             } catch (err) {
               console.log("send reply quoted error, trying unquoted:", err.message);
               try {
                 const sent2 = await sock.sendMessage(jid, { text: replyText });
                 if (sent2?.key?.id) recordSentMessage(sent2.key.id);
+                sock.sendPresenceUpdate("unavailable").catch(() => {});
                 return sent2;
               } catch (err2) {
                 console.log("send reply unquoted error:", err2.message);
@@ -818,6 +824,7 @@ async function startWhatsApp() {
                     const fallbackJid = `${myCleanNumber}@s.whatsapp.net`;
                     const sent3 = await sock.sendMessage(fallbackJid, { text: replyText });
                     if (sent3?.key?.id) recordSentMessage(sent3.key.id);
+                    sock.sendPresenceUpdate("unavailable").catch(() => {});
                     return sent3;
                   } catch (e3) {
                     console.log("fallback send error:", e3.message);
