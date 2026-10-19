@@ -137,6 +137,7 @@ The app supports custom financial month start days via `userSettings.month_start
 3. **renderCharts()** uses try-catch per chart to prevent cascading failures
 4. **PowerShell** — use `;` not `&&` to chain commands on Windows
 5. **ApexCharts tooltip** — never use `shared: true` without explicitly setting `intersect: false`, some chart types default intersect to true which conflicts
+6. **WhatsApp Bot Notifications**: Baileys defaults `markOnlineOnConnect` to `true`, which sends an `available` presence and causes WhatsApp servers to suppress mobile (iPhone/Android) push notifications. Always configure `markOnlineOnConnect: false`, `shouldSyncHistoryMessage: () => false`, and maintain presence as `unavailable` so phone notifications are never suppressed.
 
 ---
 
