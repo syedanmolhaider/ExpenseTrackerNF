@@ -255,14 +255,24 @@ function parseExpenseMessage(text, budgetItems = []) {
   if (["help", "info", "commands", "start"].includes(cleanCmd)) {
     return { isCommand: true, command: "help" };
   }
-  if (["today", "status", "summary", "daily"].includes(cleanCmd)) {
+  if (["today", "status", "daily"].includes(cleanCmd)) {
     return { isCommand: true, command: "today" };
   }
-  if (["balance", "budget", "budgets", "items", "room"].includes(cleanCmd)) {
+  if (["yesterday"].includes(cleanCmd)) {
+    return { isCommand: true, command: "yesterday" };
+  }
+  if (["month", "monthly", "overview", "summary"].includes(cleanCmd)) {
+    return { isCommand: true, command: "month" };
+  }
+  if (["balance", "budget", "budgets", "items", "room", "left", "budget left"].includes(cleanCmd)) {
     return { isCommand: true, command: "budgets" };
   }
-  if (["last", "recent"].includes(cleanCmd)) {
+  if (["last", "recent", "history"].includes(cleanCmd)) {
     return { isCommand: true, command: "last" };
+  }
+  if (/^(undo|delete|del)(\s+.*)?$/i.test(cleanCmd)) {
+    const arg = cleanCmd.replace(/^(undo|delete|del)\s*/i, "").trim();
+    return { isCommand: true, command: "delete", arg };
   }
 
   const textWithoutPhones = raw.replace(/\b(?:03[0-9]{2}[-\s]?[0-9]{7}|\+?92[0-9]{10})\b/g, "");
@@ -564,6 +574,184 @@ async function getTodayExpenses() {
   }
 }
 
+async function getYesterdayExpenses() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yestStr = d.toISOString().split("T")[0];
+  try {
+    if (!sessionCookie) await loginToTracker();
+    const res = await apiRequest(`/api/expenses?from=${yestStr}&to=${yestStr}`, "GET");
+    const expenses = Array.isArray(res) ? res : res.expenses || [];
+    return expenses;
+  } catch (err) {
+    return [];
+  }
+}
+
+async function getRecentExpenses(limit = 5) {
+  try {
+    if (!sessionUser && dbPool) {
+      const uRes = await dbPool.query("SELECT id FROM users WHERE email = $1", [USER_EMAIL.toLowerCase()]);
+      if (uRes.rows.length > 0) sessionUser = { id: uRes.rows[0].id };
+    }
+    if (sessionUser && sessionUser.id && dbPool) {
+      const res = await dbPool.query(
+        "SELECT id, title, amount, category, date, budget_tag, payment_method FROM expenses WHERE user_id = $1 ORDER BY date DESC, id DESC LIMIT $2",
+        [sessionUser.id, limit]
+      );
+      return res.rows || [];
+    }
+    if (!sessionCookie) await loginToTracker();
+    const res = await apiRequest("/api/expenses", "GET");
+    const list = Array.isArray(res) ? res : res.expenses || [];
+    return list.slice(0, limit);
+  } catch (e) {
+    return [];
+  }
+}
+
+async function getBudgetItemsWithRemaining() {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  try {
+    if (!sessionUser && dbPool) {
+      const uRes = await dbPool.query("SELECT id FROM users WHERE email = $1", [USER_EMAIL.toLowerCase()]);
+      if (uRes.rows.length > 0) sessionUser = { id: uRes.rows[0].id };
+    }
+    if (sessionUser && sessionUser.id && dbPool) {
+      const budgetRes = await dbPool.query(
+        "SELECT id, title, category, amount FROM budget_items WHERE user_id = $1 AND month = $2",
+        [sessionUser.id, currentMonth]
+      );
+      const items = budgetRes.rows || [];
+      if (items.length === 0) return [];
+
+      const expRes = await dbPool.query(
+        `SELECT budget_tag, SUM(amount) as spent 
+         FROM expenses 
+         WHERE user_id = $1 AND budget_tag IS NOT NULL AND date::text LIKE $2 || '%'
+         GROUP BY budget_tag`,
+        [sessionUser.id, currentMonth]
+      );
+      const spentMap = {};
+      (expRes.rows || []).forEach((r) => {
+        if (r.budget_tag) {
+          spentMap[r.budget_tag.toLowerCase().trim()] = parseFloat(r.spent || 0);
+        }
+      });
+
+      const itemsWithRemaining = items.map((it) => {
+        const limit = parseFloat(it.amount || 0);
+        const spent = spentMap[(it.title || "").toLowerCase().trim()] || 0;
+        const remaining = limit - spent;
+        return {
+          id: it.id,
+          title: it.title,
+          category: it.category,
+          limit,
+          spent,
+          remaining,
+          percent: limit > 0 ? Math.round((spent / limit) * 100) : 0,
+        };
+      });
+
+      // Sort in budget left order (highest remaining budget first)
+      itemsWithRemaining.sort((a, b) => b.remaining - a.remaining);
+      return itemsWithRemaining;
+    }
+  } catch (err) {
+    console.log("getBudgetItemsWithRemaining error:", err.message);
+  }
+  return [];
+}
+
+async function deleteExpenseFromTracker(arg = "") {
+  try {
+    if (!sessionUser && dbPool) {
+      const uRes = await dbPool.query("SELECT id FROM users WHERE email = $1", [USER_EMAIL.toLowerCase()]);
+      if (uRes.rows.length > 0) sessionUser = { id: uRes.rows[0].id };
+    }
+
+    let targetExpense = null;
+    const cleanArg = (arg || "").trim().toLowerCase();
+
+    if (sessionUser && sessionUser.id && dbPool) {
+      if (!cleanArg || cleanArg === "last") {
+        const findRes = await dbPool.query(
+          "SELECT id, title, amount, category, date, budget_tag FROM expenses WHERE user_id = $1 ORDER BY id DESC LIMIT 1",
+          [sessionUser.id]
+        );
+        targetExpense = findRes.rows[0] || null;
+      } else if (!isNaN(parseFloat(cleanArg))) {
+        const targetAmount = parseFloat(cleanArg);
+        const findRes = await dbPool.query(
+          "SELECT id, title, amount, category, date, budget_tag FROM expenses WHERE user_id = $1 AND amount = $2 ORDER BY id DESC LIMIT 1",
+          [sessionUser.id, targetAmount]
+        );
+        targetExpense = findRes.rows[0] || null;
+      } else {
+        const findRes = await dbPool.query(
+          "SELECT id, title, amount, category, date, budget_tag FROM expenses WHERE user_id = $1 AND LOWER(title) LIKE $2 ORDER BY id DESC LIMIT 1",
+          [sessionUser.id, `%${cleanArg}%`]
+        );
+        targetExpense = findRes.rows[0] || null;
+      }
+
+      if (targetExpense) {
+        await dbPool.query("DELETE FROM expenses WHERE id = $1 AND user_id = $2", [targetExpense.id, sessionUser.id]);
+        return targetExpense;
+      }
+    } else {
+      if (!sessionCookie) await loginToTracker();
+      const todayStr = new Date().toISOString().split("T")[0];
+      const res = await apiRequest(`/api/expenses?from=${todayStr}&to=${todayStr}`, "GET");
+      const list = Array.isArray(res) ? res : res.expenses || [];
+      if (list.length > 0) {
+        targetExpense = list[0];
+        await apiRequest(`/api/expenses/${targetExpense.id}`, "DELETE");
+        return targetExpense;
+      }
+    }
+  } catch (err) {
+    console.log("deleteExpenseFromTracker error:", err.message);
+    throw err;
+  }
+  return null;
+}
+
+async function getMonthSummary() {
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  try {
+    if (!sessionUser && dbPool) {
+      const uRes = await dbPool.query("SELECT id FROM users WHERE email = $1", [USER_EMAIL.toLowerCase()]);
+      if (uRes.rows.length > 0) sessionUser = { id: uRes.rows[0].id };
+    }
+    if (sessionUser && sessionUser.id && dbPool) {
+      const expRes = await dbPool.query(
+        "SELECT COALESCE(SUM(amount), 0) as total, COUNT(*) as count FROM expenses WHERE user_id = $1 AND date::text LIKE $2 || '%'",
+        [sessionUser.id, currentMonth]
+      );
+      const bRes = await dbPool.query(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM budget_items WHERE user_id = $1 AND month = $2",
+        [sessionUser.id, currentMonth]
+      );
+      const incRes = await dbPool.query(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM income WHERE user_id = $1 AND date::text LIKE $2 || '%'",
+        [sessionUser.id, currentMonth]
+      );
+      return {
+        month: currentMonth,
+        totalSpent: parseFloat(expRes.rows[0]?.total || 0),
+        expenseCount: parseInt(expRes.rows[0]?.count || 0, 10),
+        totalBudget: parseFloat(bRes.rows[0]?.total || 0),
+        totalIncome: parseFloat(incRes.rows[0]?.total || 0),
+      };
+    }
+  } catch (e) {
+    console.log("getMonthSummary error:", e.message);
+  }
+  return null;
+}
+
 let sock = null;
 let authManager = null;
 let isStarting = false;
@@ -838,17 +1026,27 @@ async function startWhatsApp() {
           if (parsed.isCommand && parsed.command === "help") {
             const reply = `👑 *King's Tracker WhatsApp Assistant*
 
-Send expenses in natural text:
-• *Lunch 300 #Office Lunch* ➔ Link to budget item
-• *Milk 250* ➔ Auto-links to 'Milk' budget
-• *Petrol 2000 card platinum* ➔ Platinum Card
+*Log Expenses in Natural Text:*
+• *Lunch 300* ➔ Auto-categorized as Food
+• *Milk 250* ➔ Links directly to 'Milk' budget item
+• *Lunch 300 #Office Lunch* ➔ Explicit budget tag
+• *Petrol 2000 platinum* ➔ Platinum Card
 • *Flexi 5000* ➔ Flexi Card
-• *Income 2000 Flexi* ➔ Log income
-• *Internet bill 4000* ➔ Bills
+• *Dinner 1500 cash* ➔ Cash
+
+*Log Income:*
+• *Income 50000 Salary*
+• *Income 5000 Freelance*
 
 *Commands:*
-• *today* — View today's total spending
-• *budgets* — List active budget items
+• *undo* or *delete* — Delete the last logged expense
+• *delete 300* — Delete the latest Rs 300 expense
+• *delete lunch* — Delete latest expense matching "lunch"
+• *budgets* or *left* — All budget items in budget left order
+• *today* — Today's total spent & items
+• *yesterday* — Yesterday's spending summary
+• *month* — Month overview (Spent vs Budget)
+• *last* — Recent 5 expenses logged
 • *help* — Show this guide`;
 
             await sendBotReply(reply);
@@ -860,6 +1058,41 @@ Send expenses in natural text:
               reply,
               status: "SUCCESS",
             });
+            continue;
+          }
+
+          if (parsed.isCommand && parsed.command === "delete") {
+            try {
+              const deleted = await deleteExpenseFromTracker(parsed.arg);
+              if (deleted) {
+                const todayItems = await getTodayExpenses();
+                const todayTotal = todayItems.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+                const tagInfo = deleted.budget_tag ? `\n📌 *Budget Item:* ${deleted.budget_tag}` : "";
+                const reply = `🗑️ *Expense Deleted Successfully!*
+• *Item:* ${deleted.title} — ${CURRENCY} ${parseFloat(deleted.amount).toLocaleString()}${tagInfo}
+• *Category:* ${deleted.category || "Other"}
+• *Date:* ${deleted.date ? String(deleted.date).split("T")[0] : "Today"}
+
+💰 *Today's Updated Total:* ${CURRENCY} ${todayTotal.toLocaleString()}`;
+                await sendBotReply(reply);
+                botState.stats.repliesSent++;
+                addLog({
+                  type: "COMMAND",
+                  direction: "IN_OUT",
+                  text,
+                  reply,
+                  status: "SUCCESS",
+                });
+              } else {
+                const reply = `⚠️ *No matching expense found to delete.*
+• Type *undo* to remove the most recent expense
+• Or check your dashboard: ${TRACKER_API_URL}`;
+                await sendBotReply(reply);
+                botState.stats.repliesSent++;
+              }
+            } catch (err) {
+              await sendBotReply(`⚠️ *Error deleting expense:* ${err.message}`);
+            }
             continue;
           }
 
@@ -889,18 +1122,89 @@ Send expenses in natural text:
             continue;
           }
 
-          if (parsed.isCommand && (parsed.command === "balance" || parsed.command === "budgets")) {
-            const items = await getCachedBudgetItems();
-            let reply = `📋 *Active Budget Items*\n\n`;
-            if (items.length > 0) {
-              items.slice(0, 20).forEach((b) => {
-                reply += `• *${b.title}* (${b.category || "Other"})\n`;
+          if (parsed.isCommand && parsed.command === "yesterday") {
+            const expenses = await getYesterdayExpenses();
+            const total = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+            let reply = `📅 *Yesterday's Spending Summary*\n\n💰 *Total Spent:* ${CURRENCY} ${total.toLocaleString()} (${expenses.length} expenses)\n`;
+            if (expenses.length > 0) {
+              reply += "\n*Items:*\n";
+              expenses.forEach((e) => {
+                reply += `• ${e.title}: ${CURRENCY} ${parseFloat(e.amount).toLocaleString()} (${e.category || "Other"})\n`;
               });
-              reply += `\n💡 *Tip:* Mention item name (*Milk 250*) or use tag (*Lunch 300 #Office Lunch*) to select!`;
             } else {
-              reply += `Manage your budget items directly on dashboard:\n${TRACKER_API_URL}`;
+              reply += "\nNo expenses logged yesterday.";
             }
             await sendBotReply(reply);
+            botState.stats.repliesSent++;
+            continue;
+          }
+
+          if (parsed.isCommand && parsed.command === "last") {
+            const recent = await getRecentExpenses(5);
+            let reply = `🕒 *Recent Expenses*\n\n`;
+            if (recent.length > 0) {
+              recent.forEach((e, idx) => {
+                const dateStr = e.date ? String(e.date).split("T")[0] : "";
+                const tag = e.budget_tag ? ` [${e.budget_tag}]` : "";
+                reply += `${idx + 1}. *${e.title}* — ${CURRENCY} ${parseFloat(e.amount).toLocaleString()}${tag}\n   ↳ ${e.category || "Other"} • ${dateStr}\n`;
+              });
+              reply += `\n💡 Type *undo* to delete the latest expense.`;
+            } else {
+              reply += `No recent expenses found.`;
+            }
+            await sendBotReply(reply);
+            botState.stats.repliesSent++;
+            continue;
+          }
+
+          if (parsed.isCommand && parsed.command === "month") {
+            const sum = await getMonthSummary();
+            if (sum) {
+              const netRemaining = sum.totalBudget > 0 ? sum.totalBudget - sum.totalSpent : sum.totalIncome - sum.totalSpent;
+              const reply = `🗓️ *Month Overview (${sum.month})*
+
+💰 *Total Spent:* ${CURRENCY} ${sum.totalSpent.toLocaleString()} (${sum.expenseCount} expenses)
+🎯 *Total Budget Planned:* ${CURRENCY} ${sum.totalBudget.toLocaleString()}
+💵 *Total Income:* ${CURRENCY} ${sum.totalIncome.toLocaleString()}
+📊 *Remaining Budget:* ${CURRENCY} ${netRemaining.toLocaleString()}
+
+🌐 View full trends on dashboard:
+${TRACKER_API_URL}`;
+              await sendBotReply(reply);
+            } else {
+              await sendBotReply(`Visit your dashboard to view complete monthly analytics:\n${TRACKER_API_URL}`);
+            }
+            botState.stats.repliesSent++;
+            continue;
+          }
+
+          if (parsed.isCommand && (parsed.command === "balance" || parsed.command === "budgets")) {
+            const items = await getBudgetItemsWithRemaining();
+            if (items && items.length > 0) {
+              let reply = `📋 *Budget Items (Ranked by Budget Left)*\n\n`;
+              items.slice(0, 20).forEach((b, idx) => {
+                const isOver = b.remaining < 0;
+                const icon = isOver ? "🔴" : b.percent >= 80 ? "🟡" : "🟢";
+                const leftStr = isOver
+                  ? `OVER by ${CURRENCY} ${Math.abs(b.remaining).toLocaleString()}!`
+                  : `${CURRENCY} ${b.remaining.toLocaleString()} left`;
+                reply += `${idx + 1}. ${icon} *${b.title}*: ${leftStr}\n`;
+                reply += `   ↳ Spent: ${CURRENCY} ${b.spent.toLocaleString()} / ${CURRENCY} ${b.limit.toLocaleString()} (${b.percent}%)\n`;
+              });
+              reply += `\n💡 *Tip:* Mention item name (*Milk 250*) or use tag (*Lunch 300 #Office Lunch*) to log!`;
+              await sendBotReply(reply);
+            } else {
+              const basicItems = await getCachedBudgetItems();
+              let reply = `📋 *Active Budget Items*\n\n`;
+              if (basicItems.length > 0) {
+                basicItems.slice(0, 20).forEach((b) => {
+                  reply += `• *${b.title}* (${b.category || "Other"})\n`;
+                });
+              } else {
+                reply += `Manage your budget items directly on dashboard:\n${TRACKER_API_URL}`;
+              }
+              await sendBotReply(reply);
+            }
             botState.stats.repliesSent++;
             continue;
           }
